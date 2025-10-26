@@ -11,8 +11,8 @@
 # ---------------------------------------------------------------------------- #
 Data:
   # Loader parameters
-  train_batch_size: 12        # Batch size for training
-  val_batch_size: 8           # Batch size for validation
+  train_batch_size: 6        # Batch size for training
+  val_batch_size: 4           # Batch size for validation
   num_workers: 6              # Number of parallel workers for dataloader
   prefetch_factor: 2          # Samples prefetched per worker (2 is stable default)
 
@@ -44,7 +44,7 @@ Training:
   
   # --- Pretraining and adversarial setup ---
   pretrain_g_only: True        # Train generator only for initial phase
-  g_pretrain_steps: 10000      # Number of generator-only warmup steps
+  g_pretrain_steps: 20000      # Number of generator-only warmup steps
   adv_loss_ramp_steps: 5000    # Gradual adversarial weight ramp steps
   label_smoothing: True        # Discriminator target smoothing (1.0 → 0.9)
 
@@ -56,13 +56,13 @@ Training:
 
   Losses:
     # --- GAN term ---
-    adv_loss_beta: 1e-3        # Final adversarial loss weight after ramp-up
+    adv_loss_beta: 0.0005       # Final adversarial loss weight after ramp-up - original 0.001
     adv_loss_schedule: 'cosine'   # Adversarial weight ramp type: ['linear', 'cosine']
 
     # --- Content loss components (GeneratorContentLoss) ---
     l1_weight: 1.0             # L1 loss over all bands
     sam_weight: 0.05           # Spectral Angle Mapper loss
-    perceptual_weight: 0.1     # Perceptual similarity term weight
+    perceptual_weight: 0.2     # Perceptual similarity term weight
     perceptual_metric: 'vgg'   # ['vgg', 'lpips'] - LPIPS requires pip install lpips
     tv_weight: 0.0             # Total Variation regularization (optional)
 
@@ -79,8 +79,8 @@ Generator:
   model_type: 'rrdb'           # Block type: ['SRResNet', 'res', 'rcab', 'rrdb', 'lka', 'conditional_cgan'/'cgan']
   large_kernel_size: 9         # Kernel for head and tail conv layers
   small_kernel_size: 3         # Kernel for intermediate blocks
-  n_channels: 96               # Number of feature channels (original 64)
-  n_blocks: 32                 # Number of residual/attention blocks (original 16)
+  n_channels: 64               # Number of feature channels (original 64)
+  n_blocks: 16                 # Number of residual/attention blocks (original 16)
   scaling_factor: 4            # Upscaling factor (e.g., 2×, 4×, 8×)
 
 Discriminator:
@@ -92,8 +92,8 @@ Discriminator:
 # ---------------------------------------------------------------------------- #
 Optimizers:
   optim_g_lr: 1e-4             # Learning rate for Generator
-  optim_d_lr: 1e-4             # Learning rate for Discriminator
-
+  optim_d_lr: 1e-5             # Learning rate for Discriminator
+  gradient_clip_val: 1.0        # Gradient clipping value (0 disables clipping)
 
 # ============================================================================ #
 # 📉 SCHEDULERS AND EARLY STOPPING
@@ -116,5 +116,5 @@ Logging:
   num_val_images: 5            # Number of validation images logged per epoch
   wandb:
     enabled: True              # Toggle Weights & Biases logging on/off
-    entity: "opensr"      # W&B entity or team name
+    entity: "opensr"           # W&B entity or team name
     project: "SRGAN_10m"        # W&B project name

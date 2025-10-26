@@ -92,6 +92,8 @@ Discriminator:
 Optimizers:
   optim_g_lr: 1e-4             # Learning rate for Generator
   optim_d_lr: 1e-4             # Learning rate for Discriminator
+  gradient_clip_val: 1.0        # Gradient clipping value (0 disables clipping)
+
 
 
 # ============================================================================ #
