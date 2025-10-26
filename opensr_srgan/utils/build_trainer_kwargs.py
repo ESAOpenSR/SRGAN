@@ -137,7 +137,7 @@ def build_lightning_kwargs(
         log_every_n_steps=100,
         logger=[logger],
         callbacks=[checkpoint_callback, early_stop_callback],
-        gradient_clip_val=config.Schedulers.gradient_clip_val,
+        gradient_clip_val=config.Optimizers.gradient_clip_val,
     )
 
     # ``strategy`` defaults to ``None`` on CPU runs.  Lightning does not accept

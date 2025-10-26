@@ -92,8 +92,12 @@ Discriminator:
 # ---------------------------------------------------------------------------- #
 Optimizers:
   optim_g_lr: 1e-4             # Learning rate for Generator
-  optim_d_lr: 1e-4             # Learning rate for Discriminator
+  optim_d_lr: 1e-6             # Learning rate for Discriminator
   gradient_clip_val: 1.0        # Gradient clipping value (0 disables clipping)
+  betas: [0.0, 0.99]          # optional
+  eps: 1.0e-7                 # optional
+  weight_decay_g: 0.0         # optional
+  weight_decay_d: 0.0         # optional
 
 
 # ============================================================================ #
@@ -102,7 +106,8 @@ Optimizers:
 Schedulers:
   g_warmup_steps: 0        # Generator warmup LR curve duration in steps (0 disables warmup)
   g_warmup_type: 'cosine'      # Generator warmup curve: ['cosine', 'linear']
-  metric: 'val_metrics/l1'     # Metric monitored for both schedulers
+  metric_g: 'val_metrics/l1'      # Metric monitored for Generator LR scheduler
+  metric_d: 'validation/DISC_adversarial_loss'     # Metric monitored for Discriminator LR scheduler
   patience_g: 10              # Patience (epochs) for Generator LR scheduler
   patience_d: 10              # Patience (epochs) for Discriminator LR scheduler
   factor_g: 0.5                # LR reduction factor for Generator

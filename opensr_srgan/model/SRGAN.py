@@ -56,7 +56,7 @@ class SRGAN_model(pl.LightningModule):
     Configuration overview (minimal)
     --------------------------------
     - **Model**: `in_bands` (int)
-    - **Generator**: `model_type` (`"SRResNet"`, `"res"`, `"rcab"`, `"rrdb"`, `"lka"`, `"conditional_cgan"`), 
+    - **Generator**: `model_type` (`"SRResNet"`, `"res"`, `"rcab"`, `"rrdb"`, `"lka"`, `"conditional_cgan"`),
     `n_channels`, `n_blocks`, `large_kernel_size`, `small_kernel_size`, `scaling_factor`
     - **Discriminator**: `model_type` (`"standard"`, `"patchgan"`), `n_blocks` (optional)
     - **Training**:
@@ -122,33 +122,45 @@ class SRGAN_model(pl.LightningModule):
         # Purpose: Load and parse model/training hyperparameters from YAML file.
         # ======================================================================
         if isinstance(config, str) or isinstance(config, Path):
-            config = OmegaConf.load(config)     
+            config = OmegaConf.load(config)
         elif isinstance(config, dict):
             config = OmegaConf.create(config)
         elif OmegaConf.is_config(config):
             pass
         else:
-            raise TypeError("Config must be a filepath (str or Path), dict, or OmegaConf object.")
-        assert mode in {"train", "eval"}, "Mode must be 'train' or 'eval'"  # validate mode
-        
-        
+            raise TypeError(
+                "Config must be a filepath (str or Path), dict, or OmegaConf object."
+            )
+        assert mode in {
+            "train",
+            "eval",
+        }, "Mode must be 'train' or 'eval'"  # validate mode
+
         # ======================================================================
         # SECTION: Set Variables
         # Purpose: Set config and mode variables model-wide, including PL version.
-        # ======================================================================    
+        # ======================================================================
         self.config = config
-        self.mode = mode          
+        self.mode = mode
         self.pl_version = tuple(int(x) for x in pl.__version__.split("."))
 
         # ======================================================================
         # SECTION: Get Training settings
         # Purpose: Define model variables to enable training strategies.
-        # ======================================================================        
-        self.pretrain_g_only = bool(getattr(self.config.Training, "pretrain_g_only", False))  # pretrain generator only (default False)
-        self.g_pretrain_steps = int(getattr(self.config.Training, "g_pretrain_steps", 0))     # number of steps for G pretraining
-        self.adv_loss_ramp_steps = int(getattr(self.config.Training, "adv_loss_ramp_steps", 20000))  # linear ramp-up steps for adversarial loss
-        self.adv_target = 0.9 if getattr(self.config.Training, "label_smoothing", False) else 1.0    # use 0.9 if label smoothing enabled, else 1.0
-        
+        # ======================================================================
+        self.pretrain_g_only = bool(
+            getattr(self.config.Training, "pretrain_g_only", False)
+        )  # pretrain generator only (default False)
+        self.g_pretrain_steps = int(
+            getattr(self.config.Training, "g_pretrain_steps", 0)
+        )  # number of steps for G pretraining
+        self.adv_loss_ramp_steps = int(
+            getattr(self.config.Training, "adv_loss_ramp_steps", 20000)
+        )  # linear ramp-up steps for adversarial loss
+        self.adv_target = (
+            0.9 if getattr(self.config.Training, "label_smoothing", False) else 1.0
+        )  # use 0.9 if label smoothing enabled, else 1.0
+
         # ======================================================================
         # SECTION: Set up Training Strategy
         # Purpose: Depending on PL version, set up optimizers, schedulers, etc.
@@ -159,7 +171,9 @@ class SRGAN_model(pl.LightningModule):
         # SECTION: Initialize Generator
         # Purpose: Build generator network depending on selected architecture.
         # ======================================================================
-        self.get_models(mode=self.mode)  # dynamically builds and attaches generator + discriminator
+        self.get_models(
+            mode=self.mode
+        )  # dynamically builds and attaches generator + discriminator
 
         # ======================================================================
         # SECTION: Initialize EMA
@@ -173,8 +187,13 @@ class SRGAN_model(pl.LightningModule):
         # ======================================================================
         if self.mode == "train":
             from opensr_srgan.model.loss import GeneratorContentLoss
-            self.content_loss_criterion = GeneratorContentLoss(self.config)  # perceptual loss (VGG + pixel)
-            self.adversarial_loss_criterion = torch.nn.BCEWithLogitsLoss()   # binary cross-entropy for D/G
+
+            self.content_loss_criterion = GeneratorContentLoss(
+                self.config
+            )  # perceptual loss (VGG + pixel)
+            self.adversarial_loss_criterion = (
+                torch.nn.BCEWithLogitsLoss()
+            )  # binary cross-entropy for D/G
 
     def get_models(self, mode):
         """Initialize and attach the Generator and (optionally) Discriminator models.
@@ -206,20 +225,24 @@ class SRGAN_model(pl.LightningModule):
         # ======================================================================
         generator_type = self.config.Generator.model_type
 
-        if generator_type == 'SRResNet':
+        if generator_type == "SRResNet":
             # Standard SRResNet generator
             from opensr_srgan.model.generators.srresnet import Generator
+
             self.generator = Generator(
-                in_channels=self.config.Model.in_bands,                # number of input channels
+                in_channels=self.config.Model.in_bands,  # number of input channels
                 large_kernel_size=self.config.Generator.large_kernel_size,
                 small_kernel_size=self.config.Generator.small_kernel_size,
                 n_channels=self.config.Generator.n_channels,
                 n_blocks=self.config.Generator.n_blocks,
-                scaling_factor=self.config.Generator.scaling_factor
+                scaling_factor=self.config.Generator.scaling_factor,
             )
-        elif generator_type in ['res', 'rcab', 'rrdb', 'lka']:
+        elif generator_type in ["res", "rcab", "rrdb", "lka"]:
             # Advanced generator variants (ResNet, RCAB, RRDB, etc.)
-            from opensr_srgan.model.generators.flexible_generator import FlexibleGenerator
+            from opensr_srgan.model.generators.flexible_generator import (
+                FlexibleGenerator,
+            )
+
             self.generator = FlexibleGenerator(
                 in_channels=self.config.Model.in_bands,
                 n_channels=self.config.Generator.n_channels,
@@ -227,9 +250,9 @@ class SRGAN_model(pl.LightningModule):
                 small_kernel=self.config.Generator.small_kernel_size,
                 large_kernel=self.config.Generator.large_kernel_size,
                 scale=self.config.Generator.scaling_factor,
-                block_type=self.config.Generator.model_type
+                block_type=self.config.Generator.model_type,
             )
-        elif generator_type.lower() in ['conditional_cgan', 'cgan']:
+        elif generator_type.lower() in ["conditional_cgan", "cgan"]:
             from opensr_srgan.model.generators import ConditionalGANGenerator
 
             self.generator = ConditionalGANGenerator(
@@ -244,18 +267,24 @@ class SRGAN_model(pl.LightningModule):
             )
 
         else:
-            raise ValueError(f"Unknown generator model type: {self.config.Generator.model_type}")  # safety check
+            raise ValueError(
+                f"Unknown generator model type: {self.config.Generator.model_type}"
+            )  # safety check
 
-        if mode == "train": # only get discriminator in training mode
+        if mode == "train":  # only get discriminator in training mode
             # ======================================================================
             # SECTION: Initialize Discriminator
             # Purpose: Build discriminator network for adversarial training.
             # ======================================================================
-            discriminator_type = getattr(self.config.Discriminator, 'model_type', 'standard')
-            n_blocks = getattr(self.config.Discriminator, 'n_blocks', None)
+            discriminator_type = getattr(
+                self.config.Discriminator, "model_type", "standard"
+            )
+            n_blocks = getattr(self.config.Discriminator, "n_blocks", None)
 
-            if discriminator_type == 'standard':
-                from opensr_srgan.model.discriminators.srgan_discriminator import Discriminator
+            if discriminator_type == "standard":
+                from opensr_srgan.model.discriminators.srgan_discriminator import (
+                    Discriminator,
+                )
 
                 discriminator_kwargs = {
                     "in_channels": self.config.Model.in_bands,
@@ -264,8 +293,10 @@ class SRGAN_model(pl.LightningModule):
                     discriminator_kwargs["n_blocks"] = n_blocks
 
                 self.discriminator = Discriminator(**discriminator_kwargs)
-            elif discriminator_type == 'patchgan':
-                from opensr_srgan.model.discriminators.patchgan import PatchGANDiscriminator
+            elif discriminator_type == "patchgan":
+                from opensr_srgan.model.discriminators.patchgan import (
+                    PatchGANDiscriminator,
+                )
 
                 patchgan_layers = n_blocks if n_blocks is not None else 3
                 self.discriminator = PatchGANDiscriminator(
@@ -273,7 +304,9 @@ class SRGAN_model(pl.LightningModule):
                     n_layers=patchgan_layers,
                 )
             else:
-                raise ValueError(f"Unknown discriminator model type: {discriminator_type}")
+                raise ValueError(
+                    f"Unknown discriminator model type: {discriminator_type}"
+                )
 
     def setup_lightning(self):
         """Configure PyTorch Lightning behavior based on the detected version.
@@ -299,18 +332,24 @@ class SRGAN_model(pl.LightningModule):
                 corresponding to the active PL version.
         """
         # Check for PL version - Define PL Hooks accordingly
-        if self.pl_version >= (2,0,0):
+        if self.pl_version >= (2, 0, 0):
             self.automatic_optimization = False  # manual optimization for PL 2.x
             # Set up Training Step
             from opensr_srgan.model.training_step_PL import training_step_PL2
+
             self._training_step_implementation = MethodType(training_step_PL2, self)
-        elif self.pl_version < (2,0,0):
-            assert self.automatic_optimization is True, "For PL <2.0, automatic_optimization must be True."
+        elif self.pl_version < (2, 0, 0):
+            assert (
+                self.automatic_optimization is True
+            ), "For PL <2.0, automatic_optimization must be True."
             # Set up Training Step
             from opensr_srgan.model.training_step_PL import training_step_PL1
+
             self._training_step_implementation = MethodType(training_step_PL1, self)
         else:
-            raise RuntimeError(f"Unsupported PyTorch Lightning version: {pl.__version__}")
+            raise RuntimeError(
+                f"Unsupported PyTorch Lightning version: {pl.__version__}"
+            )
 
     def initialize_ema(self):
         """Initialize the Exponential Moving Average (EMA) mechanism for the generator.
@@ -366,8 +405,8 @@ class SRGAN_model(pl.LightningModule):
             torch.Tensor: Super-resolved output images with increased spatial resolution,
             typically scaled by the model's configured upsampling factor.
         """
-        sr_imgs = self.generator(lr_imgs)   # pass LR input through generator network
-        return sr_imgs                      # return super-resolved output
+        sr_imgs = self.generator(lr_imgs)  # pass LR input through generator network
+        return sr_imgs  # return super-resolved output
 
     @torch.no_grad()
     def predict_step(self, lr_imgs):
@@ -392,35 +431,44 @@ class SRGAN_model(pl.LightningModule):
         Raises:
             AssertionError: If the generator is not in evaluation mode (`.eval()`).
         """
-        assert self.generator.training is False, "Generator must be in eval mode for prediction."  # ensure eval mode
+        assert (
+            self.generator.training is False
+        ), "Generator must be in eval mode for prediction."  # ensure eval mode
         lr_imgs = lr_imgs.to(self.device)  # move to device (GPU or CPU)
 
         # --- Check if normalization is needed ---
         lr_min, lr_max = lr_imgs.min().item(), lr_imgs.max().item()  # get value range
         if lr_max > 1.5:  # Sentinel-2 style raw reflectance → normalize
-            lr_imgs = normalise_10k(lr_imgs, stage="norm")           # normalize to 0–1 range
+            lr_imgs = normalise_10k(lr_imgs, stage="norm")  # normalize to 0–1 range
             needs_normalization = True
         else:
-            needs_normalization = False                                       # already normalized
+            needs_normalization = False  # already normalized
 
         # --- Perform super-resolution (optionally using EMA weights) ---
-        context = self.ema.average_parameters(self.generator) if self.ema is not None else nullcontext()
+        context = (
+            self.ema.average_parameters(self.generator)
+            if self.ema is not None
+            else nullcontext()
+        )
         with context:
-            sr_imgs = self.generator(lr_imgs)                        # forward pass (SR prediction)
+            sr_imgs = self.generator(lr_imgs)  # forward pass (SR prediction)
 
         # --- Histogram match SR to LR ---
-        sr_imgs = histogram_match(lr_imgs, sr_imgs)                  # match distributions
+        sr_imgs = histogram_match(lr_imgs, sr_imgs)  # match distributions
 
         # --- Denormalize only if normalization was applied ---
         if needs_normalization:
-            sr_imgs = normalise_10k(sr_imgs, stage="denorm")         # convert back to original scale
+            sr_imgs = normalise_10k(
+                sr_imgs, stage="denorm"
+            )  # convert back to original scale
 
         # --- Move to CPU and return ---
-        sr_imgs = sr_imgs.cpu().detach()                             # detach from graph for inference output
+        sr_imgs = sr_imgs.cpu().detach()  # detach from graph for inference output
         return sr_imgs
 
-
-    def training_step(self,batch,batch_idx, optimizer_idx: Optional[int] = None, *args):
+    def training_step(
+        self, batch, batch_idx, optimizer_idx: Optional[int] = None, *args
+    ):
         """Dispatch the correct training step implementation based on PyTorch Lightning version.
 
         This method acts as a compatibility layer between different PyTorch Lightning
@@ -441,13 +489,15 @@ class SRGAN_model(pl.LightningModule):
             Any: The output of the active training step implementation, loss value.
         """
         # Depending on PL version, and depending on the manual optimization
-        if self.pl_version >= (2,0,0):
+        if self.pl_version >= (2, 0, 0):
             # In PL2.x, optimizer_idx is not passed, manual optimization is performed
-            return self._training_step_implementation(batch, batch_idx) # no optim_idx
+            return self._training_step_implementation(batch, batch_idx)  # no optim_idx
         else:
             # In Pl1.x, optimizer_idx arrives twice and is passed on
-            return self._training_step_implementation(batch, batch_idx, optimizer_idx) # pass optim_idx
-        
+            return self._training_step_implementation(
+                batch, batch_idx, optimizer_idx
+            )  # pass optim_idx
+
     def optimizer_step(
         self,
         epoch,
@@ -455,7 +505,7 @@ class SRGAN_model(pl.LightningModule):
         optimizer,
         optimizer_idx=None,
         optimizer_closure=None,
-        **kwargs,           # absorbs on_tpu/using_lbfgs/etc across PL versions
+        **kwargs,  # absorbs on_tpu/using_lbfgs/etc across PL versions
     ):
         """Custom optimizer step handling for PL 1.x automatic optimization.
 
@@ -489,7 +539,9 @@ class SRGAN_model(pl.LightningModule):
         if not self.automatic_optimization:
             # In manual mode we call opt.step()/zero_grad() in training_step_PL2.
             # In manual mode, we update EMA weights manually in training step too.
-            return super().optimizer_step(epoch, batch_idx, optimizer, optimizer_idx, optimizer_closure, **kwargs)
+            return super().optimizer_step(
+                epoch, batch_idx, optimizer, optimizer_idx, optimizer_closure, **kwargs
+            )
 
         # ---- PL 1.x auto-optimization path ----
         if optimizer_closure is not None:
@@ -543,24 +595,28 @@ class SRGAN_model(pl.LightningModule):
         # Purpose: Run model inference on validation batch without gradient tracking.
         # ======================================================================
         """ 1. Extract and Predict """
-        lr_imgs, hr_imgs = batch                            # unpack LR and HR tensors
-        sr_imgs = self.forward(lr_imgs)                     # run generator to produce SR prediction
+        lr_imgs, hr_imgs = batch  # unpack LR and HR tensors
+        sr_imgs = self.forward(lr_imgs)  # run generator to produce SR prediction
 
         # ======================================================================
         # SECTION: Compute and log validation metrics
         # Purpose: measure content-based metrics (PSNR/SSIM/etc.) on SR vs HR.
         # ======================================================================
         """ 2. Log Generator Metrics """
-        metrics_hr_img = torch.clone(hr_imgs)               # clone to avoid in-place ops on autograd graph
-        metrics_sr_img = torch.clone(sr_imgs)               # same for SR
-        #metrics = calculate_metrics(metrics_sr_img, metrics_hr_img, phase="val_metrics")
+        metrics_hr_img = torch.clone(
+            hr_imgs
+        )  # clone to avoid in-place ops on autograd graph
+        metrics_sr_img = torch.clone(sr_imgs)  # same for SR
+        # metrics = calculate_metrics(metrics_sr_img, metrics_hr_img, phase="val_metrics")
         metrics = self.content_loss_criterion.return_metrics(
             metrics_sr_img, metrics_hr_img, prefix="val_metrics/"
-        )                                                   # compute metrics using loss criterion helper
-        del metrics_hr_img, metrics_sr_img                   # free cloned tensors from GPU memory
+        )  # compute metrics using loss criterion helper
+        del metrics_hr_img, metrics_sr_img  # free cloned tensors from GPU memory
 
-        for key, value in metrics.items():                   # iterate over metrics dict
-            self.log(f"{key}", value,sync_dist=True)         # log each metric to logger (e.g., W&B, TensorBoard)
+        for key, value in metrics.items():  # iterate over metrics dict
+            self.log(
+                f"{key}", value, sync_dist=True
+            )  # log each metric to logger (e.g., W&B, TensorBoard)
 
         # ======================================================================
         # SECTION: Optional visualization — Log example SR/HR/LR images
@@ -568,28 +624,30 @@ class SRGAN_model(pl.LightningModule):
         # ======================================================================
         # only perform image logging for first N batches to avoid logging all 200 images
         if batch_idx < self.config.Logging.num_val_images:
-            base_lr = lr_imgs                                # use original LR for visualization
+            base_lr = lr_imgs  # use original LR for visualization
 
             # --- Select visualization bands (if multispectral) ---
-            if self.config.Model.in_bands <3:
+            if self.config.Model.in_bands < 3:
                 # show only first band
-                lr_vis = base_lr[:, :1, :, :]               # e.g., single-band input
-                hr_vis = hr_imgs[:, :1, :, :]               # subset HR
-                sr_vis = sr_imgs[:, :1, :, :]               # subset SR
+                lr_vis = base_lr[:, :1, :, :]  # e.g., single-band input
+                hr_vis = hr_imgs[:, :1, :, :]  # subset HR
+                sr_vis = sr_imgs[:, :1, :, :]  # subset SR
             elif self.config.Model.in_bands == 3:
                 # we can show normally
                 pass
             elif self.config.Model.in_bands == 4:
                 # assume its RGB-NIR, show RGB
-                lr_vis = base_lr[:, :3, :, :]               # e.g., Sentinel-2 RGB
-                hr_vis = hr_imgs[:, :3, :, :]               # subset HR
-                sr_vis = sr_imgs[:, :3, :, :]               # subset SR
-            elif self.config.Model.in_bands > 4:               # e.g., Sentinel-2 with >3 channels
+                lr_vis = base_lr[:, :3, :, :]  # e.g., Sentinel-2 RGB
+                hr_vis = hr_imgs[:, :3, :, :]  # subset HR
+                sr_vis = sr_imgs[:, :3, :, :]  # subset SR
+            elif self.config.Model.in_bands > 4:  # e.g., Sentinel-2 with >3 channels
                 # random selection of bands
-                idx = np.random.choice(sr_imgs.shape[1], 3, replace=False)  # randomly select 3 bands
-                lr_vis = base_lr[:, idx, :, :]               # subset LR
-                hr_vis = hr_imgs[:, idx, :, :]               # subset HR
-                sr_vis = sr_imgs[:, idx, :, :]               # subset SR
+                idx = np.random.choice(
+                    sr_imgs.shape[1], 3, replace=False
+                )  # randomly select 3 bands
+                lr_vis = base_lr[:, idx, :, :]  # subset LR
+                hr_vis = hr_imgs[:, idx, :, :]  # subset HR
+                sr_vis = sr_imgs[:, idx, :, :]  # subset SR
             else:
                 # should not happen
                 pass
@@ -603,30 +661,40 @@ class SRGAN_model(pl.LightningModule):
             val_img = plot_tensors(plot_lr_img, plot_sr_img, plot_hr_img, title="Val")
 
             # --- Cleanup ---
-            del plot_lr_img, plot_hr_img, plot_sr_img         # free memory after plotting
+            del plot_lr_img, plot_hr_img, plot_sr_img  # free memory after plotting
 
             # --- Log image to WandB (or compatible logger), if wanted ---
             if self.config.Logging.wandb.enabled:
-                self.logger.experiment.log({"Val SR": wandb.Image(val_img)})  # upload to dashboard
+                self.logger.experiment.log(
+                    {"Val SR": wandb.Image(val_img)}
+                )  # upload to dashboard
 
-            
             """ 3. Log Discriminator metrics """
             # If in pretraining, discard D metrics
-            if self._pretrain_check(): # check if we'e in pretrain phase
-                self.log("discriminator/adversarial_loss",
-                        torch.zeros(1, device=lr_imgs.device),
-                        prog_bar=False, sync_dist=True)
+            if self._pretrain_check():  # check if we'e in pretrain phase
+                self.log(
+                    "discriminator/adversarial_loss",
+                    torch.zeros(1, device=lr_imgs.device),
+                    prog_bar=False,
+                    sync_dist=True,
+                )
             else:
                 # run discriminator and get loss between pred labels and true labels
                 hr_discriminated = self.discriminator(hr_imgs)
                 sr_discriminated = self.discriminator(sr_imgs)
-                adversarial_loss = self.adversarial_loss_criterion(sr_discriminated, torch.ones_like(sr_discriminated))
+                adversarial_loss = self.adversarial_loss_criterion(
+                    sr_discriminated, torch.ones_like(sr_discriminated)
+                )
 
                 # Binary Cross-Entropy loss
-                adversarial_loss = self.adversarial_loss_criterion(sr_discriminated,
-                                                                torch.zeros_like(sr_discriminated)) + self.adversarial_loss_criterion(hr_discriminated,
-                                                                                                                                        torch.ones_like(hr_discriminated))
-                self.log("validation/DISC_adversarial_loss",adversarial_loss,sync_dist=True)
+                adversarial_loss = self.adversarial_loss_criterion(
+                    sr_discriminated, torch.zeros_like(sr_discriminated)
+                ) + self.adversarial_loss_criterion(
+                    hr_discriminated, torch.ones_like(hr_discriminated)
+                )
+                self.log(
+                    "validation/DISC_adversarial_loss", adversarial_loss, sync_dist=True
+                )
 
     def on_validation_epoch_start(self):
         """Hook executed at the start of each validation epoch.
@@ -681,110 +749,173 @@ class SRGAN_model(pl.LightningModule):
         super().on_test_epoch_end()
 
     def configure_optimizers(self):
-        """Set up optimizers and learning rate schedulers for GAN training.
-
-        Initializes separate Adam optimizers for the generator and discriminator,
-        along with optional learning rate schedulers. Supports ReduceLROnPlateau
-        schedulers for both models and an optional generator warmup scheduler
-        (linear or cosine) for smoother training initialization.
-
-        Returns:
-            Tuple[List[torch.optim.Optimizer], List[Dict[str, Any]]]:
-                A tuple containing:
-                - A list of optimizers in order `[optimizer_d, optimizer_g]`
-                (order is crucial for multi-optimizer training).
-                - A list of scheduler configurations for PyTorch Lightning.
-
-        Configuration Fields:
-            config.Optimizers:
-                - `optim_g_lr` (float): Learning rate for the generator.
-                - `optim_d_lr` (float): Learning rate for the discriminator.
-
-            config.Schedulers:
-                - `factor_g`, `factor_d` (float): Multiplicative LR reduction factor.
-                - `patience_g`, `patience_d` (int): Epochs to wait before LR reduction.
-                - `metric` (str): Metric name to monitor for ReduceLROnPlateau.
-                - `g_warmup_steps` (int, optional): Steps for warmup phase (default: 0).
-                - `g_warmup_type` (str, optional): Type of warmup schedule (`"linear"` or `"cosine"`).
-
-        Notes:
-            - Uses `ReduceLROnPlateau` for both generator and discriminator.
-            - Optionally applies step-based warmup for the generator learning rate.
-            - The returned order `[D, G]` must match the order expected by the training step.
         """
-        
-        # configure Generator optimizer (Adam)
-        optimizer_g = torch.optim.Adam(
-            params=filter(lambda p: p.requires_grad, self.generator.parameters()),  # only trainable params
-            lr=self.config.Optimizers.optim_g_lr                                     # LR from config
+        Robust optimizers & schedulers for GANs (PL1 & PL2 compatible).
+
+        - TTUR by default (D lr <= G lr)
+        - Adam with GAN-friendly betas/eps
+        - Exclude norm/affine/bias params from weight decay
+        - Separate Plateau schedulers for G and D (with cooldown/min_lr)
+        - Optional step-wise warmup for G (linear/cosine), no LR jump at handoff
+        - Returned order is [D, G] to match your training_step expectations
+        """
+        import math
+        import torch
+        import torch.nn as nn
+        from torch.optim import Adam
+        from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+        cfg_opt = self.config.Optimizers
+        cfg_sch = self.config.Schedulers
+
+        # ---------- helpers ----------
+        def _split_wd_params(model):
+            """Return two lists: params_with_wd, params_without_wd."""
+            wd, no_wd = [], []
+            norm_like = (
+                nn.BatchNorm1d,
+                nn.BatchNorm2d,
+                nn.BatchNorm3d,
+                nn.GroupNorm,
+                nn.LayerNorm,
+                nn.InstanceNorm1d,
+                nn.InstanceNorm2d,
+                nn.InstanceNorm3d,
+            )
+            for m in model.modules():
+                for n, p in m.named_parameters(recurse=False):
+                    if not p.requires_grad:
+                        continue
+                    if n.endswith("bias") or isinstance(m, norm_like):
+                        no_wd.append(p)
+                    else:
+                        wd.append(p)
+            # catch any top-level params not in modules (rare)
+            seen = set(map(id, wd + no_wd))
+            for n, p in model.named_parameters():
+                if p.requires_grad and id(p) not in seen:
+                    (no_wd if n.endswith("bias") else wd).append(p)
+            return wd, no_wd
+
+        def _adam(params, lr):
+            # GAN-friendly defaults; tune in config if needed
+            betas = getattr(cfg_opt, "betas", (0.0, 0.99))
+            eps = getattr(cfg_opt, "eps", 1e-7)
+            return Adam(params, lr=lr, betas=betas, eps=eps)
+
+        # ---------- LRs (TTUR) ----------
+        lr_g = float(getattr(cfg_opt, "optim_g_lr", 1e-4))
+        lr_d = float(
+            getattr(cfg_opt, "optim_d_lr", max(lr_g * 0.5, 1e-6))
+        )  # default: D slower than G
+
+        # weight decay (only on non-norm, non-bias)
+        wd_g = float(getattr(cfg_opt, "weight_decay_g", 0.0))
+        wd_d = float(getattr(cfg_opt, "weight_decay_d", 0.0))
+
+        # ---------- build optimizers with clean param groups ----------
+        g_wd, g_no = _split_wd_params(self.generator)
+        d_wd, d_no = _split_wd_params(self.discriminator)
+
+        optimizer_g = _adam(
+            [
+                {"params": g_wd, "weight_decay": wd_g},
+                {"params": g_no, "weight_decay": 0.0},
+            ],
+            lr=lr_g,
+        )
+        optimizer_d = _adam(
+            [
+                {"params": d_wd, "weight_decay": wd_d},
+                {"params": d_no, "weight_decay": 0.0},
+            ],
+            lr=lr_d,
         )
 
-        # configure Discriminator optimizer (Adam)
-        optimizer_d = torch.optim.Adam(
-            params=filter(lambda p: p.requires_grad, self.discriminator.parameters()),  # only trainable params
-            lr=self.config.Optimizers.optim_d_lr                                       # LR from config
+        # ---------- schedulers ----------
+        # Use distinct monitors for clarity (recommend: log these in validation)
+        monitor_g = getattr(
+            cfg_sch, "metric_g", getattr(cfg_sch, "metric", "val_g_loss")
+        )
+        monitor_d = getattr(
+            cfg_sch, "metric_d", getattr(cfg_sch, "metric", "val_d_loss")
         )
 
-        # learning rate schedulers (ReduceLROnPlateau)
-        scheduler_g = ReduceLROnPlateau(
-            optimizer_g, mode='min',
-            factor=self.config.Schedulers.factor_g,
-            patience=self.config.Schedulers.patience_g,
-            #verbose=self.config.Schedulers.verbose
+        sched_kwargs = dict(
+            mode="min",
+            factor=float(getattr(cfg_sch, "factor_g", 0.5)),
+            patience=int(getattr(cfg_sch, "patience_g", 5)),
+            threshold=float(getattr(cfg_sch, "threshold", 1e-3)),
+            threshold_mode="rel",
+            cooldown=int(getattr(cfg_sch, "cooldown", 0)),
+            min_lr=float(getattr(cfg_sch, "min_lr", 1e-7)),
+            verbose=bool(getattr(cfg_sch, "verbose", False)),
         )
-        scheduler_d = ReduceLROnPlateau(
-            optimizer_d, mode='min',
-            factor=self.config.Schedulers.factor_d,
-            patience=self.config.Schedulers.patience_d,
-            #verbose=self.config.Schedulers.verbose
+        # D can have its own factor/patience; fall back to G’s if not set
+        sched_kwargs_d = dict(sched_kwargs)
+        sched_kwargs_d["factor"] = float(
+            getattr(cfg_sch, "factor_d", sched_kwargs["factor"])
+        )
+        sched_kwargs_d["patience"] = int(
+            getattr(cfg_sch, "patience_d", sched_kwargs["patience"])
         )
 
-        # optional generator warmup scheduler (step-based)
-        warmup_steps = int(getattr(self.config.Schedulers, "g_warmup_steps", 0))
-        warmup_type = getattr(self.config.Schedulers, "g_warmup_type", "none").lower()
+        scheduler_g = ReduceLROnPlateau(optimizer_g, **sched_kwargs)
+        scheduler_d = ReduceLROnPlateau(optimizer_d, **sched_kwargs_d)
 
-        warmup_scheduler_config = None
-        if warmup_steps > 0 and warmup_type in {"cosine", "linear"}:
+        sch_configs = [
+            {
+                "scheduler": scheduler_d,
+                "monitor": monitor_d,
+                "reduce_on_plateau": True,
+                "interval": "epoch",
+                "frequency": 1,
+                "name": "plateau_d",
+            },
+            {
+                "scheduler": scheduler_g,
+                "monitor": monitor_g,
+                "reduce_on_plateau": True,
+                "interval": "epoch",
+                "frequency": 1,
+                "name": "plateau_g",
+            },
+        ]
 
-            def _generator_warmup_lambda(current_step: int) -> float:
-                if current_step >= warmup_steps:
+        # ---------- optional warmup for G (step-wise, multiplicative) ----------
+        warmup_steps = int(getattr(cfg_sch, "g_warmup_steps", 0))
+        warmup_type = str(getattr(cfg_sch, "g_warmup_type", "none")).lower()
+        if warmup_steps > 0 and warmup_type in {"linear", "cosine"}:
+
+            def _g_warmup_lambda(step: int) -> float:
+                if step >= warmup_steps:
                     return 1.0
+                t = (step + 1) / max(1, warmup_steps)
+                return (
+                    t
+                    if warmup_type == "linear"
+                    else 0.5 * (1.0 - math.cos(math.pi * t))
+                )
 
-                progress = (current_step + 1) / float(max(1, warmup_steps))
-                if warmup_type == "linear":
-                    return progress
-
-                # default to cosine warmup for smoother start
-                return 0.5 * (1.0 - math.cos(math.pi * progress))
-
-            warmup_scheduler = torch.optim.lr_scheduler.LambdaLR(
-                optimizer_g,
-                lr_lambda=_generator_warmup_lambda,
+            warmup_g = torch.optim.lr_scheduler.LambdaLR(
+                optimizer_g, lr_lambda=_g_warmup_lambda
+            )
+            # Runs every step; multiplies base LR so there is no jump at the end
+            sch_configs.append(
+                {
+                    "scheduler": warmup_g,
+                    "interval": "step",
+                    "frequency": 1,
+                    "name": "warmup_g",
+                }
             )
 
-            warmup_scheduler_config = {
-                'scheduler': warmup_scheduler,
-                'interval': 'step',
-                'frequency': 1,
-                'name': 'generator_warmup',
-            }
+        # Return order [D, G] to match your training_step
+        return [optimizer_d, optimizer_g], sch_configs
 
-        scheduler_configs = [
-            {'scheduler': scheduler_d, 'monitor': self.config.Schedulers.metric, 'reduce_on_plateau': True, 'interval': 'epoch', 'frequency': 1},
-            {'scheduler': scheduler_g, 'monitor': self.config.Schedulers.metric, 'reduce_on_plateau': True, 'interval': 'epoch', 'frequency': 1}
-        ]
-
-        if warmup_scheduler_config is not None:
-            scheduler_configs.append(warmup_scheduler_config)
-
-        # return both optimizers + schedulers for PL
-        return [
-            [optimizer_d, optimizer_g],  # order super important, it's [D, G] and checked in training step
-            scheduler_configs,
-        ]
-    
-    
-    def on_train_batch_start(self, batch, batch_idx):  # called before each training batch
+    def on_train_batch_start(
+        self, batch, batch_idx
+    ):  # called before each training batch
         """Hook executed before each training batch.
 
         Freezes or unfreezes discriminator parameters depending on the
@@ -796,10 +927,10 @@ class SRGAN_model(pl.LightningModule):
             batch (Any): The current batch of training data.
             batch_idx (int): Index of the current batch in the epoch.
         """
-        pre = self._pretrain_check()                   # check if currently in pretraining phase
-        for p in self.discriminator.parameters():      # loop over all discriminator params
-            p.requires_grad = not pre                  # freeze D during pretrain, unfreeze otherwise
-            
+        pre = self._pretrain_check()  # check if currently in pretraining phase
+        for p in self.discriminator.parameters():  # loop over all discriminator params
+            p.requires_grad = not pre  # freeze D during pretrain, unfreeze otherwise
+
     def on_train_batch_end(self, outputs, batch, batch_idx):
         """Hook executed after each training batch.
 
@@ -811,7 +942,7 @@ class SRGAN_model(pl.LightningModule):
             batch (Any): The batch of data processed.
             batch_idx (int): Index of the current batch in the epoch.
         """
-        self._log_lrs() # log LR's on each batch end
+        self._log_lrs()  # log LR's on each batch end
 
     def on_fit_start(self):  # called once at the start of training
         """Hook executed once at the beginning of model fitting.
@@ -826,9 +957,10 @@ class SRGAN_model(pl.LightningModule):
             to avoid duplicated output in distributed training.
         """
         super().on_fit_start()
-        if self.ema is not None and self.ema.device is None: # move ema weights
+        if self.ema is not None and self.ema.device is None:  # move ema weights
             self.ema.to(self.device)
         from opensr_srgan.utils.gpu_rank import _is_global_zero
+
         if _is_global_zero():
             print_model_summary(self)  # print model summary to console
 
@@ -840,7 +972,6 @@ class SRGAN_model(pl.LightningModule):
             prog_bar=True,
             sync_dist=True,
         )
-
 
     def _log_ema_setup_metrics(self) -> None:
         """Log static Exponential Moving Average (EMA) configuration parameters.
@@ -962,7 +1093,6 @@ class SRGAN_model(pl.LightningModule):
                 sync_dist=True,
             )
 
-
     def _pretrain_check(self) -> bool:
         """Check whether the model is still in the generator pretraining phase.
 
@@ -974,12 +1104,13 @@ class SRGAN_model(pl.LightningModule):
             - During pretraining, the discriminator is frozen and only the
             generator is updated.
         """
-        if self.pretrain_g_only and self.global_step < self.g_pretrain_steps:  # true if pretraining active
+        if (
+            self.pretrain_g_only and self.global_step < self.g_pretrain_steps
+        ):  # true if pretraining active
             return True
         else:
             return False  # false once pretrain steps are exceeded
 
-        
     def _compute_adv_loss_weight(self) -> float:
         """Compute the current adversarial loss weighting factor.
 
@@ -1016,7 +1147,10 @@ class SRGAN_model(pl.LightningModule):
         if self.global_step < self.g_pretrain_steps:
             return 0.0
 
-        if self.adv_loss_ramp_steps <= 0 or self.global_step >= self.g_pretrain_steps + self.adv_loss_ramp_steps:
+        if (
+            self.adv_loss_ramp_steps <= 0
+            or self.global_step >= self.g_pretrain_steps + self.adv_loss_ramp_steps
+        ):
             return beta
 
         # Normalize progress to [0, 1]
@@ -1040,7 +1174,7 @@ class SRGAN_model(pl.LightningModule):
         Args:
             adv_weight (float): Scalar multiplier applied to the adversarial loss term.
         """
-        self.log("training/adv_loss_weight", adv_weight,sync_dist=True)
+        self.log("training/adv_loss_weight", adv_weight, sync_dist=True)
 
     def _adv_loss_weight(self) -> float:
         """Compute and log the current adversarial loss weight.
@@ -1118,12 +1252,26 @@ class SRGAN_model(pl.LightningModule):
         # order matches your return: [optimizer_d, optimizer_g]
         opt_d = self.trainer.optimizers[0]
         opt_g = self.trainer.optimizers[1]
-        self.log("lr_discriminator", opt_d.param_groups[0]["lr"],
-                on_step=True, on_epoch=True, prog_bar=False, logger=True,sync_dist=True)
-        self.log("lr_generator", opt_g.param_groups[0]["lr"],
-                on_step=True, on_epoch=True, prog_bar=False, logger=True,sync_dist=True)
-    
-    def load_from_checkpoint(self,ckpt_path) -> None:
+        self.log(
+            "lr_discriminator",
+            opt_d.param_groups[0]["lr"],
+            on_step=True,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+            sync_dist=True,
+        )
+        self.log(
+            "lr_generator",
+            opt_g.param_groups[0]["lr"],
+            on_step=True,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+            sync_dist=True,
+        )
+
+    def load_from_checkpoint(self, ckpt_path) -> None:
         """Load model weights from a PyTorch Lightning checkpoint file.
 
         Loads the `state_dict` from the given checkpoint and maps it to the current device.
@@ -1137,6 +1285,5 @@ class SRGAN_model(pl.LightningModule):
         """
         # load ckpt
         ckpt = torch.load(ckpt_path, map_location=self.device)
-        self.load_state_dict(ckpt['state_dict'])
+        self.load_state_dict(ckpt["state_dict"])
         print(f"Loaded checkpoint from {ckpt_path}")
-        

@@ -41,6 +41,8 @@ Weighted combinations of spectral and perceptual losses enable fine control over
 A configuration-first philosophy drives reproducible experimentation, with all model, loss, and schedule parameters defined via concise configuration files.  
 The training pipeline stabilizes adversarial optimization through generator pretraining, linear adversarial-weight ramping, cosine learning-rate warmup, and optional exponential moving-average (EMA) smoothing.
 
+Two-time-scale update rule (TTUR) learning rates, GAN-friendly Adam defaults (betas $=(0.0, 0.99)$, $\varepsilon=10^{-7}$), selective weight-decay exclusions, ReduceLROnPlateau schedulers with cooldown/minimum learning-rate control, and configurable gradient clipping complete the stabilisation toolkit.
+
 Integration with the *OpenSR* ecosystem provides data interfaces for Sentinel-2 SAFE and SEN2NAIP datasets, and scalable large-scene inference through `opensr-utils`.  
 All common training optimizations for GAN training are implemented, creating a ready-to-use boilerplate for training notoriously unstable GANs on remote-sensing data.
 
@@ -205,6 +207,11 @@ Table: **Implemented training features for stable adversarial optimization.**
 | `label_smoothing` | Applies soft labels (e.g., 0.9 for real) to stabilize the discriminator and reduce overconfidence. |
 | `g_warmup_steps`, `g_warmup_type` | Warmup schedule for the generator’s learning rate, linear or cosine, ensuring smooth optimizer convergence. |
 | `EMA.enabled` | Enables Exponential Moving Average tracking of generator weights for smoother validation and inference outputs. |
+| TTUR LRs (`optim_g_lr`, `optim_d_lr`) | Two-time-scale update rule with discriminator LR defaulting to a slower schedule than the generator to maintain balance. |
+| Adam betas/epsilon (`betas`, `eps`) | GAN-friendly defaults $(0.0, 0.99)$ and $10^{-7}$ avoid stale momentum and numerical noise during adversarial updates. |
+| Weight-decay exclusions | Normalisation and bias parameters are automatically removed from decay groups so regularisation targets convolutional kernels only. |
+| Plateau scheduler controls (`cooldown`, `min_lr`) | `ReduceLROnPlateau` schedulers for $G$ and $D$ now support cooldown periods and minimum learning-rate floors. |
+| `gradient_clip_val` | Optional global-norm clipping applied after every optimiser step to suppress discriminator-induced spikes. |
 | `Training.gpus` | Enables distributed data-parallel training when multiple GPU indices are listed, scaling training efficiently via Pytorch-Lightning. |
 
 :::

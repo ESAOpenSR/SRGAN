@@ -22,6 +22,12 @@ Once the `training/pretrain_phase` flag is `0`, pretraining of the generator is 
 As training continues, the generator is trying to fool the discriminator and the discriminator is trying to distinguish between true/synthetic, we monitor the overall loss of the models independantly. When the overall loss metric of one model reaches a plateau, we reduce it's learning rate in order to optimnally train the model.
 ![lr_scheduler](assets/lr_scheduler.png). The patience, LR decrease factor inc ase of plateau and the metric to be used for these LR schedulers are all defined individually for $G$ and $D$ in the `Schedulers.` section of the config file.
 
+The schedulers now expose a `cooldown` period and `min_lr` floor. Cooldown waits a configurable number of epochs before watching for the next plateau, preventing back-to-back reductions, while `min_lr` guarantees that the optimiser never stalls at zero. Use these knobs to keep the momentum of long trainings without overshooting into vanishing updates.
+
+#### TTUR, Adam defaults and gradient clipping
+
+Both optimisers use a two-time-scale update rule (TTUR) so the discriminator defaults to a slower learning rate than the generator. The bundled Adam configuration mirrors popular GAN recipes with betas set to `(0.0, 0.99)` and `eps=1e-7`, ensuring the generator reacts quickly to discriminator feedback without building up stale momentum. Weight decay is automatically restricted to convolutional and dense kernels—normalisation layers and biases are excluded—so regularisation never interferes with running statistics. Finally, `gradient_clip_val` applies global norm clipping when set above zero; values between `0.5` and `1.0` work well when discriminator spikes cause unstable updates.
+
 #### Final stages of the Training
 With further progression of the training, it is important not only to monitor the absolute reconstruction quality of the generator, but also to keep an eye on the balance between the generator and discriminator. Ideally, we try to reach the Nash equilibrium, where the discriminator can not distinguish between real and synthetic anymore, meaning the super-resolution is (at least fdor the discriminator) indistinguishable from the real high-resolution image. This equilibrium is achieved when both $D(y)$ and $D(G(x))$ approach `0.5`.
 ![adv1](assets/discr_y_prob.png)

@@ -129,10 +129,19 @@ When adjusting these presets, scale generator and discriminator together and mon
 
 ## Optimisers
 
+The trainer instantiates independent Adam optimisers for the generator and discriminator and enables a Two-Time-Scale Update Rule (TTUR) setup by default. The discriminator learning rate automatically defaults to a slower schedule than the generator, which keeps adversarial updates balanced without extra configuration.
+
 | Key | Default | Description |
 | --- | --- | --- |
 | `optim_g_lr` | `1e-4` | Learning rate for the generator Adam optimiser. |
-| `optim_d_lr` | `1e-4` | Learning rate for the discriminator Adam optimiser. |
+| `optim_d_lr` | `0.5 * optim_g_lr` | Learning rate for the discriminator. Falls back to half of the generator LR (TTUR) when not explicitly set. |
+| `betas` | `(0.0, 0.99)` | GAN-friendly Adam momentum pair that favours fast response from the second moment term while removing generator bias from the first moment. |
+| `eps` | `1e-7` | Lower epsilon that matches common GAN recipes and prevents plateau-induced numerical noise. |
+| `weight_decay_g` | `0.0` | Weight decay applied to generator parameters that are *not* normalisation affine/bias terms. |
+| `weight_decay_d` | `0.0` | Weight decay applied to discriminator parameters that are *not* normalisation affine/bias terms. |
+| `gradient_clip_val` | `0.0` | Global gradient-norm clipping threshold applied to both optimisers (set to `0` to disable). |
+
+Weight decay exclusions are handled automatically: batch/instance/group-norm layers and bias parameters are filtered into a no-decay group so regularisation only touches convolutional kernels and dense weights. This mirrors best practices for GAN training and keeps normalisation statistics stable.
 
 ## Schedulers
 
@@ -141,17 +150,24 @@ Both optimisers share the same configuration keys because they use `torch.optim.
 | Key | Default | Description |
 | --- | --- | --- |
 | `metric` | `val_metrics/l1` | Validation metric monitored for plateau detection. |
+| `metric_g` | — | Optional override for the generator scheduler monitor. |
+| `metric_d` | — | Optional override for the discriminator scheduler monitor. |
 | `patience_g` | `100` | Epochs with no improvement before reducing the generator LR. |
 | `patience_d` | `100` | Epochs with no improvement before reducing the discriminator LR. |
 | `factor_g` | `0.5` | Multiplicative factor applied to the generator LR upon plateau. |
 | `factor_d` | `0.5` | Multiplicative factor applied to the discriminator LR upon plateau. |
+| `cooldown` | `0` | Number of epochs to wait after an LR drop before resuming plateau checks. |
+| `min_lr` | `1e-7` | Minimum learning rate allowed for both schedulers. |
 | `verbose` | `True` | Enables scheduler logging messages. |
 | `g_warmup_steps` | `2000` | Number of optimiser steps used for generator LR warmup. Set to `0` to disable. |
 | `g_warmup_type` | `cosine` | Warmup curve for the generator LR (`cosine` or `linear`). |
 
 `g_warmup_steps` applies a step-wise warmup through `torch.optim.lr_scheduler.LambdaLR` before resuming the standard
 `ReduceLROnPlateau` schedule. Cosine warmup is smoother for most runs, but a linear ramp (especially for 1–5k steps) remains
-available for experiments that prefer a steady rise.
+available for experiments that prefer a steady rise. Both generator and discriminator schedulers expose Plateau parameters,
+including a shared `cooldown` period (epochs to wait before resuming plateau checks) and a `min_lr` floor so the learning rate
+never collapses to zero. Separate monitor keys (`metric_g`, `metric_d`) can be provided when generator and discriminator use
+different validation metrics.
 
 ## Logging
 

@@ -100,7 +100,7 @@ def train(config):
             OmegaConf.save(config, f)
     checkpoint_callback = ModelCheckpoint(
         dirpath=dir_save_checkpoints,
-        monitor=config.Schedulers.metric,
+        monitor=config.Schedulers.metric_g,
         mode="min",
         save_last=True,
         save_top_k=2,
@@ -110,7 +110,7 @@ def train(config):
     from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
     early_stop_callback = EarlyStopping(
-        monitor=config.Schedulers.metric,
+        monitor=config.Schedulers.metric_g,
         min_delta=0.00,
         patience=250,
         verbose=True,
