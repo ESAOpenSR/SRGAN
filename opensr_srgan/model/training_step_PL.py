@@ -204,6 +204,16 @@ def training_step_PL2(self, batch, batch_idx):
     # fetch optimizers (expects two)
     opt_d, opt_g = self.optimizers()
 
+    # optional gradient clipping support (norm-based)
+    sched_cfg = getattr(self.config, "Schedulers", None)
+    gradient_clip_val = 0.0
+    if sched_cfg is not None:
+        gradient_clip_val = float(getattr(sched_cfg, "gradient_clip_val", 0.0) or 0.0)
+
+    def _maybe_clip_gradients(module):
+        if gradient_clip_val > 0.0 and module is not None:
+            torch.nn.utils.clip_grad_norm_(module.parameters(), gradient_clip_val)
+
     # ======================================================================
     # SECTION: Pretraining phase gate
     # ======================================================================
@@ -235,6 +245,7 @@ def training_step_PL2(self, batch, batch_idx):
         if hasattr(self, "toggle_optimizer"): self.toggle_optimizer(opt_g)
         opt_g.zero_grad()
         self.manual_backward(content_loss)
+        _maybe_clip_gradients(self.generator)
         opt_g.step()
         if hasattr(self, "untoggle_optimizer"): self.untoggle_optimizer(opt_g)
         
@@ -269,6 +280,7 @@ def training_step_PL2(self, batch, batch_idx):
     self.log("discriminator/D(G(x))_prob", d_fake_prob, prog_bar=True, sync_dist=True)
 
     self.manual_backward(adversarial_loss)
+    _maybe_clip_gradients(self.discriminator)
     opt_d.step()
     if hasattr(self, "untoggle_optimizer"): self.untoggle_optimizer(opt_d)
 
@@ -295,6 +307,7 @@ def training_step_PL2(self, batch, batch_idx):
     self.log("generator/total_loss", total_loss, sync_dist=True)
 
     self.manual_backward(total_loss)
+    _maybe_clip_gradients(self.generator)
     opt_g.step()
     if hasattr(self, "untoggle_optimizer"): self.untoggle_optimizer(opt_g)
     
