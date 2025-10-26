@@ -7,6 +7,24 @@ import kornia.metrics as km
 
 from ...data.utils import Normalizer
 
+LOSS_EPS = 1e-12
+
+
+def _ensure_finite(tensor: torch.Tensor, *, eps: float = LOSS_EPS) -> torch.Tensor:
+    """Clamp NaN/Inf values that can emerge from loss computations.
+
+    Args:
+        tensor: Input tensor potentially containing NaNs/Infs.
+        eps: Small positive constant used when replacing NaNs.
+
+    Returns:
+        torch.Tensor: Tensor with finite values only.
+    """
+
+    if not torch.is_floating_point(tensor):
+        return tensor
+    return torch.nan_to_num(tensor, nan=eps, posinf=1.0 / eps, neginf=-1.0 / eps)
+
 def _cfg_get(cfg, keys, default=None):
     """Safely retrieve a nested configuration value.
 
@@ -133,6 +151,7 @@ class GeneratorContentLoss(nn.Module):
             self.perc_w * comps["perceptual"] +
             self.tv_w   * comps["tv"]
         )
+        loss = _ensure_finite(loss)
         metrics = {k: v.detach() for k, v in comps.items()}
         return loss, metrics
 
@@ -169,7 +188,7 @@ class GeneratorContentLoss(nn.Module):
         """
         dh = (x[:, :, 1:, :] - x[:, :, :-1, :]).abs().mean()
         dw = (x[:, :, :, 1:] - x[:, :, :, :-1]).abs().mean()
-        return dh + dw
+        return _ensure_finite(dh + dw)
 
     @staticmethod
     def _sam_loss(sr: torch.Tensor, hr: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
@@ -189,12 +208,18 @@ class GeneratorContentLoss(nn.Module):
         B, C, H, W = sr.shape
         sr_f = sr.view(B, C, -1)
         hr_f = hr.view(B, C, -1)
-        dot  = (sr_f * hr_f).sum(dim=1)
+        dot = (sr_f * hr_f).sum(dim=1)
+        if torch.is_floating_point(sr):
+            dtype_eps = torch.finfo(sr.dtype).eps
+        else:
+            dtype_eps = torch.finfo(torch.float32).eps
+        eps = max(eps, dtype_eps)
         sr_n = sr_f.norm(dim=1).clamp_min(eps)
         hr_n = hr_f.norm(dim=1).clamp_min(eps)
-        cos  = (dot / (sr_n * hr_n)).clamp(-1 + 1e-7, 1 - 1e-7)
-        ang  = torch.acos(cos)
-        return ang.mean()
+        denom = torch.clamp(sr_n * hr_n, min=eps)
+        cos = torch.clamp(dot / denom, -1 + 1e-7, 1 - 1e-7)
+        ang = torch.acos(cos)
+        return _ensure_finite(ang.mean())
 
     def _pick_rgb(self, x: torch.Tensor) -> torch.Tensor:
         """Select three channels for perceptual computation.
@@ -265,7 +290,7 @@ class GeneratorContentLoss(nn.Module):
 
         if not requires_grad:
             distance = distance.detach()
-        return distance
+        return _ensure_finite(distance)
 
     def _compute_components(
         self, sr: torch.Tensor, hr: torch.Tensor, *, build_graph: bool
@@ -296,7 +321,7 @@ class GeneratorContentLoss(nn.Module):
                 return fn().detach()
 
         # Core reconstruction metrics (always unweighted)
-        comps["l1"] = _compute(self.l1_w, lambda: F.l1_loss(sr, hr))
+        comps["l1"] = _compute(self.l1_w, lambda: _ensure_finite(F.l1_loss(sr, hr)))
         comps["sam"] = _compute(self.sam_w, lambda: self._sam_loss(sr, hr))
 
         # Perceptual distance on 3 selected bands
@@ -311,14 +336,15 @@ class GeneratorContentLoss(nn.Module):
         with torch.no_grad():
             #sr_metric = self.normalizer.normalize(sr)
             #hr_metric = self.normalizer.normalize(hr)
-            sr_metric = torch.clamp(sr, 0.0, self.max_val)
-            hr_metric = torch.clamp(hr, 0.0, self.max_val)
-            psnr = km.psnr(sr_metric, hr_metric, max_val=self.max_val)
+            safe_max_val = max(self.max_val, LOSS_EPS)
+            sr_metric = torch.clamp(sr, 0.0, safe_max_val)
+            hr_metric = torch.clamp(hr, 0.0, safe_max_val)
+            psnr = km.psnr(sr_metric, hr_metric, max_val=safe_max_val)
             ssim = km.ssim(
                 sr_metric,
                 hr_metric,
                 window_size=self.ssim_win,
-                max_val=self.max_val,
+                max_val=safe_max_val,
             )
 
             if psnr.dim() > 0:
@@ -326,8 +352,8 @@ class GeneratorContentLoss(nn.Module):
             if ssim.dim() > 0:
                 ssim = ssim.mean()
 
-            comps["psnr"] = psnr.detach()
-            comps["ssim"] = ssim.detach()
+            comps["psnr"] = _ensure_finite(psnr).detach()
+            comps["ssim"] = _ensure_finite(ssim).detach()
 
         return comps
 
