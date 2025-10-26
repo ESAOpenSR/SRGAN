@@ -93,6 +93,10 @@ Optimizers:
   optim_g_lr: 1e-4             # Learning rate for Generator
   optim_d_lr: 1e-4             # Learning rate for Discriminator
   gradient_clip_val: 1.0        # Gradient clipping value (0 disables clipping)
+  betas: [0.0, 0.99]          # optional
+  eps: 1.0e-7                 # optional
+  weight_decay_g: 0.0         # optional
+  weight_decay_d: 0.0         # optional
 
 
 
