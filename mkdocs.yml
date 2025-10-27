@@ -10,7 +10,7 @@ docs_dir: docs
 
 theme:
   name: material
-  favicon: assets/logo.png
+  favicon: assets/favicon.png
   #favicon: assets/favicon.png
   features:
     - navigation.tabs        # <- top tabs
