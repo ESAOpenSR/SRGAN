@@ -8,8 +8,9 @@ This document outlines how ESA OpenSR organises its super-resolution GAN, the ma
 
 * **Configuration ingestion.** Uses OmegaConf to load hyperparameters, dataset choices, and logging options. Convenience helpers
   such as `_pretrain_check()` and `_compute_adv_loss_weight()` translate config values into runtime behaviour.
-* **Model factory.** `get_models()` builds the generator and discriminator at runtime based on `Generator.model_type` and
-  `Discriminator.model_type`. Unsupported combinations fail fast with clear error messages.
+* **Model factory.** `get_models()` builds the generator and discriminator at runtime via the generator factory using
+  `Generator.model_type`/`block_type` and `Discriminator.model_type`. Unsupported combinations fail fast with clear error
+  messages.
 * **Loss construction.** `GeneratorContentLoss` (from `opensr_srgan.model.loss`) provides L1, spectral angle mapper (SAM), perceptual, and
   total-variation terms. Adversarial supervision uses `torch.nn.BCEWithLogitsLoss` with optional label smoothing.
 * **Optimiser scheduling.** `configure_optimizers()` returns paired Adam optimisers (generator + discriminator) with
@@ -40,7 +41,7 @@ The generator zoo lives under `opensr_srgan/model/generators/` and can be select
 * **Flexible residual families (`flexible_generator.py`).** Parameterised factory that instantiates residual, RCAB, RRDB, or
   large-kernel attention blocks while reusing the same interface. Channel counts, block depth, kernel sizes, and scaling factor
   are all read from the YAML file.
-* **Conditional GAN generator (`cgan_generator.py`).** Extends the flexible generator with conditioning inputs and latent noise,
+* **Stochastic GAN generator (`cgan_generator.py`).** Extends the flexible generator with conditioning inputs and latent noise,
   enabling experiments where auxiliary metadata influences the super-resolution output.
 * **Advanced variants (`SRGAN_advanced.py`).** Provides additional block implementations and compatibility aliases exposed in
   `__init__.py` for backwards compatibility.

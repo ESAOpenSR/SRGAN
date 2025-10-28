@@ -27,17 +27,28 @@ def print_model_summary(self):
     # ------------------------------------------------------------------
     # Derive human-readable generator description
     # ------------------------------------------------------------------
-    g_type = self.config.Generator.model_type
-    if g_type == "SRResNet":
-        g_desc = "SRResNet (Residual Blocks with BatchNorm)"
-    elif g_type == "res":
-        g_desc = "flexible_generator (Residual Blocks without BatchNorm)"
-    elif g_type == "rcab":
-        g_desc = "flexible_generator (RCAB Blocks with Channel Attention)"
-    elif g_type == "rrdb":
-        g_desc = "flexible_generator (RRDB Dense Residual Blocks)"
-    elif g_type == "lka":
-        g_desc = "flexible_generator (LKA Large-Kernel Attention Blocks)"
+    g_type = getattr(self.config.Generator, "model_type", "SRResNet")
+    g_type_norm = str(g_type).lower().replace("-", "_")
+    block_type = getattr(self.config.Generator, "block_type", None)
+
+    if g_type_norm in {"res", "rcab", "rrdb", "lka"} and block_type is None:
+        block_type = g_type_norm
+        g_type_norm = "srresnet"
+
+    block_desc_map = {
+        "standard": "Residual Blocks with BatchNorm",
+        "res": "Residual Blocks without BatchNorm",
+        "rcab": "RCAB Blocks with Channel Attention",
+        "rrdb": "RRDB Dense Residual Blocks",
+        "lka": "LKA Large-Kernel Attention Blocks",
+    }
+
+    if g_type_norm in {"srresnet", "sr_resnet"}:
+        block_key = "standard" if block_type is None else str(block_type).lower()
+        desc = block_desc_map.get(block_key, f"Custom Block Variant: {block_key}")
+        g_desc = f"SRResNet ({desc})"
+    elif g_type_norm in {"stochastic_gan", "cgan", "conditional_cgan"}:
+        g_desc = "Stochastic SRGAN (Latent-modulated Residual Blocks)"
     else:
         g_desc = f"Custom Generator Type: {g_type}"
 

@@ -18,6 +18,7 @@ from opensr_srgan.utils.logging_helpers import plot_tensors
 from opensr_srgan.utils.model_descriptions import print_model_summary
 from opensr_srgan.utils.radiometrics import histogram as histogram_match
 from opensr_srgan.utils.radiometrics import normalise_10k
+from opensr_srgan.model.generators import build_generator
 from opensr_srgan.model.model_blocks import ExponentialMovingAverage
 
 
@@ -56,8 +57,10 @@ class SRGAN_model(pl.LightningModule):
     Configuration overview (minimal)
     --------------------------------
     - **Model**: `in_bands` (int)
-    - **Generator**: `model_type` (`"SRResNet"`, `"res"`, `"rcab"`, `"rrdb"`, `"lka"`, `"conditional_cgan"`),
-    `n_channels`, `n_blocks`, `large_kernel_size`, `small_kernel_size`, `scaling_factor`
+        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`), optional
+        `block_type` for SRResNet variants (`"standard"`, `"res"`, `"rcab"`, `"rrdb"`,
+        `"lka"`), `n_channels`, `n_blocks`, `large_kernel_size`, `small_kernel_size`,
+        `scaling_factor`
     - **Discriminator**: `model_type` (`"standard"`, `"patchgan"`), `n_blocks` (optional)
     - **Training**:
     - `pretrain_g_only` (bool), `g_pretrain_steps` (int)
@@ -223,53 +226,7 @@ class SRGAN_model(pl.LightningModule):
         # SECTION: Initialize Generator
         # Purpose: Build generator network depending on selected architecture.
         # ======================================================================
-        generator_type = self.config.Generator.model_type
-
-        if generator_type == "SRResNet":
-            # Standard SRResNet generator
-            from opensr_srgan.model.generators.srresnet import Generator
-
-            self.generator = Generator(
-                in_channels=self.config.Model.in_bands,  # number of input channels
-                large_kernel_size=self.config.Generator.large_kernel_size,
-                small_kernel_size=self.config.Generator.small_kernel_size,
-                n_channels=self.config.Generator.n_channels,
-                n_blocks=self.config.Generator.n_blocks,
-                scaling_factor=self.config.Generator.scaling_factor,
-            )
-        elif generator_type in ["res", "rcab", "rrdb", "lka"]:
-            # Advanced generator variants (ResNet, RCAB, RRDB, etc.)
-            from opensr_srgan.model.generators.flexible_generator import (
-                FlexibleGenerator,
-            )
-
-            self.generator = FlexibleGenerator(
-                in_channels=self.config.Model.in_bands,
-                n_channels=self.config.Generator.n_channels,
-                n_blocks=self.config.Generator.n_blocks,
-                small_kernel=self.config.Generator.small_kernel_size,
-                large_kernel=self.config.Generator.large_kernel_size,
-                scale=self.config.Generator.scaling_factor,
-                block_type=self.config.Generator.model_type,
-            )
-        elif generator_type.lower() in ["conditional_cgan", "cgan"]:
-            from opensr_srgan.model.generators import ConditionalGANGenerator
-
-            self.generator = ConditionalGANGenerator(
-                in_channels=self.config.Model.in_bands,
-                n_channels=self.config.Generator.n_channels,
-                n_blocks=self.config.Generator.n_blocks,
-                small_kernel=self.config.Generator.small_kernel_size,
-                large_kernel=self.config.Generator.large_kernel_size,
-                scale=self.config.Generator.scaling_factor,
-                noise_dim=getattr(self.config.Generator, "noise_dim", 128),
-                res_scale=getattr(self.config.Generator, "res_scale", 0.2),
-            )
-
-        else:
-            raise ValueError(
-                f"Unknown generator model type: {self.config.Generator.model_type}"
-            )  # safety check
+        self.generator = build_generator(self.config)
 
         if mode == "train":  # only get discriminator in training mode
             # ======================================================================
