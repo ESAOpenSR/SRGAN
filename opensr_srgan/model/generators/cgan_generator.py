@@ -9,7 +9,7 @@ from torch import nn
 
 from ..model_blocks import make_upsampler
 
-__all__ = ["ConditionalGANGenerator"]
+__all__ = ["StochasticGenerator", "ConditionalGANGenerator"]
 
 
 class NoiseResBlock(nn.Module):
@@ -65,8 +65,8 @@ class NoiseResBlock(nn.Module):
         return x + self.res_scale * out
 
 
-class ConditionalGANGenerator(nn.Module):
-    """Conditional generator with latent noise modulation for super-resolution.
+class StochasticGenerator(nn.Module):
+    """Stochastic generator with latent noise modulation for super-resolution.
 
     Extends a standard SR generator by injecting stochastic latent noise through
     `NoiseResBlock`s, enabling diverse texture generation conditioned on the same
@@ -98,7 +98,7 @@ class ConditionalGANGenerator(nn.Module):
         tail (nn.Conv2d): Final convolution projecting to output space.
 
     Example:
-        >>> g = ConditionalGANGenerator(in_channels=3, scale=4)
+        >>> g = StochasticGenerator(in_channels=3, scale=4)
         >>> lr = torch.randn(1, 3, 64, 64)
         >>> sr, noise = g(lr, return_noise=True)
     """
@@ -187,3 +187,7 @@ class ConditionalGANGenerator(nn.Module):
         if return_noise:
             return sr, noise
         return sr
+
+
+# Backwards compatibility ---------------------------------------------------
+ConditionalGANGenerator = StochasticGenerator

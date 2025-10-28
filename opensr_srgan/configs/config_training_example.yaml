@@ -76,7 +76,8 @@ Training:
 # ---------------------------------------------------------------------------- #
 # See Docs for archtecture details and suggestions
 Generator:
-  model_type: 'SRResNet'           # Block type: ['SRResNet', 'res', 'rcab', 'rrdb', 'lka', 'conditional_cgan'/'cgan']
+  model_type: 'SRResNet'       # Generator family: ['SRResNet', 'stochastic_gan']
+  block_type: 'standard'       # SRResNet block variant: ['standard', 'res', 'rcab', 'rrdb', 'lka']
   large_kernel_size: 9         # Kernel for head and tail conv layers
   small_kernel_size: 3         # Kernel for intermediate blocks
   n_channels: 64               # Number of feature channels (original 64)

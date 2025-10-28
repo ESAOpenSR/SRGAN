@@ -79,7 +79,8 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `model_type` | `cgan` | Generator architecture (`SRResNet`, `res`, `rcab`, `rrdb`, `lka`, `conditional_cgan`, `cgan`). |
+| `model_type` | `SRResNet` | Generator family (`SRResNet` or `stochastic_gan`). |
+| `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`. |
 | `large_kernel_size` | `9` | Kernel size for input/output convolution layers. |
 | `small_kernel_size` | `3` | Kernel size for residual/attention blocks. |
 | `n_channels` | `96` | Base number of feature channels. |
@@ -109,12 +110,12 @@ performing sweeps:
 
 | Generator type | Recommended `n_channels` | Recommended `n_blocks` | Typical `scaling_factor` | Notes |
 | --- | --- | --- | --- | --- |
-| `SRResNet` | 64 | 16 | 4× | Canonical baseline with batch-norm residual blocks; scale can be 2×/4×/8× as needed. |
-| `res` | 96 | 32 | 4×–8× | Lightweight residual blocks without batch norm; works well for high-scale (8×) Sentinel data. |
-| `rcab` | 96 | 32 | 4×–8× | Attention-enhanced residual blocks; keep depth high to exploit channel attention. |
-| `rrdb` | 96 | 32 | 4×–8× | Dense residual blocks expand receptive field; expect higher VRAM use at 32 blocks. |
-| `lka` | 96 | 24–32 | 4×–8× | Large-kernel attention blocks stabilise at moderate depth; drop to 24 blocks if memory bound. |
-| `conditional_cgan`/`cgan` | 96 | 16 | 4× | Latent-modulated residual stack; pair with noise_dim≈128 and res_scale≈0.2 defaults. |
+| `SRResNet` (`block_type: standard`) | 64 | 16 | 4× | Canonical baseline with batch-norm residual blocks; scale can be 2×/4×/8× as needed. |
+| `SRResNet` (`block_type: res`) | 96 | 32 | 4×–8× | Lightweight residual blocks without batch norm; works well for high-scale (8×) Sentinel data. |
+| `SRResNet` (`block_type: rcab`) | 96 | 32 | 4×–8× | Attention-enhanced residual blocks; keep depth high to exploit channel attention. |
+| `SRResNet` (`block_type: rrdb`) | 96 | 32 | 4×–8× | Dense residual blocks expand receptive field; expect higher VRAM use at 32 blocks. |
+| `SRResNet` (`block_type: lka`) | 96 | 24–32 | 4×–8× | Large-kernel attention blocks stabilise at moderate depth; drop to 24 blocks if memory bound. |
+| `stochastic_gan` | 96 | 16 | 4× | Latent-modulated residual stack; pair with `noise_dim ≈ 128` and `res_scale ≈ 0.2` defaults. |
 
 ### Discriminator presets
 
