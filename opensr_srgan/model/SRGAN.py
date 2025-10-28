@@ -57,11 +57,13 @@ class SRGAN_model(pl.LightningModule):
     Configuration overview (minimal)
     --------------------------------
     - **Model**: `in_bands` (int)
-        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`), optional
-        `block_type` for SRResNet variants (`"standard"`, `"res"`, `"rcab"`, `"rrdb"`,
-        `"lka"`), `n_channels`, `n_blocks`, `large_kernel_size`, `small_kernel_size`,
-        `scaling_factor`
-    - **Discriminator**: `model_type` (`"standard"`, `"patchgan"`), `n_blocks` (optional)
+        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`, `"esrgan"`),
+        optional `block_type` for SRResNet variants (`"standard"`, `"res"`, `"rcab"`,
+        `"rrdb"`, `"lka"`), `n_channels`, `n_blocks`, `large_kernel_size`,
+        `small_kernel_size`, `scaling_factor`, plus ESRGAN-specific knobs
+        (`growth_channels`, `res_scale`, `out_channels`).
+    - **Discriminator**: `model_type` (`"standard"`, `"patchgan"`, `"esrgan"`), `n_blocks`
+        (optional), ESRGAN extras (`base_channels`, `linear_size`).
     - **Training**:
     - `pretrain_g_only` (bool), `g_pretrain_steps` (int)
     - `adv_loss_ramp_steps` (int), `label_smoothing` (bool)
