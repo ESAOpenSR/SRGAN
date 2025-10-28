@@ -7,6 +7,7 @@ from typing import Any
 from torch import nn
 
 from .cgan_generator import StochasticGenerator
+from .esrgan import ESRGANGenerator
 from .flexible_generator import FlexibleGenerator
 from .srresnet import Generator as SRResNetGenerator
 
@@ -23,6 +24,7 @@ _SRRESNET_BLOCK_ALIASES = {
 
 _MODEL_TYPE_ALIASES = {
     "srresnet": {"srresnet", "sr_resnet", "sr-resnet"},
+    "esrgan": {"esrgan", "rrdbnet", "rrdb_net"},
     "stochastic_gan": {
         "stochastic_gan",
         "stochastic",
@@ -71,6 +73,25 @@ def _resolve_srresnet_block(generator_cfg: Any, model_type_hint: str) -> str:
     )
 
 
+def _warn_overridden_options(component: str, model: str, options: list[str]) -> None:
+    """Emit a user-facing notice when configuration options are ignored."""
+
+    if not options:
+        return
+
+    joined = ", ".join(sorted(options))
+    print(f"[{component}:{model}] Ignoring unsupported configuration options: {joined}.")
+
+
+def _collect_overridden(generator_cfg: Any, *keys: str) -> list[str]:
+    overridden: list[str] = []
+    for key in keys:
+        value = getattr(generator_cfg, key, None)
+        if value is not None:
+            overridden.append(key)
+    return overridden
+
+
 def build_generator(config: Any) -> nn.Module:
     """Instantiate a generator module from the user configuration.
 
@@ -110,13 +131,14 @@ def build_generator(config: Any) -> nn.Module:
         srresnet_block = None
 
     in_channels = int(getattr(model_cfg, "in_bands"))
-    large_kernel = int(getattr(generator_cfg, "large_kernel_size"))
-    small_kernel = int(getattr(generator_cfg, "small_kernel_size"))
-    n_channels = int(getattr(generator_cfg, "n_channels"))
-    n_blocks = int(getattr(generator_cfg, "n_blocks"))
-    scale = int(getattr(generator_cfg, "scaling_factor"))
+    scale = int(getattr(generator_cfg, "scaling_factor", 4))
 
     if model_type == "srresnet":
+        large_kernel = int(getattr(generator_cfg, "large_kernel_size", 9))
+        small_kernel = int(getattr(generator_cfg, "small_kernel_size", 3))
+        n_channels = int(getattr(generator_cfg, "n_channels", 64))
+        n_blocks = int(getattr(generator_cfg, "n_blocks", 16))
+
         block_variant = _resolve_srresnet_block(generator_cfg, srresnet_block)
 
         if block_variant == "standard":
@@ -140,8 +162,19 @@ def build_generator(config: Any) -> nn.Module:
         )
 
     if model_type == "stochastic_gan":
+        large_kernel = int(getattr(generator_cfg, "large_kernel_size", 9))
+        small_kernel = int(getattr(generator_cfg, "small_kernel_size", 3))
+        n_channels = int(getattr(generator_cfg, "n_channels", 64))
+        n_blocks = int(getattr(generator_cfg, "n_blocks", 16))
         noise_dim = int(getattr(generator_cfg, "noise_dim", 128))
         res_scale = float(getattr(generator_cfg, "res_scale", 0.2))
+
+        _warn_overridden_options(
+            "Generator",
+            "stochastic_gan",
+            _collect_overridden(generator_cfg, "block_type"),
+        )
+
         return StochasticGenerator(
             in_channels=in_channels,
             n_channels=n_channels,
@@ -151,6 +184,35 @@ def build_generator(config: Any) -> nn.Module:
             scale=scale,
             noise_dim=noise_dim,
             res_scale=res_scale,
+        )
+
+    if model_type == "esrgan":
+        n_channels = int(getattr(generator_cfg, "n_channels", 64))
+        n_rrdb = int(getattr(generator_cfg, "n_blocks", 23))
+        growth_channels = int(getattr(generator_cfg, "growth_channels", 32))
+        res_scale = float(getattr(generator_cfg, "res_scale", 0.2))
+        out_channels = int(getattr(generator_cfg, "out_channels", in_channels))
+
+        _warn_overridden_options(
+            "Generator",
+            "esrgan",
+            _collect_overridden(
+                generator_cfg,
+                "block_type",
+                "large_kernel_size",
+                "small_kernel_size",
+                "noise_dim",
+            ),
+        )
+
+        return ESRGANGenerator(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            n_features=n_channels,
+            n_blocks=n_rrdb,
+            growth_channels=growth_channels,
+            res_scale=res_scale,
+            scale=scale,
         )
 
     raise ValueError(
