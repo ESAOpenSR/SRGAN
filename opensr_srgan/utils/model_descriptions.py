@@ -27,17 +27,30 @@ def print_model_summary(self):
     # ------------------------------------------------------------------
     # Derive human-readable generator description
     # ------------------------------------------------------------------
-    g_type = self.config.Generator.model_type
-    if g_type == "SRResNet":
-        g_desc = "SRResNet (Residual Blocks with BatchNorm)"
-    elif g_type == "res":
-        g_desc = "flexible_generator (Residual Blocks without BatchNorm)"
-    elif g_type == "rcab":
-        g_desc = "flexible_generator (RCAB Blocks with Channel Attention)"
-    elif g_type == "rrdb":
-        g_desc = "flexible_generator (RRDB Dense Residual Blocks)"
-    elif g_type == "lka":
-        g_desc = "flexible_generator (LKA Large-Kernel Attention Blocks)"
+    g_type = getattr(self.config.Generator, "model_type", "SRResNet")
+    g_type_norm = str(g_type).lower().replace("-", "_")
+    block_type = getattr(self.config.Generator, "block_type", None)
+
+    if g_type_norm in {"res", "rcab", "rrdb", "lka"} and block_type is None:
+        block_type = g_type_norm
+        g_type_norm = "srresnet"
+
+    block_desc_map = {
+        "standard": "Residual Blocks with BatchNorm",
+        "res": "Residual Blocks without BatchNorm",
+        "rcab": "RCAB Blocks with Channel Attention",
+        "rrdb": "RRDB Dense Residual Blocks",
+        "lka": "LKA Large-Kernel Attention Blocks",
+    }
+
+    if g_type_norm in {"srresnet", "sr_resnet"}:
+        block_key = "standard" if block_type is None else str(block_type).lower()
+        desc = block_desc_map.get(block_key, f"Custom Block Variant: {block_key}")
+        g_desc = f"SRResNet ({desc})"
+    elif g_type_norm in {"stochastic_gan", "cgan", "conditional_cgan"}:
+        g_desc = "Stochastic SRGAN (Latent-modulated Residual Blocks)"
+    elif g_type_norm == "esrgan":
+        g_desc = "ESRGAN (RRDB Residual-in-Residual Dense Network)"
     else:
         g_desc = f"Custom Generator Type: {g_type}"
 
@@ -74,11 +87,27 @@ def print_model_summary(self):
     print(f"   • Architecture:      {g_desc}")
     print(f"   • Resolution:        {res_str}")
     print(f"   • Input Channels:    {self.config.Model.in_bands}")
-    print(f"   • Feature Channels:  {self.config.Generator.n_channels}")
-    print(f"   • Residual Blocks:   {self.config.Generator.n_blocks}")
-    print(
-        f"   • Kernel Sizes:      small={self.config.Generator.small_kernel_size}, large={self.config.Generator.large_kernel_size}"
+    feature_channels = getattr(self.config.Generator, "n_channels", None)
+    if feature_channels is not None:
+        print(f"   • Feature Channels:  {feature_channels}")
+
+    block_count = getattr(
+        self.config.Generator,
+        "n_blocks",
+        getattr(self.generator, "n_blocks", None),
     )
+    if block_count is not None:
+        print(f"   • Residual Blocks:   {block_count}")
+
+    small_kernel = getattr(self.config.Generator, "small_kernel_size", None)
+    large_kernel = getattr(self.config.Generator, "large_kernel_size", None)
+    if small_kernel is not None or large_kernel is not None:
+        print(
+            "   • Kernel Sizes:      small={small}, large={large}".format(
+                small=small_kernel if small_kernel is not None else "N/A",
+                large=large_kernel if large_kernel is not None else "N/A",
+            )
+        )
     print(f"   • Params:            {g_params:.2f} M\n")
 
     # ------------------------------------------------------------------
@@ -97,6 +126,8 @@ def print_model_summary(self):
 
     if d_type == "patchgan":
         d_desc = "PatchGAN"
+    elif d_type == "esrgan":
+        d_desc = "ESRGAN"
     else:
         d_desc = "SRGAN"
 

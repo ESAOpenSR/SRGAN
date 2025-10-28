@@ -35,7 +35,7 @@ number-sections: true
 ## Summary
 
 We present *Remote-Sensing-SRGAN*, an open and modular framework for single-image (SI) super-resolution (SR) in Earth Observation (EO).  
-The package unifies multiple GAN-based architectures under a common, configuration-driven design that supports flexible generator and discriminator definitions, adjustable scale factors, and multispectral inputs such as Sentinel-2.
+The package unifies multiple GAN-based architectures under a common, configuration-driven design that supports flexible generator and discriminator definitions, adjustable scale factors, and multispectral inputs such as Sentinel-2. ESRGAN-style RRDB generators and their accompanying discriminator can now be selected alongside SRResNet and stochastic variants using only configuration changes.
 
 Weighted combinations of spectral and perceptual losses enable fine control over reconstruction fidelity and visual realism.  
 A configuration-first philosophy drives reproducible experimentation, with all model, loss, and schedule parameters defined via concise configuration files.  
@@ -135,12 +135,13 @@ Table: **Implemented generator types and their characteristics.**
 | `rcab` [@rcab] | Residual Channel Attention Blocks. Adds channel-wise reweighting to enhance textures and small structures. |
 | `rrdb` [@rrdb] | Residual-in-Residual Dense Blocks (RRDB) as in ESRGAN. Deep structure with dense connections, improving detail sharpness. |
 | `lka` [@lka] | Large-Kernel Attention blocks. Capture wide spatial context, beneficial for structured RS patterns (e.g., fields, roads). |
+| `esrgan` [@rrdb] | Full ESRGAN generator with configurable RRDB count, growth channels, and residual scaling. |
 | `cgan` | Stochastic Conditional Generator with *NoiseResBlock*. |
 
 :::
 
-The `Generator` class provides a unified implementation of SR backbones that share a common convolutional structure while differing in their internal residual block design.  
-The module is initialized with a `block_type` flag selecting one of `{res, rcab, rrdb, lka, cgan}`, each drawn from a shared registry of block factories.  
+The `Generator` class provides a unified implementation of SR backbones that share a common convolutional structure while differing in their internal residual block design.
+The module is initialized with a `model_type` flag selecting one of `{res, rcab, rrdb, lka, esrgan, cgan}`, each drawn from a shared registry of block factories or dedicated ESRGAN implementation.
 Given an input tensor $x$, the model applies a wide receptive-field head convolution, followed by $N$ residual blocks of the selected type, a tail convolution for residual fusion, and an upsampling module that increases spatial resolution by a factor of 2, 4, or 8.  
 The network ends with a linear output head producing the super-resolved image:
 
@@ -182,14 +183,19 @@ Table: **Implemented discriminator types and their purposes.**
 |:-----------------------|:----------------|
 | `standard` [@ledig2017photo] | A global SR-GAN-style CNN discriminator that judges the overall realism of the full image. Promotes coherent global structure. |
 | `patchgan` [@patchgan] | A PatchGAN discriminator that outputs patch-level predictions. Focuses on local realism and texture detail. Patch size is implicitly controlled by network depth (`n_blocks`). |
+| `esrgan` [@rrdb] | ESRGAN discriminator with configurable base channels and linear head size to complement RRDB generators. |
 
 :::
 
-Two discriminator variants are implemented to complement the different generator types: a global `Discriminator` and a local `PatchGANDiscriminator`. Both are built from shared convolutional blocks with LeakyReLU activations and instance normalization.
+Three discriminator variants are implemented to complement the different generator types: a global `Discriminator`, a local `PatchGANDiscriminator`, and the deeper `ESRGANDiscriminator`. All are built from shared convolutional blocks with LeakyReLU activations and instance normalization.
 
 The standard discriminator follows the original SRGAN [@ledig2017photo] design and evaluates the realism of the entire super-resolved image and the actual HR image. It stacks a sequence of strided convolutional layers with progressively increasing feature channels, an adaptive average pooling layer to a fixed spatial size, and two fully connected layers producing a scalar real/fake score. This “global” discriminator promotes coherent large-scale structure and overall photorealism.
 
-The `PatchGANDiscriminator` instead outputs a grid of patch-level predictions, classifying each overlapping region as real or fake. Built upon the CycleGAN/pix2pix [@cyclegan; @px2px] reference implementation, it uses a configurable number of convolutional layers and normalization schemes (batch, instance, or none). The resulting patch map acts as a spatial realism prior, emphasizing texture fidelity and fine detail. Together, these architectures allow users to select the appropriate adversarial granularity: global consistency through SRGAN-style discrimination, or local realism through PatchGAN.
+The `PatchGANDiscriminator` instead outputs a grid of patch-level predictions, classifying each overlapping region as real or fake. Built upon the CycleGAN/pix2pix [@cyclegan; @px2px] reference implementation, it uses a configurable number of convolutional layers and normalization schemes (batch, instance, or none). The resulting patch map acts as a spatial realism prior, emphasizing texture fidelity and fine detail.
+
+Finally, the `ESRGANDiscriminator` mirrors the deeper VGG-style stack from ESRGAN. Its `base_channels` and fully connected `linear_size` can be tuned to match the generator capacity, offering an aggressive adversarial signal when paired with RRDB-based generators.
+
+Together, these architectures allow users to select the appropriate adversarial granularity: global consistency through SRGAN-style discrimination, local realism through PatchGAN, or sharper perceptual contrast via ESRGAN.
 {#tab:disc}
 
 ### Training Features
