@@ -79,20 +79,25 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `model_type` | `SRResNet` | Generator family (`SRResNet` or `stochastic_gan`). |
-| `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`. |
+| `model_type` | `SRResNet` | Generator family (`SRResNet`, `stochastic_gan`, or `esrgan`). |
+| `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`/`esrgan`. |
 | `large_kernel_size` | `9` | Kernel size for input/output convolution layers. |
 | `small_kernel_size` | `3` | Kernel size for residual/attention blocks. |
-| `n_channels` | `96` | Base number of feature channels. |
-| `n_blocks` | `32` | Number of residual/attention blocks. |
+| `n_channels` | `96` | Base number of feature channels (RRDB/ESRGAN trunk width). |
+| `n_blocks` | `32` | Number of residual/attention blocks (RRDB count when `model_type: esrgan`). |
 | `scaling_factor` | `8` | Super-resolution scale factor (2, 4, 8, ...). |
+| `growth_channels` | `32` | ESRGAN-only: growth channels inside each RRDB block. |
+| `res_scale` | `0.2` | Residual scaling used by stochastic/ESRGAN variants. |
+| `out_channels` | `Model.in_bands` | ESRGAN-only: override the number of output bands. |
 
 ## Discriminator
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `model_type` | `standard` | Discriminator architecture (`standard` SRGAN or `patchgan`). |
-| `n_blocks` | `8` | Number of convolutional blocks. PatchGAN defaults to 3 when unspecified. |
+| `model_type` | `standard` | Discriminator architecture (`standard`, `patchgan`, or `esrgan`). |
+| `n_blocks` | `8` | Number of convolutional blocks. PatchGAN defaults to 3 when unspecified (ignored by `esrgan`). |
+| `base_channels` | `64` | ESRGAN-only: base number of feature maps. |
+| `linear_size` | `1024` | ESRGAN-only: hidden dimension of the fully connected head. |
 
 ## Suggested settings
 
@@ -116,6 +121,7 @@ performing sweeps:
 | `SRResNet` (`block_type: rrdb`) | 96 | 32 | 4×–8× | Dense residual blocks expand receptive field; expect higher VRAM use at 32 blocks. |
 | `SRResNet` (`block_type: lka`) | 96 | 24–32 | 4×–8× | Large-kernel attention blocks stabilise at moderate depth; drop to 24 blocks if memory bound. |
 | `stochastic_gan` | 96 | 16 | 4× | Latent-modulated residual stack; pair with `noise_dim ≈ 128` and `res_scale ≈ 0.2` defaults. |
+| `esrgan` | 64 | 23 | 4× | ESRGAN-style RRDB trunk; tune `growth_channels` (typically 32) and keep `res_scale ≈ 0.2` for stability. |
 
 ### Discriminator presets
 
@@ -123,10 +129,14 @@ Tune discriminator depth to match the generator capacity—too shallow and adver
 
 | Discriminator type | Recommended depth parameter | Additional notes |
 | --- | --- | --- |
-| `standard` | `n_blocks = 8` | Mirrors the original SRGAN CNN with alternating stride-1/stride-2 blocks before the dense head.】 |
+| `standard` | `n_blocks = 8` | Mirrors the original SRGAN CNN with alternating stride-1/stride-2 blocks before the dense head. |
 | `patchgan` | `n_blocks = 3` | Maps to the 3-layer PatchGAN (a.k.a. `n_layers`); increase to 4–5 for larger crops or when the generator is particularly sharp. |
+| `esrgan` | `base_channels = 64`, `linear_size = 1024` | Deep VGG-style discriminator from ESRGAN; keep base width aligned with the generator feature count. |
 
 When adjusting these presets, scale generator and discriminator together and monitor adversarial loss ramps defined in `Training.Losses` to keep training stable.
+
+!!! note
+    When you pick `model_type: esrgan` or `stochastic_gan`, SRResNet-only keys such as `block_type`, `large_kernel_size`, or `small_kernel_size` are automatically ignored. The model factory prints a console notice so you know which settings were overridden.
 
 ## Optimisers
 

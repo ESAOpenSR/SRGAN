@@ -57,11 +57,13 @@ class SRGAN_model(pl.LightningModule):
     Configuration overview (minimal)
     --------------------------------
     - **Model**: `in_bands` (int)
-        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`), optional
-        `block_type` for SRResNet variants (`"standard"`, `"res"`, `"rcab"`, `"rrdb"`,
-        `"lka"`), `n_channels`, `n_blocks`, `large_kernel_size`, `small_kernel_size`,
-        `scaling_factor`
-    - **Discriminator**: `model_type` (`"standard"`, `"patchgan"`), `n_blocks` (optional)
+        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`, `"esrgan"`),
+        optional `block_type` for SRResNet variants (`"standard"`, `"res"`, `"rcab"`,
+        `"rrdb"`, `"lka"`), `n_channels`, `n_blocks`, `large_kernel_size`,
+        `small_kernel_size`, `scaling_factor`, plus ESRGAN-specific knobs
+        (`growth_channels`, `res_scale`, `out_channels`).
+    - **Discriminator**: `model_type` (`"standard"`, `"patchgan"`, `"esrgan"`), `n_blocks`
+        (optional), ESRGAN extras (`base_channels`, `linear_size`).
     - **Training**:
     - `pretrain_g_only` (bool), `g_pretrain_steps` (int)
     - `adv_loss_ramp_steps` (int), `label_smoothing` (bool)
@@ -233,9 +235,10 @@ class SRGAN_model(pl.LightningModule):
             # SECTION: Initialize Discriminator
             # Purpose: Build discriminator network for adversarial training.
             # ======================================================================
-            discriminator_type = getattr(
+            raw_discriminator_type = getattr(
                 self.config.Discriminator, "model_type", "standard"
             )
+            discriminator_type = str(raw_discriminator_type).strip().lower()
             n_blocks = getattr(self.config.Discriminator, "n_blocks", None)
 
             if discriminator_type == "standard":
@@ -260,9 +263,32 @@ class SRGAN_model(pl.LightningModule):
                     input_nc=self.config.Model.in_bands,
                     n_layers=patchgan_layers,
                 )
+            elif discriminator_type == "esrgan":
+                from opensr_srgan.model.discriminators.esrgan import (
+                    ESRGANDiscriminator,
+                )
+
+                ignored_options = []
+                if n_blocks is not None:
+                    ignored_options.append("n_blocks")
+                if ignored_options:
+                    ignored_joined = ", ".join(sorted(ignored_options))
+                    print(
+                        f"[Discriminator:esrgan] Ignoring unsupported configuration options: {ignored_joined}."
+                    )
+
+                base_channels = getattr(
+                    self.config.Discriminator, "base_channels", 64
+                )
+                linear_size = getattr(self.config.Discriminator, "linear_size", 1024)
+                self.discriminator = ESRGANDiscriminator(
+                    in_channels=self.config.Model.in_bands,
+                    base_channels=int(base_channels),
+                    linear_size=int(linear_size),
+                )
             else:
                 raise ValueError(
-                    f"Unknown discriminator model type: {discriminator_type}"
+                    f"Unknown discriminator model type: {raw_discriminator_type}"
                 )
 
     def setup_lightning(self):

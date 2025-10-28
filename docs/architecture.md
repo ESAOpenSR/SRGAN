@@ -43,6 +43,8 @@ The generator zoo lives under `opensr_srgan/model/generators/` and can be select
   are all read from the YAML file.
 * **Stochastic GAN generator (`cgan_generator.py`).** Extends the flexible generator with conditioning inputs and latent noise,
   enabling experiments where auxiliary metadata influences the super-resolution output.
+* **ESRGAN generator (`esrgan.py`).** Implements the RRDBNet trunk introduced with ESRGAN, exposing `n_blocks`, `growth_channels`,
+  and `res_scale` so you can dial in deeper receptive fields and sharper textures.
 * **Advanced variants (`SRGAN_advanced.py`).** Provides additional block implementations and compatibility aliases exposed in
   `__init__.py` for backwards compatibility.
 
@@ -50,12 +52,14 @@ Common traits across generators include configurable input channel counts (`Mode
 
 ## Discriminator options
 
-`opensr_srgan/model/discriminators/` exposes two complementary discriminators:
+`opensr_srgan/model/discriminators/` exposes three complementary discriminators:
 
 * **Standard SRGAN discriminator (`srgan_discriminator.py`).** Deep convolutional stack tailored for multispectral imagery. The
   number of convolutional blocks is configurable through `Discriminator.n_blocks`.
 * **PatchGAN discriminator (`patchgan.py`).** Operates on local patches, which can improve high-frequency fidelity when training
   with large images. The depth is controlled by `n_blocks` and defaults to three layers.
+* **ESRGAN discriminator (`esrgan.py`).** Deep VGG-style stack with configurable `base_channels` and `linear_size`; pairs well
+  with RRDB generators when perceptual sharpness is the priority.
 
 Both discriminators use LeakyReLU activations and strided convolutions to progressively downsample the input until a real/fake logit map is produced.
 

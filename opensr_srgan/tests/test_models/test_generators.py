@@ -13,6 +13,7 @@ from torch import nn  # noqa: E402  (import after torch availability check)
 
 from opensr_srgan.model.generators import (  # noqa: E402
     ConditionalGANGenerator,
+    ESRGANGenerator,
     FlexibleGenerator,
     Generator,
     SRResNet,
@@ -27,6 +28,7 @@ from opensr_srgan.model.generators import (  # noqa: E402
         (SRResNet, {}),
         (Generator, {}),
         (FlexibleGenerator, {}),
+        (ESRGANGenerator, {}),
         (StochasticGenerator, {}),
     ],
 )
@@ -92,6 +94,16 @@ def test_conditional_alias_points_to_stochastic_generator():
             },
             FlexibleGenerator,
         ),
+        (
+            {
+                "model_type": "esrgan",
+                "n_channels": 64,
+                "n_blocks": 23,
+                "scaling_factor": 4,
+                "growth_channels": 32,
+            },
+            ESRGANGenerator,
+        ),
     ],
 )
 def test_build_generator_from_config(generator_cfg, expected_cls):
@@ -106,3 +118,46 @@ def test_build_generator_from_config(generator_cfg, expected_cls):
 
     generator = build_generator(config)
     assert isinstance(generator, expected_cls)
+
+
+def test_stochastic_generator_warns_about_block_type(capsys):
+    """Selecting the stochastic generator should mention unsupported options."""
+
+    config = OmegaConf.create(
+        {
+            "Model": {"in_bands": 3},
+            "Generator": {
+                "model_type": "stochastic_gan",
+                "block_type": "rrdb",
+                "scaling_factor": 4,
+            },
+        }
+    )
+
+    build_generator(config)
+    captured = capsys.readouterr()
+    assert "[Generator:stochastic_gan] Ignoring unsupported configuration options: block_type." in captured.out
+
+
+def test_esrgan_generator_warns_about_srresnet_specific_options(capsys):
+    """ESRGAN generator should notify users when SRResNet-only options are present."""
+
+    config = OmegaConf.create(
+        {
+            "Model": {"in_bands": 3},
+            "Generator": {
+                "model_type": "esrgan",
+                "block_type": "rcab",
+                "large_kernel_size": 11,
+                "small_kernel_size": 5,
+                "scaling_factor": 4,
+            },
+        }
+    )
+
+    build_generator(config)
+    captured = capsys.readouterr()
+    assert (
+        "[Generator:esrgan] Ignoring unsupported configuration options: block_type, large_kernel_size, small_kernel_size."
+        in captured.out
+    )
