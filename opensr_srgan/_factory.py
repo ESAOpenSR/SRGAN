@@ -158,9 +158,16 @@ def load_inference_model(
 
 if __name__ == "__main__":
     # simple test
-    model = load_inference_model("RGB-NIR")
+    # Create Model
+    model = load_from_config("opensr_srgan/configs/config_playgound.yaml")
+    #model = load_inference_model("RGB-NIR")
+    
+    # Print Model Summary
+    from opensr_srgan.utils.model_descriptions import print_model_summary
+    print_model_summary(model)
+    
+    # Simple test for funcionality
     import torch
-
     lr = torch.randn(1, 4, 64, 64)
-    sr = model.predict_step(lr)
-    print(sr.shape)
+    sr = model.forward(lr)
+    print(lr.shape, "->", sr.shape)
