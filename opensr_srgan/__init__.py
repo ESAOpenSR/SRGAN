@@ -4,7 +4,23 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-__all__ = ["SRGAN_model", "train", "load_from_config", "load_inference_model"]
+try:  # pragma: no cover - import shim for Python <3.8
+    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+except ModuleNotFoundError:  # pragma: no cover - fallback for very old Python
+    from importlib_metadata import PackageNotFoundError, version as _pkg_version  # type: ignore
+
+__all__ = [
+    "SRGAN_model",
+    "train",
+    "load_from_config",
+    "load_inference_model",
+    "__version__",
+]
+
+try:  # pragma: no cover - depends on installation metadata
+    __version__ = _pkg_version("opensr-srgan")
+except PackageNotFoundError:  # pragma: no cover - local source tree fallback
+    __version__ = "0.0.0"
 
 if TYPE_CHECKING:  # pragma: no cover - type checkers only
     from .model.SRGAN import SRGAN_model as SRGANModel
