@@ -115,9 +115,10 @@ coming soon...
 
 ---
 
-## 🧑‍🚀 Authors & Acknowledgements
+## 🧑‍🚀 Authors, Acknowledgements, and Notes on AI Usage
 
-Developed by **Simon Donike** (IPL–UV) within the **ESA Φ-lab / OpenSR** initiative.
+Developed by **Simon Donike** (IPL–UV) within the **ESA Φ-lab / OpenSR** initiative.  
+
 
 ---
 
