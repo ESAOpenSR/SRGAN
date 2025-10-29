@@ -83,7 +83,18 @@ def _make_config(**training_overrides):
         "max_epochs": 5,
     }
     base_training.update(training_overrides)
-    return OmegaConf.create({"Training": base_training})
+
+    return OmegaConf.create(
+        {
+            "Training": base_training,
+            # ``build_lightning_kwargs`` expects optimiser settings for gradient
+            # clipping, so provide the minimal structure required by the real
+            # configuration files.
+            "Optimizers": {
+                "gradient_clip_val": 0.0,
+            },
+        }
+    )
 
 
 def _call_builder(config, resume_ckpt=None):
