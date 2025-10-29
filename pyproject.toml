@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opensr-srgan"
-version = "0.2.2"
+version = "0.2.3"
 description = "Modular Super-Resolution GAN Framework for Remote Sensing."
 readme = "README.md"
 authors = [
