@@ -1,12 +1,10 @@
 ---
-title: "Remote-Sensing-SRGAN: A Flexible Super-Resolution Framework for Multispectral Earth Observation Data"
+title: "OpenSR GAN Lab: A Configurable Super-Resolution Framework for Multimodal Imaging"
 tags:
   - super-resolution
-  - remote sensing
   - GAN
   - ESRGAN
-  - Sentinel-2
-  - multispectral
+  - multimodal imaging
   - PyTorch
   - OpenSR
   - technical report
@@ -30,96 +28,98 @@ version:
 number-sections: true
 ---
 
-# Remote-Sensing-SRGAN: A Flexible Super-Resolution Framework for Multispectral Earth Observation Data
+# OpenSR GAN Lab: A Configurable Super-Resolution Framework for Multimodal Imaging
 
 ## Summary
 
-We present *Remote-Sensing-SRGAN*, an open and modular framework for single-image (SI) super-resolution (SR) in Earth Observation (EO).  
-The package unifies multiple GAN-based architectures under a common, configuration-driven design that supports flexible generator and discriminator definitions, adjustable scale factors, and multispectral inputs such as Sentinel-2. ESRGAN-style RRDB generators and their accompanying discriminator can now be selected alongside SRResNet and stochastic variants using only configuration changes.
+We present *OpenSR GAN Lab*, an open and modular framework for single-image (SI) super-resolution (SR) that now targets multimodal imaging pipelines.
+The package unifies multiple GAN-based architectures under a common, configuration-driven design that supports flexible generator and discriminator definitions, adjustable scale factors, and arbitrary channel counts spanning medical, industrial, consumer, and remote-sensing imagery.
+ESRGAN-style RRDB backbones, their dedicated discriminators, and stochastic noise-injected generators sit alongside SRResNet, residual channel attention, and large-kernel attention variants and can be selected through configuration alone.
 
-Weighted combinations of spectral and perceptual losses enable fine control over reconstruction fidelity and visual realism.  
-A configuration-first philosophy drives reproducible experimentation, with all model, loss, and schedule parameters defined via concise configuration files.  
+Weighted combinations of pixel, spectral, structural, and perceptual losses enable fine control over reconstruction fidelity and visual realism.
+A configuration-first philosophy drives reproducible experimentation, with all model, loss, augmentation, and schedule parameters defined via concise configuration files.
 The training pipeline stabilizes adversarial optimization through generator pretraining, linear adversarial-weight ramping, cosine learning-rate warmup, and optional exponential moving-average (EMA) smoothing.
 
 Two-time-scale update rule (TTUR) learning rates, GAN-friendly Adam defaults (betas $=(0.0, 0.99)$, $\varepsilon=10^{-7}$), selective weight-decay exclusions, ReduceLROnPlateau schedulers with cooldown/minimum learning-rate control, and configurable gradient clipping complete the stabilisation toolkit.
 
-Integration with the *OpenSR* ecosystem provides data interfaces for Sentinel-2 SAFE and SEN2NAIP datasets, and scalable large-scene inference through `opensr-utils`.  
-All common training optimizations for GAN training are implemented, creating a ready-to-use boilerplate for training notoriously unstable GANs on remote-sensing data.
+Integration with the *OpenSR* ecosystem provides data interfaces for folder-based datasets, medical volumetric formats, Sentinel SAFE archives, and scalable large-scene inference through `opensr-utils`.
+All common training optimizations for GAN training are implemented, creating a ready-to-use boilerplate for training notoriously unstable GANs across domains.
 
-The framework lowers the barrier for researchers and practitioners to build, benchmark, and deploy robust GAN-based SR models across diverse EO datasets.
+The framework lowers the barrier for researchers and practitioners to build, benchmark, and deploy robust GAN-based SR models across diverse imaging datasets while preserving the remote-sensing experiments that motivated the project.
 
 
 ## Introduction
 
 #### Remote Sensing
 
-Optical satellite imagery plays a key role in monitoring the Earth's surface for applications such as agriculture [@agriculture], land cover mapping [@mapping], ecosystem assessment [@ecosysetm], and disaster management [@disaster].  
-The European Space Agency’s Sentinel-2 mission provides freely available multispectral imagery at 10 m spatial resolution with a revisit time of five days, enabling dense temporal monitoring at global scale.  
+Optical satellite imagery plays a key role in monitoring the Earth's surface for applications such as agriculture [@agriculture], land cover mapping [@mapping], ecosystem assessment [@ecosysetm], and disaster management [@disaster].
+The European Space Agency’s Sentinel-2 mission provides freely available multispectral imagery at 10 m spatial resolution with a revisit time of five days, enabling dense temporal monitoring at global scale.
 
-In contrast, very-high-resolution sensors, such as Pleiades or SPOT, offer much richer spatial detail but limited temporal coverage and high acquisition costs.  
+In contrast, very-high-resolution sensors, such as Pleiades or SPOT, offer much richer spatial detail but limited temporal coverage and high acquisition costs.
 Consequently, a trade-off exists between spatial and temporal resolution in Earth-observation (EO) imagery.
 
 #### Super-Resolution
 
-Single-image super-resolution (SISR) aims to enhance the spatial detail of low-resolution (LR) observations by learning a mapping to a plausible high-resolution (HR) counterpart.  
-In remote sensing, SR can bridge the gap between freely available medium-resolution imagery and costly commercial data, potentially improving downstream tasks such as land-cover classification, object detection, and change detection.  
+Single-image super-resolution (SISR) aims to enhance the spatial detail of low-resolution (LR) observations by learning a mapping to a plausible high-resolution (HR) counterpart.
+In remote sensing, SR can bridge the gap between freely available medium-resolution imagery and costly commercial data, potentially improving downstream tasks such as land-cover classification, object detection, and change detection.
 
 The advent of deep convolutional networks led to major breakthroughs in both reconstruction fidelity and perceptual realism [@dong2015imagesuperresolutionusingdeep; @kim2016deeplyrecursiveconvolutionalnetworkimage].
 
 #### GANs
 
-Generative Adversarial Networks (GANs) [@goodfellow2014generativeadversarialnetworks] introduced an adversarial learning framework in which a generator and a discriminator are trained in competition, enabling the synthesis of realistic, high-frequency image details.  
-Since their introduction, GANs have been rapidly adopted in the remote-sensing community for tasks such as cloud removal, image translation, domain adaptation, and data synthesis [@11159252; @su2024intriguingpropertycounterfactualexplanation].  
+Generative Adversarial Networks (GANs) [@goodfellow2014generativeadversarialnetworks] introduced an adversarial learning framework in which a generator and a discriminator are trained in competition, enabling the synthesis of realistic, high-frequency image details.
+Since their introduction, GANs have been rapidly adopted in the remote-sensing community for tasks such as cloud removal, image translation, domain adaptation, and data synthesis [@11159252; @su2024intriguingpropertycounterfactualexplanation].
 These applications demonstrated the potential of adversarial training to generate spatially coherent and perceptually plausible remote-sensing imagery.
 
-Building on these successes, the computer-vision community introduced the Super-Resolution GAN (SRGAN) [@ledig2017photo], which combined perceptual and adversarial losses to reconstruct photo-realistic high-resolution images from their low-resolution counterparts.  
+Building on these successes, the computer-vision community introduced the Super-Resolution GAN (SRGAN) [@ledig2017photo], which combined perceptual and adversarial losses to reconstruct photo-realistic high-resolution images from their low-resolution counterparts.
 The approach inspired a wave of research applying SRGAN-like architectures to remote-sensing super-resolution [@rs15205062; @9787539; @10375518; @satlassuperres], where the ability to recover fine spatial detail from coarse observations can significantly enhance analysis of land cover, infrastructure, and environmental change.
 
-Recent advances in diffusion and transformer-based architectures have shifted the state of the art in image super-resolution toward generative models with stronger probabilistic and contextual reasoning [@s1; @s2; @s3].  
+Recent advances in diffusion and transformer-based architectures have shifted the state of the art in image super-resolution toward generative models with stronger probabilistic and contextual reasoning [@s1; @s2; @s3].
 Nevertheless, GAN-based approaches continue to be actively explored [@g1] and remain a practical choice for operational production settings [@allen].
 
 
 ## Problem Statement
 
-Despite their success in computer vision, Generative Adversarial Networks (GANs) remain notoriously difficult to train [@p1; @p2; @p3].  
-The simultaneous optimization of generator and discriminator networks often leads to unstable dynamics, mode collapse, and high sensitivity to hyperparameters.  
+Despite their success in computer vision, Generative Adversarial Networks (GANs) remain notoriously difficult to train [@p1; @p2; @p3].
+The simultaneous optimization of generator and discriminator networks often leads to unstable dynamics, mode collapse, and high sensitivity to hyperparameters.
 
-In remote-sensing applications, these issues are amplified by domain-specific challenges such as multispectral or hyperspectral inputs, high dynamic range reflectance values, varying sensor characteristics, and limited availability of perfectly aligned high-resolution ground-truth data.  
+Across modalities, practitioners must adapt to diverse sensor characteristics, channel counts, and value ranges.
+Remote-sensing projects may juggle multispectral or hyperspectral stacks with high dynamic range reflectance values, while medical and industrial systems contribute volumetric data, anisotropic pixels, or low-light noise profiles.
 
-Moreover, researchers in remote sensing rarely work with fixed RGB imagery.  
-They frequently need to adapt existing GAN architectures to support arbitrary numbers of spectral bands, retrain models for different satellite sensors (e.g., Sentinel-2, SPOT, Pleiades, PlanetScope), or implement benchmarks for newly collected datasets.  
-These modifications usually require non-trivial changes to the model architecture, preprocessing pipeline, and loss configuration, making reproducibility and experimentation cumbersome.  
+Researchers rarely work with fixed RGB imagery.
+They frequently need to adapt existing GAN architectures to support arbitrary numbers of bands, retrain models for different sensors or acquisition devices, or implement benchmarks for newly collected datasets.
+These modifications typically require non-trivial changes to the model architecture, preprocessing pipeline, and loss configuration, making reproducibility and experimentation cumbersome.
 
-Implementing the full set of heuristics that make GAN training stable—such as generator pretraining, adversarial loss ramping, label smoothing, learning-rate warmup, and exponential moving-average (EMA) tracking—adds another layer of complexity.  
-Consequently, reproducing and extending GAN-based SR models in the Earth-Observation (EO) domain is often time-consuming, fragile, and inconsistent across studies.
+Implementing the full set of heuristics that make GAN training stable—such as generator pretraining, adversarial loss ramping, label smoothing, learning-rate warmup, and exponential moving-average (EMA) tracking—adds another layer of complexity.
+Consequently, reproducing and extending GAN-based SR models across domains is often time-consuming, fragile, and inconsistent between studies.
 
 
 ## Contribution Summary
 
-*Remote-Sensing-SRGAN* was developed to address these challenges by providing a unified, modular, and extensible framework for training and evaluating GAN-based super-resolution models in remote sensing.  
-The software integrates multiple state-of-the-art SR architectures, loss functions, and training strategies within a configuration-driven design that allows users to flexibly adapt experiments without modifying the source code.
+*OpenSR GAN Lab* was developed to address these challenges by providing a unified, modular, and extensible framework for training and evaluating GAN-based super-resolution models across imaging domains.
+The software integrates multiple state-of-the-art SR architectures, loss functions, dataset adapters, and training strategies within a configuration-driven design that allows users to flexibly adapt experiments without modifying the source code.
 
 The main contributions of this work include:
 
-- **Modular GAN framework:** Supports interchangeable generator and discriminator architectures with customizable depth, width, and scale factors.  
-- **Configuration-first workflow:** Enables fully reproducible training and evaluation through concise YAML files, independent of code changes.  
-- **Training stabilization techniques:** Includes generator pretraining, adversarial ramp-up, learning-rate warmup, label smoothing, and EMA smoothing.  
-- **Multispectral compatibility:** Provides native support for arbitrary band configurations from different satellite sensors.  
-- **OpenSR ecosystem integration:** Connects seamlessly to the SEN2NAIP dataset, leverages the unified evaluation framework `opensr-test` [@osrtest], and supports scalable inference via `opensr-utils` [@osrutils].
+- **Modular GAN framework:** Supports interchangeable generator and discriminator architectures with customizable depth, width, and scale factors, including SRResNet variants, residual channel attention, ESRGAN RRDB backbones, large-kernel attention, and stochastic conditional generators.
+- **Configuration-first workflow:** Enables fully reproducible training and evaluation through concise YAML files, independent of code changes, and captures augmentation, normalisation, and logging behaviour.
+- **Training stabilization techniques:** Includes generator pretraining, adversarial ramp-up, learning-rate warmup, label smoothing, EMA smoothing, and TTUR optimizers.
+- **Multimodal compatibility:** Provides native support for arbitrary band configurations across satellite sensors, medical scanners, microscopy stacks, and photographic RGB pipelines via pluggable dataset adapters.
+- **OpenSR ecosystem integration:** Connects seamlessly to SEN2NAIP and other dataset loaders, leverages the unified evaluation framework `opensr-test` [@osrtest], and supports scalable inference via `opensr-utils` [@osrutils].
 
-Together, these features make *Remote-Sensing-SRGAN* a reliable boilerplate for researchers and practitioners to train, benchmark, and deploy GAN-based SR models across diverse Earth-observation datasets and sensor types.
+Together, these features make *OpenSR GAN Lab* a reliable boilerplate for researchers and practitioners to train, benchmark, and deploy GAN-based SR models across diverse sensor types and application domains while retaining the remote-sensing experiments that seeded the project.
 
 
 ## Software Overview and Framework Design
 
-*Remote-Sensing-SRGAN* follows a modular and configuration-driven architecture. All model definitions, loss compositions, and training schedules are controlled through a single YAML configuration file, ensuring that experiments remain reproducible and easily adaptable to new sensors, band configurations, or datasets. The framework is implemented in PyTorch and PyTorch Lightning, providing seamless GPU acceleration and built-in experiment logging.  
+*OpenSR GAN Lab* follows a modular and configuration-driven architecture. All model definitions, loss compositions, augmentations, and training schedules are controlled through a single YAML configuration file, ensuring that experiments remain reproducible and easily adaptable to new sensors, band configurations, or datasets. The framework is implemented in PyTorch and PyTorch Lightning, providing seamless GPU acceleration and built-in experiment logging.
 
 The system consists of four main components:  
 
 - A flexible **generator–discriminator architecture** supporting multiple SR backbones.  
 - A configurable **multi-loss system** combining pixel, perceptual, spectral, and adversarial objectives.  
 - A robust **training pipeline** with pretraining, warmup, ramp-up, and EMA stabilization mechanisms.  
-- Integration with the **OpenSR ecosystem** for dataset access, evaluation (`opensr-test`), and large-scale inference (`opensr-utils`).  
+- Integration with the **OpenSR ecosystem** for dataset access (folder trees, Sentinel SAFE, medical volumes), evaluation (`opensr-test`), and large-scale inference (`opensr-utils`).
 
 ### Generator Architectures
 
@@ -134,7 +134,7 @@ Table: **Implemented generator types and their characteristics.**
 | `res` [@ledig2017photo] | SRResNet generator using residual blocks without batch normalization. Stable and effective for content pretraining. |
 | `rcab` [@rcab] | Residual Channel Attention Blocks. Adds channel-wise reweighting to enhance textures and small structures. |
 | `rrdb` [@rrdb] | Residual-in-Residual Dense Blocks (RRDB) as in ESRGAN. Deep structure with dense connections, improving detail sharpness. |
-| `lka` [@lka] | Large-Kernel Attention blocks. Capture wide spatial context, beneficial for structured RS patterns (e.g., fields, roads). |
+| `lka` [@lka] | Large-Kernel Attention blocks. Capture wide spatial context, beneficial for structured textures and long-range dependencies. |
 | `esrgan` [@rrdb] | Full ESRGAN generator with configurable RRDB count, growth channels, and residual scaling. |
 | `cgan` | Stochastic Conditional Generator with *NoiseResBlock*. |
 
@@ -267,7 +267,7 @@ Typical configurations combine L1, Perceptual, and Adversarial losses, optionall
 
 ### Metrics
 
-During training, a range of scalar metrics are continuously computed and logged Weights & Biases. These indicators capture the evolving balance between generator and discriminator, quantify loss dynamics, and provide early warnings of instability or mode collapse. Together, they form a compact diagnostic suite that allows users to monitor convergence, identify regime transitions (e.g., from pretraining to adversarial learning), and ensure stable training behaviour. [Table&nbsp;5](#tab:metrics) summarises the most relevant internal metrics recorded by *Remote-Sensing-SRGAN*.
+During training, a range of scalar metrics are continuously computed and logged Weights & Biases. These indicators capture the evolving balance between generator and discriminator, quantify loss dynamics, and provide early warnings of instability or mode collapse. Together, they form a compact diagnostic suite that allows users to monitor convergence, identify regime transitions (e.g., from pretraining to adversarial learning), and ensure stable training behaviour. [Table&nbsp;5](#tab:metrics) summarises the most relevant internal metrics recorded by *OpenSR GAN Lab*.
 
 
 ::: {#tab:metrics}
@@ -288,8 +288,8 @@ Table: **Key internal metrics tracked during training and validation for monitor
 
 ## Performance Preview
 
-*Remote-Sensing-SRGAN* is presented as a software framework focused on reproducibility and flexible experimentation rather than as a SOTA-benchmark study, exploring each experiment in-depth.  
-To illustrate its workflow and SR capabilities, we include two representative experiments with different datasets and model configurations, enabling an impression of the type of results that can be achieved with this framework.
+*OpenSR GAN Lab* is presented as a software framework focused on reproducibility and flexible experimentation rather than as a SOTA-benchmark study, exploring each experiment in-depth.
+To illustrate its workflow and SR capabilities, we include the original remote-sensing experiments with different datasets and model configurations, enabling an impression of the type of results that can be achieved with this framework.
 
 ### Experiment 1: RGB Super-Resolution on Sentinel-2 and NAIP (4×)
 
@@ -372,8 +372,13 @@ These example configurations illustrate how users can reproduce experiments dire
 
 ## Limitations
 
-Super-resolution techniques, including those implemented in *Remote-Sensing-SRGAN*, can enhance apparent spatial detail but can never substitute for true high-resolution observations acquired by native sensors.  
-While *Remote-Sensing-SRGAN* provides a stable and extensible foundation for GAN-based super-resolution in remote sensing, several limitations remain. First, the framework focuses on the engineering and reproducibility aspects of model development rather than achieving state-of-the-art quantitative performance. It is therefore intended as a research and benchmarking blueprint, not as an optimized production model. Second, although the modular configuration system greatly simplifies experimentation, users are still responsible for ensuring proper data preprocessing, radiometric normalization, and accurate LR–HR alignment, factors that strongly influence training stability and reconstruction quality. Third, adversarial optimization in multispectral domains remains sensitive to dataset size and diversity; small or unbalanced datasets may still yield mode collapse or spectral inconsistencies despite the provided stabilization mechanisms. Finally, the current release does not include native uncertainty estimation or automatic hyperparameter tuning; these remain open areas for future extension.
+Super-resolution techniques, including those implemented in *OpenSR GAN Lab*, can enhance apparent spatial detail but can never substitute for true high-resolution observations acquired by native sensors.
+While *OpenSR GAN Lab* provides a stable and extensible foundation for GAN-based super-resolution in remote sensing, several limitations remain.
+First, the framework focuses on the engineering and reproducibility aspects of model development rather than achieving state-of-the-art quantitative performance.
+It is therefore intended as a research and benchmarking blueprint, not as an optimized production model.
+Second, although the modular configuration system greatly simplifies experimentation, users are still responsible for ensuring proper data preprocessing, radiometric normalization, and accurate LR–HR alignment, factors that strongly influence training stability and reconstruction quality.
+Third, adversarial optimization in multispectral domains remains sensitive to dataset size and diversity; small or unbalanced datasets may still yield mode collapse or spectral inconsistencies despite the provided stabilization mechanisms.
+Finally, the current release does not include native uncertainty estimation or automatic hyperparameter tuning; these remain open areas for future extension.
 
 ---
 
