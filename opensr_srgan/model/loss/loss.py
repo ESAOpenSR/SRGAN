@@ -354,10 +354,13 @@ class GeneratorContentLoss(nn.Module):
         comps["sam"] = _compute(self.sam_w, lambda: self._sam_loss(sr, hr))
 
         # Perceptual distance on 3 selected bands
-        sr_3, hr_3 = self._prepare_perceptual_input(sr=sr, hr=hr)
-        comps["perceptual"] = self._perceptual_distance(
-            sr_3, hr_3, build_graph=build_graph
-        )
+        if self.perceptual_model != None and self.perc_w != 0.0:
+            sr_3, hr_3 = self._prepare_perceptual_input(sr=sr, hr=hr)
+            comps["perceptual"] = self._perceptual_distance(
+                sr_3, hr_3, build_graph=build_graph
+            )
+        else:
+            comps["perceptual"] = torch.tensor(0.0, device=sr.device)
 
         # Total variation
         comps["tv"] = _compute(self.tv_w, lambda: self._tv_loss(sr))
