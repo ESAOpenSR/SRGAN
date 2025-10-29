@@ -25,6 +25,7 @@ def _ensure_finite(tensor: torch.Tensor, *, eps: float = LOSS_EPS) -> torch.Tens
         return tensor
     return torch.nan_to_num(tensor, nan=eps, posinf=1.0 / eps, neginf=-1.0 / eps)
 
+
 def _cfg_get(cfg, keys, default=None):
     """Safely retrieve a nested configuration value.
 
@@ -48,6 +49,7 @@ def _cfg_get(cfg, keys, default=None):
         else:
             cur = getattr(cur, k, None)
     return default if cur is None else cur
+
 
 class GeneratorContentLoss(nn.Module):
     """Composite generator content loss with perceptual metric selection.
@@ -85,42 +87,54 @@ class GeneratorContentLoss(nn.Module):
 
         # --- weights & settings from config ---
         # (fallback to deprecated Training.perceptual_loss_weight if needed)
-        self.l1_w   = float(_cfg_get(cfg, ["Training","Losses","l1_weight"], 1.0))
-        self.sam_w  = float(_cfg_get(cfg, ["Training","Losses","sam_weight"], 0.05))
-        perc_w_cfg  = _cfg_get(cfg, ["Training","Losses","perceptual_weight"],
-                               _cfg_get(cfg, ["Training","perceptual_loss_weight"], 0.1))
+        self.l1_w = float(_cfg_get(cfg, ["Training", "Losses", "l1_weight"], 1.0))
+        self.sam_w = float(_cfg_get(cfg, ["Training", "Losses", "sam_weight"], 0.05))
+        perc_w_cfg = _cfg_get(
+            cfg,
+            ["Training", "Losses", "perceptual_weight"],
+            _cfg_get(cfg, ["Training", "perceptual_loss_weight"], 0.1),
+        )
         self.perc_w = float(perc_w_cfg)
-        self.tv_w   = float(_cfg_get(cfg, ["Training","Losses","tv_weight"], 0.0))
+        self.tv_w = float(_cfg_get(cfg, ["Training", "Losses", "tv_weight"], 0.0))
 
-        self.max_val  = float(_cfg_get(cfg, ["Training","Losses","max_val"], 1.0))
-        self.ssim_win = int(_cfg_get(cfg, ["Training","Losses","ssim_win"], 11))
+        self.max_val = float(_cfg_get(cfg, ["Training", "Losses", "max_val"], 1.0))
+        self.ssim_win = int(_cfg_get(cfg, ["Training", "Losses", "ssim_win"], 11))
 
-        self.randomize_bands = bool(_cfg_get(cfg, ["Training","Losses","randomize_bands"], True))
-        fixed_idx = _cfg_get(cfg, ["Training","Losses","fixed_idx"], None)
+        fixed_idx = _cfg_get(cfg, ["Training", "Losses", "fixed_idx"], None)
         if fixed_idx is not None:
             fixed_idx = torch.as_tensor(fixed_idx, dtype=torch.long)
             assert fixed_idx.numel() == 3, "fixed_idx must have length 3"
-        self.register_buffer("fixed_idx", fixed_idx if fixed_idx is not None else None, persistent=False)
+        self.register_buffer(
+            "fixed_idx", fixed_idx if fixed_idx is not None else None, persistent=False
+        )
 
-        # --- configure perceptual metric ---
-        self.perc_metric = str(_cfg_get(cfg, ["Training", "Losses", "perceptual_metric"], "vgg")).lower()
+        # Only init model if perceptual weight > 0
+        if self.perc_w != 0.0:
+            # --- configure perceptual metric ---
+            self.perc_metric = str(
+                _cfg_get(cfg, ["Training", "Losses", "perceptual_metric"], "vgg")
+            ).lower()
 
-        if self.perc_metric == "vgg":
-            from .vgg import TruncatedVGG19
+            if self.perc_metric == "vgg":
+                from .vgg import TruncatedVGG19
 
-            i = int(_cfg_get(cfg, ["TruncatedVGG", "i"], 5))
-            j = int(_cfg_get(cfg, ["TruncatedVGG", "j"], 4))
-            self.perceptual_model = TruncatedVGG19(i=i, j=j,weights= not testing)
-        elif self.perc_metric == "lpips":
-            import lpips
+                i = int(_cfg_get(cfg, ["TruncatedVGG", "i"], 5))
+                j = int(_cfg_get(cfg, ["TruncatedVGG", "j"], 4))
+                self.perceptual_model = TruncatedVGG19(i=i, j=j, weights=not testing)
+            elif self.perc_metric == "lpips":
+                import lpips
 
-            self.perceptual_model = lpips.LPIPS(net="alex")
-        else:
-            raise ValueError(f"Unsupported perceptual metric: {self.perc_metric}")
+                self.perceptual_model = lpips.LPIPS(net="alex")
+            else:
+                raise ValueError(f"Unsupported perceptual metric: {self.perc_metric}")
 
-        for p in self.perceptual_model.parameters():
-            p.requires_grad = False
-        self.perceptual_model.eval()
+            # Set to eval and freeze params
+            for p in self.perceptual_model.parameters():
+                p.requires_grad = False
+            self.perceptual_model.eval()
+        else:  # Set to None when no perc. wanted
+            self.perceptual_model = None
+            self.perc_metric = None
 
         # Shared normalizer for computing evaluation metrics
         self.normalizer = Normalizer(cfg)
@@ -146,17 +160,19 @@ class GeneratorContentLoss(nn.Module):
         """
         comps = self._compute_components(sr, hr, build_graph=True)
         loss = (
-            self.l1_w   * comps["l1"] +
-            self.sam_w  * comps["sam"] +
-            self.perc_w * comps["perceptual"] +
-            self.tv_w   * comps["tv"]
+            self.l1_w * comps["l1"]
+            + self.sam_w * comps["sam"]
+            + self.perc_w * comps["perceptual"]
+            + self.tv_w * comps["tv"]
         )
         loss = _ensure_finite(loss)
         metrics = {k: v.detach() for k, v in comps.items()}
         return loss, metrics
 
     @torch.no_grad()
-    def return_metrics(self, sr: torch.Tensor, hr: torch.Tensor, prefix: str = "") -> dict[str, torch.Tensor]:
+    def return_metrics(
+        self, sr: torch.Tensor, hr: torch.Tensor, prefix: str = ""
+    ) -> dict[str, torch.Tensor]:
         """
         Compute all unweighted metric components and (optionally) prefix their keys.
 
@@ -191,7 +207,9 @@ class GeneratorContentLoss(nn.Module):
         return _ensure_finite(dh + dw)
 
     @staticmethod
-    def _sam_loss(sr: torch.Tensor, hr: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
+    def _sam_loss(
+        sr: torch.Tensor, hr: torch.Tensor, eps: float = 1e-8
+    ) -> torch.Tensor:
         """Spectral Angle Mapper (SAM) in radians.
 
         Flattens spatial dims and computes the mean angle between spectral vectors
@@ -221,11 +239,13 @@ class GeneratorContentLoss(nn.Module):
         ang = torch.acos(cos)
         return _ensure_finite(ang.mean())
 
-    def _pick_rgb(self, x: torch.Tensor) -> torch.Tensor:
+    def _prepare_perceptual_input(
+        self, sr: torch.Tensor, hr: torch.Tensor
+    ) -> torch.Tensor:
         """Select three channels for perceptual computation.
 
         If the input has exactly 3 channels, returns them unchanged. Otherwise,
-        selects either random unique indices (when ``randomize_bands=True``) or
+        selects either random unique indices  or
         the fixed indices stored in ``self.fixed_idx``.
 
         Args:
@@ -233,21 +253,31 @@ class GeneratorContentLoss(nn.Module):
 
         Returns:
             torch.Tensor: Tensor with three channels, shape ``(B, 3, H, W)``.
-
-        Raises:
-            AssertionError: If ``randomize_bands=False`` and ``fixed_idx`` is missing.
         """
-        B, C, H, W = x.shape
-        if C == 3:
-            return x
-        if self.randomize_bands:
-            idx = torch.randperm(C, device=x.device)[:3]
+        B, C, H, W = sr.shape
+        if C == 1:
+            # repeat single channel 3 times
+            sr = sr.repeat(1, 3, 1, 1)
+            hr = hr.repeat(1, 3, 1, 1)
+            return sr, hr
+        elif C == 2:
+            # repeat first channel to make 3
+            sr = torch.cat([sr, sr[:, :1, :, :]], dim=1)
+            hr = torch.cat([hr, hr[:, :1, :, :]], dim=1)
+            return sr, hr
+        elif C == 3:
+            # already 3 channels, return as is
+            return sr, hr
         else:
-            assert self.fixed_idx is not None, "Provide fixed_idx or enable randomize_bands"
-            idx = self.fixed_idx.to(device=x.device)
-        return x[:, idx, :, :]
+            # when over 3 channels, randomly select 3 unique indices
+            idx = torch.randperm(C, device=sr.device)[:3]
+            sr = sr[:, idx, :, :]
+            hr = hr[:, idx, :, :]
+            return sr, hr
 
-    def _perceptual_distance(self, sr_3: torch.Tensor, hr_3: torch.Tensor, *, build_graph: bool) -> torch.Tensor:
+    def _perceptual_distance(
+        self, sr_3: torch.Tensor, hr_3: torch.Tensor, *, build_graph: bool
+    ) -> torch.Tensor:
         """Compute perceptual distance between SR and HR (3-channel inputs).
 
         Uses the configured backend:
@@ -294,8 +324,7 @@ class GeneratorContentLoss(nn.Module):
 
     def _compute_components(
         self, sr: torch.Tensor, hr: torch.Tensor, *, build_graph: bool
-        ) -> dict[str, torch.Tensor]:
-        
+    ) -> dict[str, torch.Tensor]:
         """Compute individual content components and auxiliary quality metrics.
 
         Produces a dictionary with: L1, SAM, Perceptual, TV (optionally with grads),
@@ -325,17 +354,18 @@ class GeneratorContentLoss(nn.Module):
         comps["sam"] = _compute(self.sam_w, lambda: self._sam_loss(sr, hr))
 
         # Perceptual distance on 3 selected bands
-        sr_3 = self._pick_rgb(sr)
-        hr_3 = self._pick_rgb(hr)
-        comps["perceptual"] = self._perceptual_distance(sr_3, hr_3, build_graph=build_graph)
+        sr_3, hr_3 = self._prepare_perceptual_input(sr=sr, hr=hr)
+        comps["perceptual"] = self._perceptual_distance(
+            sr_3, hr_3, build_graph=build_graph
+        )
 
         # Total variation
         comps["tv"] = _compute(self.tv_w, lambda: self._tv_loss(sr))
 
         # --- Quality metrics ---
         with torch.no_grad():
-            #sr_metric = self.normalizer.normalize(sr)
-            #hr_metric = self.normalizer.normalize(hr)
+            # sr_metric = self.normalizer.normalize(sr)
+            # hr_metric = self.normalizer.normalize(hr)
             safe_max_val = max(self.max_val, LOSS_EPS)
             sr_metric = torch.clamp(sr, 0.0, safe_max_val)
             hr_metric = torch.clamp(hr, 0.0, safe_max_val)

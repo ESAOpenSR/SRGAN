@@ -1270,3 +1270,15 @@ class SRGAN_model(pl.LightningModule):
         ckpt = torch.load(ckpt_path, map_location=self.device)
         self.load_state_dict(ckpt["state_dict"])
         print(f"Loaded checkpoint from {ckpt_path}")
+
+# Quick Testing
+if __name__ == "__main__":
+    from omegaconf import OmegaConf
+    config = OmegaConf.load("opensr_srgan/configs/config_xray.yaml")
+    model = SRGAN_model(config=config)
+    
+    # test data
+    import torch
+    lr = torch.randn(2, 1, 128, 128)
+    sr = model(lr)
+    
