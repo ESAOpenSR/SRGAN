@@ -80,6 +80,61 @@ def normalise_10k(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
     return im
 
 
+def zero_one_signed(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
+    """Convert values between the ``[0, 1]`` and ``[-1, 1]`` ranges.
+
+    Parameters
+    ----------
+    im : torch.Tensor
+        Tensor containing values already scaled to ``[0, 1]``.
+    stage : {"norm", "denorm"}
+        - ``"norm"``   → map ``[0, 1]`` → ``[-1, 1]`` using ``im * 2 - 1``.
+        - ``"denorm"`` → map ``[-1, 1]`` → ``[0, 1]`` using ``(im + 1) / 2``.
+
+    Returns
+    -------
+    torch.Tensor
+        Range-adjusted tensor.
+    """
+
+    assert stage in ["norm", "denorm"]
+
+    if stage == "norm":
+        return torch.clamp((im * 2.0) - 1.0, -1.0, 1.0)
+    return torch.clamp((im + 1.0) / 2.0, 0.0, 1.0)
+
+
+def normalise_10k_signed(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
+    """Normalize Sentinel-2 DN values to the symmetric ``[-1, 1]`` range.
+
+    This helper chains :func:`normalise_10k` (``[0, 10000]`` → ``[0, 1]``) with
+    :func:`zero_one_signed` (``[0, 1]`` → ``[-1, 1]``) so models that expect
+    signed inputs receive the conventional ``[-1, 1]`` distribution.
+
+    Parameters
+    ----------
+    im : torch.Tensor
+        Input tensor containing reflectance-like values expressed as
+        ``[0, 10000]``.
+    stage : {"norm", "denorm"}
+        Normalisation stage. ``"denorm"`` restores the original ``[0, 10000]``
+        range.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor in the requested range.
+    """
+
+    assert stage in ["norm", "denorm"]
+
+    if stage == "norm":
+        scaled = normalise_10k(im, stage="norm")
+        return zero_one_signed(scaled, stage="norm")
+    scaled = zero_one_signed(im, stage="denorm")
+    return normalise_10k(scaled, stage="denorm")
+
+
 def sen2_stretch(im: torch.Tensor) -> torch.Tensor:
     """
     Apply a simple contrast stretch to Sentinel-2 data.
