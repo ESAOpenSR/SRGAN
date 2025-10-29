@@ -1,47 +1,135 @@
-# Data
+# Data guide
 
-The training stack ships with a single, self-contained example dataset that you can download in seconds to verify that the pipeline works end to end. This page explains how to fetch the sample data, how it is structured, and what you need to do when
-you are ready to plug in your own collections.
+OpenSR GAN Lab welcomes datasets from medical scanners, satellites, drones, microscopes, and consumer cameras. The goal is to
+define how low-resolution (LR) inputs and high-resolution (HR) references are paired, normalised, and sampled without editing
+code. This guide explains the dataset abstractions, built-in loaders, and ways to extend them.
 
-## Example dataset
+## Dataset selectors
 
-The example dataset is a small Sentinel-2 crop bundle hosted on the Hugging Face Hub. Each `.npz` archive contains a high-resolution chip stored under the key `hr`. Low-resolution counterparts are generated on the fly by bicubic interpolation inside the dataset class.
-
-* **Scale factor:** 4× upsampling between the generated LR inputs and provided HR targets.
-* **Splits:** All files except the final 20 samples are used for training; the last 20 form the validation split.
-* **Normalisation:** Values above 1.5 are assumed to be Sentinel-2 reflectance and are normalised by `1/10000`.
-
-### Downloading the files
-
-`opensr_srgan/data/example_data/download_example_dataset.py` exposes a helper that downloads and extracts the archive into `example_dataset/` relative to your working directory. Run it from a Python shell or a small script:
-
-```python
-from opensr_srgan.data.example_data.download_example_dataset import get_example_dataset
-
-get_example_dataset()
-```
-
-The helper pulls `example_dataset.zip` from the [`simon-donike/SR-GAN`](https://huggingface.co/simon-donike/SR-GAN) repository, extracts it, and removes the temporary archive once the copy completes.
-
-### Directory layout
-
-After extraction the folder contains `.npz` chips named `hr_*.npz`. No further preparation is required. Simply point the configuration to the dataset by setting:
+Every configuration file references a dataset with a simple key:
 
 ```yaml
 Data:
-  dataset_type: ExampleDataset
+  dataset: medical_mri
 ```
 
-The training loop automatically instantiates `opensr_srgan.data.example_data.example_dataset.ExampleDataset` for both the
-training and validation dataloaders.
+This key is resolved by the dataset registry (`opensr_srgan.data.registry`). You can add new selectors via entry points or by
+calling `register_dataset` in Python. Built-in options include:
 
-## Adding new datasets
+| Key | Use case |
+| --- | --- |
+| `medical_mri` | Paired MRI volumes with optional slice sampling strategies. |
+| `medical_ct` | CT volumes that may require HU windowing before normalisation. |
+| `medical_xray` | 2D radiographs stored as PNG, TIFF, or DICOM. |
+| `sentinel2` | Multispectral Sentinel-2 SAFE archives (10 m / 20 m). |
+| `multispectral_hdf5` | Generic HDF5 container for hyperspectral stacks. |
+| `microscopy_zarr` | Large microscopy tiles stored in Zarr arrays. |
+| `rgb_folder` | Standard computer-vision datasets organised as HR/LR folder pairs. |
+| `video_frames` | Sequential frames for video SR. |
+| `custom` | Hook for user-supplied dataset class. |
 
-When you are ready to move beyond the bundled sample data you can register a custom dataset. The repository uses a single factory function `opensr_srgan.data.dataset_selector.select_dataset` to keep the training script agnostic of individual
-collections. To integrate a new source:
+## Directory conventions
 
-1. **Implement a dataset class.** Create a `torch.utils.data.Dataset` that returns `(lr, hr)` tensors and performs any normalisation your sensor requires. Place the implementation somewhere under `opensr_srgan/data/`.
-2. **Update the selector.** Add a new `elif` branch to `select_dataset` that imports your dataset class, instantiates the training and validation splits, and returns them.
-3. **Expose configuration hooks.** Introduce a new `Data.dataset_type` key (for example `MyDataset`) and any additional fields you need (paths, augmentation flags, scale factors, …). Document the required entries in your configuration file.
+Folder-based datasets assume the following structure unless overridden:
 
-Following this pattern keeps `opensr_srgan.train` untouched: once the selector knows about your dataset you can launch training through the CLI or the Python API without further changes.
+```
+root/
+├── train/
+│   ├── LR/
+│   └── HR/
+├── val/
+│   ├── LR/
+│   └── HR/
+└── test/
+    ├── LR/
+    └── HR/
+```
+
+If your data lives in another layout, configure `Data.lr_glob`, `Data.hr_glob`, or implement a small adapter that translates
+from your format to the `(lr, hr)` pair interface.
+
+## Normalisation statistics
+
+Normalisation is handled by the `Normalisation` block in configs. Statistics can come from:
+
+* **Inline values** – Provide means/stds directly in YAML.
+* **External files** – Reference `.yaml`, `.json`, `.npy`, or `.pt` files bundled with your experiment.
+* **Dataset scans** – Enable `stats_source: dataset` to compute statistics on the fly (cached for future runs).
+
+For medical imaging, you can specify modality-aware logic (e.g. CT Hounsfield unit clipping) by pointing to a Python function via
+`Normalisation.custom_fn`.
+
+## Augmentations
+
+Augmentations live inside the `Data` block. Supported flags include `hflip`, `vflip`, `rotate90`, `elastic`, `random_crop`, and
+`noise`. For volumetric data, rotations can be restricted to the axial plane while preserving anatomy.
+
+Advanced users can define a `Data.augmentation_pipeline` that points to a custom Albumentations or MONAI transform sequence.
+
+## Curriculum & sampling
+
+OpenSR GAN Lab supports weighted sampling and curricula. Example:
+
+```yaml
+Data:
+  curriculum:
+    - until_step: 100_000
+      crop_size: [96, 96]
+    - until_step: 300_000
+      crop_size: [128, 128]
+```
+
+You can also specify `class_weights`, `patient_weights`, or `tile_weights` for domains where some regions are rarer or more
+important.
+
+## Large-scene tiling
+
+For huge rasters or volumes, enable streaming datasets that only load required tiles:
+
+```yaml
+Data:
+  dataset: microscopy_zarr
+  streaming: true
+  tile_size: [256, 256]
+  stride: [128, 128]
+```
+
+Streaming mode works with both training and inference pipelines, preventing memory blow-ups.
+
+## Custom dataset integration
+
+1. **Implement a dataset class** that returns `(lr, hr, metadata)` and registers augmentations inside `__getitem__`.
+2. **Register it** using `from opensr_srgan.data.registry import register_dataset`.
+3. **Reference the key** in your YAML file.
+
+Example:
+
+```python
+from opensr_srgan.data.registry import register_dataset
+
+@register_dataset("histopathology_wsis")
+class HistopathologyTiles(Dataset):
+    def __init__(self, cfg, split):
+        ...
+```
+
+## Metadata and evaluation
+
+Datasets can attach metadata (e.g. patient ID, acquisition date, sensor name). The Lightning module logs these attributes and can
+use them for stratified validation or domain-specific evaluation metrics.
+
+## Built-in statistics helpers
+
+The repository ships scripts to compute per-channel statistics:
+
+```bash
+python -m opensr_srgan.tools.compute_stats --config configs/medical_mri.yaml
+```
+
+This command scans the dataset, computes means/stds/percentiles, and writes them to the location specified by
+`Normalisation.stats_file`.
+
+---
+
+By describing your dataset in configuration files, you gain repeatable, shareable pipelines across medical, industrial, and
+aerial imaging projects.

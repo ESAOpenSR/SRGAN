@@ -1,116 +1,109 @@
 # Getting started
 
-This guide walks through installing dependencies, configuring datasets, and launching your first ESA OpenSR experiment. The stack uses Python 3.10+, PyTorch Lightning, and Weights & Biases for experiment tracking.
+Whether you are prototyping on a laptop or orchestrating large multi-GPU jobs, this guide walks you through installing OpenSR GAN
+Lab and running your first experiment.
 
-> 💡 **Only need inference?** Install the published package instead: `python -m pip install opensr-srgan`. It exposes `load_from_config` and `load_inference_model` so you can instantiate models without cloning the repository. Continue with the rest of this guide when you want to train, fine-tune, or otherwise modify the codebase.
+## Installation
 
-## 1. Install the environment
+### 1. Choose your environment
 
-1. **Create a virtual environment.**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
-2. **Install Python dependencies.**
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Authenticate logging backends (optional but recommended).**
-   * Run `wandb login` to capture metrics and images in your W&B workspace.
-   * Start `tensorboard --logdir logs/` if you prefer local dashboards.
+OpenSR GAN Lab targets Python 3.10–3.12 and PyTorch Lightning 1.9–2.x. Decide if you want a lightweight inference environment or
+full training stack.
 
-## 2. Gather training data
-
-The repository now ships with a single, ready-to-use example dataset so you can verify the full training loop without preparing custom manifests. Fetch it with the bundled helper:
-
-```python
-from opensr_srgan.data.example_data.download_example_dataset import get_example_dataset
-
-get_example_dataset()  # downloads into ./example_dataset/
-```
-
-The script downloads `example_dataset.zip` from the Hugging Face Hub, extracts it to `example_dataset/`, and removes the archive once extraction finishes. The configuration only needs to specify the dataset type:
-
-```yaml
-Data:
-  dataset_type: ExampleDataset
-```
-
-When you are ready to integrate your own collections, follow the guidance in [Data](data.md) to add a new dataset class and register it with the selector.
-
-## 3. Configure the experiment
-
-Use of the provided YAML presets or copy and edit one:
+### 2. Install from PyPI (inference & quick experiments)
 
 ```bash
-cp opensr_srgan/configs/config_10m.yaml opensr_srgan/configs/my_experiment.yaml
+python -m pip install opensr-srgan
 ```
 
-Update at least the following fields:
+This installs the package with minimal dependencies. Use it to load checkpoints, run inference scripts, or fine-tune existing
+models.
 
-* `Data.dataset_type`: Keep `ExampleDataset` for the bundled sample or switch to your custom key once you register a new dataset.
-* `Generator.scaling_factor`: Set the desired upscaling (e.g., `4` or `8`).
-* `Model.load_checkpoint`: Provide a path if you want to fine-tune an existing checkpoint.
-* `Training.Losses.perceptual_metric`: Switch to `lpips` if you installed the optional dependency.
-
-See [Configuration](configuration.md) for a full breakdown of available options.
-
-## 4. Launch training
-
-Run the training script with your customised config:
+### 3. Install from source (training & development)
 
 ```bash
-python -m opensr_srgan.train --config opensr_srgan/configs/my_experiment.yaml
+git clone https://github.com/simon-donike/SISR-RS-SRGAN.git
+cd SISR-RS-SRGAN
+python -m pip install -r requirements.txt
+pre-commit install
 ```
 
-Prefer to stay inside Python? Import the helper exposed by the package:
+Optional extras:
 
-```python
-from opensr_srgan import train
+* `pip install monai nibabel` for medical-imaging data loaders.
+* `pip install rasterio satpy` for geospatial rasters.
+* `pip install zarr dask` for large microscopy datasets.
 
-train("opensr_srgan/configs/my_experiment.yaml")
+### 4. Verify the installation
+
+```bash
+python -c "import opensr_srgan; print(opensr_srgan.__version__)"
 ```
 
-Both entry points will:
+## First configuration
 
-1. Instantiate the `SRGAN_model` Lightning module from the YAML file.
-2. Build the appropriate dataset pair and wrap it in a `LightningDataModule`.
-3. Configure Weights & Biases and TensorBoard loggers alongside checkpointing and learning-rate monitoring callbacks.
-4. Start alternating generator/discriminator optimisation according to your warm-start schedule.
+Configuration lives in `opensr_srgan/configs/`. Start by copying a template:
 
-Training resumes automatically if `Model.continue_training` points to a Lightning checkpoint. If you interrupt training, always use the `Model.continue_training` flag to pass the generated checkpoint, since that restores all optimizers, schedulers, EMA etc.
+```bash
+cp opensr_srgan/configs/examples/mri_x4.yaml my_experiment.yaml
+```
 
-## 5. Run validation or inference
+Open `my_experiment.yaml` and update:
 
-* **Validation metrics** are logged at the end of each epoch, including L1, SAM, PSNR/SSIM (from the content loss helper), and
-  discriminator statistics.
-* **Qualitative monitoring** is available through Weights & Biases image panels when `Logging.num_val_images` is greater than zero.
-* **Inference** on new low-resolution tiles can reuse the Lightning module.
-  * **When working from the PyPI package:**
-    ```python
-    from opensr_srgan import load_from_config, load_inference_model
+* `Data.root` to point to your dataset directory.
+* `Data.dataset` if you use a different selector.
+* `Normalisation.stats_file` to reference your statistics.
+* `Model.Generator.in_channels`/`out_channels` to match your modality.
 
-    # Option A – bring your own config + checkpoint (local path or URL)
-    custom_model = load_from_config(
-        config_path="opensr_srgan/configs/config_10m.yaml",
-        checkpoint_uri="https://example.com/checkpoints/srgan.ckpt",
-        map_location="cuda",  # optional
-    )
+## Running training
 
-    # Option B – grab the published RGB-NIR/SWIR presets from Hugging Face
-    preset_model = load_inference_model("RGB-NIR", map_location="cpu")
-    ```
-  * **When working from source:**
-    ```python
-    from opensr_srgan.model.SRGAN import SRGAN_model
+```bash
+python -m opensr_srgan.train --config my_experiment.yaml
+```
 
-    model = SRGAN_model("your_config.yaml")
-    model.load_from_checkpoint("path/to/checkpoint.ckpt")
-    sr_tiles = model.predict_step(lr_tiles)
-    ```
-  In all cases the helpers automatically normalise Sentinel-2 ranges, apply histogram matching, and denormalise outputs for
-  easier comparison with the source imagery.
+Useful flags:
 
-## 6. Create Data Pipeline
+* `--resume` – Continue training from the last checkpoint.
+* `--devices` – Select GPUs or set to `cpu` for quick dry runs.
+* `--strategy` – Choose Lightning strategies (e.g. `ddp`, `fsdp`).
+* `--precision` – Override precision (`16`, `bf16`, `32`).
 
-* **SR Sen2 Tiles**: Use `opensr-utils` to crop, SR, patch, and overlap whole Sentinel-2 tiles. (Note: Currently only supports RGB-NIR.)
+Training outputs logs, checkpoints, and validation panels into `Project.output_dir`.
+
+## Monitoring progress
+
+By default, the trainer logs to Weights & Biases when credentials are available. Otherwise, it falls back to TensorBoard or CSV
+depending on configuration. Expect:
+
+* Scalar plots for each loss component.
+* Validation image grids for LR/HR/SR comparisons.
+* Histograms of pixel distributions and discriminator logits.
+
+## Running inference
+
+Use the same config file to run inference once you have a checkpoint:
+
+```bash
+python -m opensr_srgan.inference \
+  --config my_experiment.yaml \
+  --checkpoint runs/mri_x4/checkpoints/ema.ckpt \
+  --input data/lr_samples \
+  --output outputs/sr_results
+```
+
+Enable tiled inference for large scenes by defining `Inference.tile_size` and `Inference.overlap` in the config.
+
+## Troubleshooting
+
+* **CUDA mismatch** – Install the PyTorch wheel that matches your driver (see [pytorch.org](https://pytorch.org/get-started/)).
+* **Missing dependencies** – Some modality-specific loaders (DICOM, SAFE, Zarr) require optional packages; install the
+  recommended extras listed above.
+* **Convergence issues** – Refer to the [training guideline](training-guideline.md) for tips on warm-ups, ramps, and loss tuning.
+* **Normalisation drift** – Double-check statistics files and ensure LR/HR branches share compatible scaling.
+
+## Next steps
+
+* Explore the [Configuration](configuration.md) reference to fine-tune settings.
+* Read the [Training](training.md) chapter for optimisation strategies.
+* Learn about [Inference](inference.md) to deploy your models.
+* Share your configs and findings with the community via issues or pull requests.

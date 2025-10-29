@@ -1,238 +1,223 @@
-# Configuration
+# Configuration guide
 
-ESA OpenSR relies on YAML files to control every aspect of the training pipeline. This page documents the available keys and how they influence the underlying code. Use `opensr_srgan/configs/config_20m.yaml` and `opensr_srgan/configs/config_10m.yaml` as starting points.
+Everything in OpenSR GAN Lab is controlled by YAML files. Configuration files define the dataset, normalisation pipeline,
+architectures, loss weights, schedulers, logging, and runtime options. This page summarises each section so you can design
+experiments for any image modality.
 
-## File structure
+## File layout
 
-A typical configuration contains the following top-level sections:
+Configuration files live in `opensr_srgan/configs/`. Copy an existing template and edit it, or create a new file and run
+`python -m opensr_srgan.train --config path/to/your.yaml`.
 
 ```
-Data:
-Model:
-Training:
-Generator:
-Discriminator:
-Optimizers:
-Schedulers:
-Logging:
+Config
+├── Project metadata
+├── Data
+├── Normalisation
+├── Model
+│   ├── Generator
+│   └── Discriminator
+├── Training
+│   ├── Losses
+│   ├── Optimisers & schedulers
+│   ├── Stability controls
+│   └── Logging
+└── Callbacks / export
 ```
 
-Each section maps directly to parameters consumed inside `opensr_srgan/model/SRGAN.py`, the dataset factory, or the training script.
+## Project metadata
+
+```yaml
+Project:
+  name: mri_x4
+  seed: 42
+  output_dir: runs/mri_x4
+  task: super_resolution
+```
+
+Use this block to set seeds, output paths, and naming. `task` influences default callbacks (e.g. image logging).
 
 ## Data
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `train_batch_size` | 12 | Mini-batch size for the training dataloader. Falls back to `batch_size` if set. |
-| `val_batch_size` | 8 | Batch size for validation. |
-| `num_workers` | 6 | Number of worker processes for both dataloaders. |
-| `prefetch_factor` | 2 | Additional batches prefetched by each worker. Ignored when `num_workers == 0`. |
-| `dataset_type` | `ExampleDataset` | Dataset selector consumed by `opensr_srgan.data.dataset_selector.select_dataset`. |
-| `normalization` | `'sen2_stretch'` | Normalisation strategy applied to input tensors. Accepts a string alias or a mapping (see below). |
-
-### Normalization policies
-
-The :class:`~opensr_srgan.data.utils.normalizer.Normalizer` centralises all
-normalisation logic. Pick one of the built-in aliases that matches your data:
-
-| Method | Description |
-| --- | --- |
-| `sen2_stretch` | Multiply by 10/3 for a light Sentinel-2 contrast stretch. |
-| `normalise_10k` / `reflectance` | Scale Sentinel-2 style 0–10000 reflectance values to `[0, 1]`. |
-| `normalise_10k_signed` / `reflectance_signed` | Scale 0–10000 reflectance to `[-1, 1]` (`/5000 - 1`). |
-| `normalise_s2` | Symmetric Sentinel-2 stretch used during training (maps to `[-1, 1]` and back). |
-| `zero_one` | Clamp incoming values to `[0, 1]` without otherwise changing them. |
-| `zero_one_signed` | Convert `[0, 1]` inputs to `[-1, 1]` via the common `tensor * 2 - 1` rule. |
-| `identity` / `none` | Leave tensors unchanged (use when data is already normalised). |
-
-Aliases such as `reflectance`, `sentinel2`, or `zero_to_one` map to the canonical
-entries above. Call :meth:`opensr_srgan.data.utils.normalizer.Normalizer.available_methods`
-to inspect the current list programmatically.
-
-#### Using custom callables
-
-When you need a bespoke policy, provide a mapping instead of a string. The
-normaliser will import and wrap your functions:
-
 ```yaml
 Data:
-  normalization:
-    name: custom
-    normalize: my_package.normalization:scale_to_unit
-    denormalize: my_package.normalization:unit_to_scale
-    # Optional keyword arguments applied when calling the functions
-    normalize_kwargs:
-      clip: true
+  dataset: medical_mri
+  root: /data/mri
+  batch_size: 8
+  num_workers: 8
+  crop_size: [128, 128]
+  scale: 4
+  dimensions: 2d  # set to 3d for volumetric pipelines
+  augmentations:
+    hflip: true
+    vflip: true
+    rotate90: true
 ```
 
-The callables receive a single `torch.Tensor` argument and must return a tensor.
-If you need to reuse the same function for both directions (for example
-`opensr_srgan.utils.radiometrics.normalise_10k`), add `normalize_kwargs` /
-`denormalize_kwargs` with the appropriate `stage` parameter.
+Key fields:
+
+* `dataset` – Selector that maps to a dataset class. Built-ins include `medical_mri`, `medical_ct`, `sentinel2`, `rgb_folder`,
+  `multispectral_hdf5`, `microscopy_zarr`, and `custom`.
+* `dimensions` – `2d` or `3d`. Controls augmentation helpers and whether 3D convolutions are enabled.
+* `scale` – Upscaling factor between LR and HR inputs.
+* `crop_size` – Spatial size of random crops (list for height/width or depth/height/width).
+* `sampler` – Optional weighted sampling or curriculum (e.g. focus on challenging cases first).
+
+## Normalisation
+
+```yaml
+Normalisation:
+  stats_source: file  # file | inline | dataset
+  stats_file: configs/stats/mri_stats.yaml
+  per_channel: true
+  lr:
+    type: zscore
+    clip: [-5, 5]
+  hr:
+    type: zscore
+    clip: [-5, 5]
+  histogram_match:
+    enabled: true
+    reference: configs/stats/mri_reference.npy
+```
+
+Set how LR and HR samples are scaled and matched. Options include `zscore`, `minmax`, `percentile`, `identity`, and
+`custom` (point to a Python function). Histogram matching can be toggled independently for LR/HR.
 
 ## Model
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `in_bands` | 6 | Number of input channels expected by the generator and discriminator. |
-| `continue_training` | `False` | Path to a Lightning checkpoint for resuming training (`Trainer.fit(resume_from_checkpoint=...)`). |
-| `load_checkpoint` | `False` | Path to a checkpoint used solely for weight initialisation (no training state restored). |
+```yaml
+Model:
+  Generator:
+    model_type: rrdb
+    in_channels: 1
+    out_channels: 1
+    n_blocks: 23
+    n_channels: 64
+    growth_channels: 32
+    scale: 4
+  Discriminator:
+    model_type: esrgan
+    in_channels: 1
+    n_blocks: 7
+    base_channels: 64
+    feature_matching: true
+```
 
-## Training
+Change `model_type` to switch architectures. Additional parameters depend on the chosen type (e.g. `window_size` for SwinIR
+variants, `kernel_size` for LKA). Setting `in_channels` greater than 3 is fully supported.
 
-### Warm-up and adversarial scheduling
+### Custom modules
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `pretrain_g_only` | `True` | Enable generator-only warm-up before adversarial updates. |
-| `g_pretrain_steps` | `10000` | Number of optimiser steps spent in the warm-up phase. |
-| `adv_loss_ramp_steps` | `5000` | Duration of the adversarial weight ramp after the warm-up. |
-| `label_smoothing` | `True` | Replaces target value 1.0 with 0.9 for real examples to stabilise discriminator training. |
+Add your own modules by registering them through entry points (`pyproject.toml`) or Python hooks:
 
-### Generator EMA (`Training.EMA`)
+```python
+from opensr_srgan.model.registry import register_generator
 
-Maintaining an exponential moving average (EMA) of the generator smooths out sharp weight updates and usually yields sharper yet
-stable validation imagery. The EMA is fully optional and controlled through the `Training.EMA` block:
+@register_generator("my_custom_generator")
+def build_my_generator(cfg):
+    ...
+```
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `enabled` | `False` | Turns EMA tracking on/off. When enabled, the EMA weights automatically replace the live generator during evaluation/inference. |
-| `decay` | `0.999` | Smoothing factor applied at every update. Values closer to 1.0 retain longer history. |
-| `update_after_step` | `0` | Defers EMA updates until the given optimiser step. Useful when you want the generator to warm up before tracking. |
-| `device` | `null` | Stores EMA weights on a dedicated device (`"cpu"`, `"cuda:1"`, …). `null` keeps the weights on the same device as the generator. |
-| `use_num_updates` | `True` | Enables PyTorch’s bias correction so the EMA ramps in smoothly during the first few updates. |
+Then reference `model_type: my_custom_generator` in the YAML.
 
-### Generator content loss (`Training.Losses`)
+## Training & losses
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `adv_loss_beta` | `1e-3` | Target weight applied to the adversarial term after ramp-up. |
-| `adv_loss_schedule` | `cosine` | Ramp shape (`linear` or `cosine`). |
-| `l1_weight` | `1.0` | Weight of the pixelwise L1 loss. |
-| `sam_weight` | `0.05` | Weight of the spectral angle mapper loss. |
-| `perceptual_weight` | `0.1` | Weight of the perceptual feature loss. |
-| `perceptual_metric` | `vgg` | Backbone used for perceptual features (`vgg` or `lpips`). |
-| `tv_weight` | `0.0` | Total variation regularisation strength. |
-| `max_val` | `1.0` | Peak value assumed by PSNR/SSIM computations. |
-| `ssim_win` | `11` | Window size for SSIM metrics. Must be an odd integer. |
+```yaml
+Training:
+  precision: 16
+  max_steps: 500_000
+  accumulate_grad_batches: 2
+  ema:
+    enabled: true
+    decay: 0.999
+  Losses:
+    l1_weight: 1.0
+    perceptual_weight: 0.2
+    perceptual_metric: lpips
+    perceptual_channels: [0]  # choose specific bands
+    sam_weight: 0.05
+    adv_loss_beta: 1e-3
+    adv_warmup:
+      steps: 20_000
+      mode: cosine
+  Optimizers:
+    generator:
+      name: adam
+      lr: 2e-4
+      betas: [0.9, 0.99]
+    discriminator:
+      name: adam
+      lr: 1e-4
+      betas: [0.9, 0.99]
+  Schedulers:
+    generator:
+      warmup_steps: 5_000
+      warmup_type: linear
+      plateau_patience: 10_000
+      factor: 0.5
+    discriminator:
+      warmup_steps: 0
+      plateau_patience: 15_000
+      factor: 0.5
+  Stability:
+    pretrain_g_only: true
+    g_pretrain_steps: 100_000
+    d_update_interval: 1
+    gradient_clip_val: 1.0
+```
 
-## Generator
+Highlights:
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `model_type` | `SRResNet` | Generator family (`SRResNet`, `stochastic_gan`, or `esrgan`). |
-| `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`/`esrgan`. |
-| `large_kernel_size` | `9` | Kernel size for input/output convolution layers. |
-| `small_kernel_size` | `3` | Kernel size for residual/attention blocks. |
-| `n_channels` | `96` | Base number of feature channels (RRDB/ESRGAN trunk width). |
-| `n_blocks` | `32` | Number of residual/attention blocks (RRDB count when `model_type: esrgan`). |
-| `scaling_factor` | `8` | Super-resolution scale factor (2, 4, 8, ...). |
-| `growth_channels` | `32` | ESRGAN-only: growth channels inside each RRDB block. |
-| `res_scale` | `0.2` | Residual scaling used by stochastic/ESRGAN variants. |
-| `out_channels` | `Model.in_bands` | ESRGAN-only: override the number of output bands. |
+* `precision` can be `16`, `bf16`, or `32` depending on hardware.
+* `ema` toggles exponential moving averages for the generator.
+* `Losses` accepts any combination; omit weights to disable terms.
+* `perceptual_channels` restricts which channels feed into perceptual losses (useful for hyperspectral or medical scans).
+* `adv_warmup` ramps in adversarial pressure gradually.
+* `Optimizers` and `Schedulers` are defined per network. You can reference cosine annealing, OneCycle, or custom schedulers.
+* `Stability` houses gradient clipping, update cadence, and generator-only pretraining.
 
-## Discriminator
+## Logging & callbacks
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `model_type` | `standard` | Discriminator architecture (`standard`, `patchgan`, or `esrgan`). |
-| `n_blocks` | `8` | Number of convolutional blocks. PatchGAN defaults to 3 when unspecified (ignored by `esrgan`). |
-| `base_channels` | `64` | ESRGAN-only: base number of feature maps. |
-| `linear_size` | `1024` | ESRGAN-only: hidden dimension of the fully connected head. |
+```yaml
+Logging:
+  logger: wandb  # wandb | tensorboard | csv
+  project: opensr-gans
+  entity: my-team
+  log_images_every_n_steps: 2_000
+  save_normalised_images: false
+Callbacks:
+  checkpoint:
+    monitor: val/perceptual
+    mode: min
+    save_top_k: 3
+  tiling_preview:
+    enabled: true
+    tiles: [[0, 0], [256, 256]]
+  export:
+    on_save:
+      - onnx
+      - torchscript
+```
 
-## Suggested settings
+Pick a logger, control how often image panels are captured, and configure checkpoint/export behaviour. Additional callbacks
+include early stopping, LR logging, and evaluation hooks that run custom metrics.
 
-### Generator presets
+## Inference-specific options
 
-The defaults in the YAML configs intentionally balance stability and fidelity for Sentinel-2 data. Start here before
-performing sweeps:
+Inference scripts accept the same config file. Add a block to control tiling and patch overlap:
 
-* Keep `n_channels` around 96 for residual-style backbones so feature widths match the initial convolution used by the
-  flexible generator factory.
-* Depth drives detail. Begin with `n_blocks = 32` for flexible variants and reduce to 16 when training budgets are
-  tight or when using the conditional generator, which already injects stochasticity via latent noise.
-* Set `scaling_factor` according to your target resolution (2×/4×/8×); all bundled generators support those values out
-  of the box.
+```yaml
+Inference:
+  tile_size: [256, 256]
+  overlap: [32, 32]
+  batch_size: 4
+  save_visualisations: true
+  export_format: tif
+```
 
-| Generator type | Recommended `n_channels` | Recommended `n_blocks` | Typical `scaling_factor` | Notes |
-| --- | --- | --- | --- | --- |
-| `SRResNet` (`block_type: standard`) | 64 | 16 | 4× | Canonical baseline with batch-norm residual blocks; scale can be 2×/4×/8× as needed. |
-| `SRResNet` (`block_type: res`) | 96 | 32 | 4×–8× | Lightweight residual blocks without batch norm; works well for high-scale (8×) Sentinel data. |
-| `SRResNet` (`block_type: rcab`) | 96 | 32 | 4×–8× | Attention-enhanced residual blocks; keep depth high to exploit channel attention. |
-| `SRResNet` (`block_type: rrdb`) | 96 | 32 | 4×–8× | Dense residual blocks expand receptive field; expect higher VRAM use at 32 blocks. |
-| `SRResNet` (`block_type: lka`) | 96 | 24–32 | 4×–8× | Large-kernel attention blocks stabilise at moderate depth; drop to 24 blocks if memory bound. |
-| `stochastic_gan` | 96 | 16 | 4× | Latent-modulated residual stack; pair with `noise_dim ≈ 128` and `res_scale ≈ 0.2` defaults. |
-| `esrgan` | 64 | 23 | 4× | ESRGAN-style RRDB trunk; tune `growth_channels` (typically 32) and keep `res_scale ≈ 0.2` for stability. |
+These settings ensure large rasters or volumes can be processed piecewise while preserving seams.
 
-### Discriminator presets
+---
 
-Tune discriminator depth to match the generator capacity—too shallow and adversarial loss underfits, too deep and the training loop destabilises. These starting points mirror the architectures bundled with the repo:
-
-| Discriminator type | Recommended depth parameter | Additional notes |
-| --- | --- | --- |
-| `standard` | `n_blocks = 8` | Mirrors the original SRGAN CNN with alternating stride-1/stride-2 blocks before the dense head. |
-| `patchgan` | `n_blocks = 3` | Maps to the 3-layer PatchGAN (a.k.a. `n_layers`); increase to 4–5 for larger crops or when the generator is particularly sharp. |
-| `esrgan` | `base_channels = 64`, `linear_size = 1024` | Deep VGG-style discriminator from ESRGAN; keep base width aligned with the generator feature count. |
-
-When adjusting these presets, scale generator and discriminator together and monitor adversarial loss ramps defined in `Training.Losses` to keep training stable.
-
-!!! note
-    When you pick `model_type: esrgan` or `stochastic_gan`, SRResNet-only keys such as `block_type`, `large_kernel_size`, or `small_kernel_size` are automatically ignored. The model factory prints a console notice so you know which settings were overridden.
-
-## Optimisers
-
-The trainer instantiates independent Adam optimisers for the generator and discriminator and enables a Two-Time-Scale Update Rule (TTUR) setup by default. The discriminator learning rate automatically defaults to a slower schedule than the generator, which keeps adversarial updates balanced without extra configuration.
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `optim_g_lr` | `1e-4` | Learning rate for the generator Adam optimiser. |
-| `optim_d_lr` | `0.5 * optim_g_lr` | Learning rate for the discriminator. Falls back to half of the generator LR (TTUR) when not explicitly set. |
-| `betas` | `(0.0, 0.99)` | GAN-friendly Adam momentum pair that favours fast response from the second moment term while removing generator bias from the first moment. |
-| `eps` | `1e-7` | Lower epsilon that matches common GAN recipes and prevents plateau-induced numerical noise. |
-| `weight_decay_g` | `0.0` | Weight decay applied to generator parameters that are *not* normalisation affine/bias terms. |
-| `weight_decay_d` | `0.0` | Weight decay applied to discriminator parameters that are *not* normalisation affine/bias terms. |
-| `gradient_clip_val` | `0.0` | Global gradient-norm clipping threshold applied to both optimisers (set to `0` to disable). |
-
-Weight decay exclusions are handled automatically: batch/instance/group-norm layers and bias parameters are filtered into a no-decay group so regularisation only touches convolutional kernels and dense weights. This mirrors best practices for GAN training and keeps normalisation statistics stable.
-
-## Schedulers
-
-Both optimisers share the same configuration keys because they use `torch.optim.lr_scheduler.ReduceLROnPlateau`.
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `metric` | `val_metrics/l1` | Validation metric monitored for plateau detection. |
-| `metric_g` | — | Optional override for the generator scheduler monitor. |
-| `metric_d` | — | Optional override for the discriminator scheduler monitor. |
-| `patience_g` | `100` | Epochs with no improvement before reducing the generator LR. |
-| `patience_d` | `100` | Epochs with no improvement before reducing the discriminator LR. |
-| `factor_g` | `0.5` | Multiplicative factor applied to the generator LR upon plateau. |
-| `factor_d` | `0.5` | Multiplicative factor applied to the discriminator LR upon plateau. |
-| `cooldown` | `0` | Number of epochs to wait after an LR drop before resuming plateau checks. |
-| `min_lr` | `1e-7` | Minimum learning rate allowed for both schedulers. |
-| `verbose` | `True` | Enables scheduler logging messages. |
-| `g_warmup_steps` | `2000` | Number of optimiser steps used for generator LR warmup. Set to `0` to disable. |
-| `g_warmup_type` | `cosine` | Warmup curve for the generator LR (`cosine` or `linear`). |
-
-`g_warmup_steps` applies a step-wise warmup through `torch.optim.lr_scheduler.LambdaLR` before resuming the standard
-`ReduceLROnPlateau` schedule. Cosine warmup is smoother for most runs, but a linear ramp (especially for 1–5k steps) remains
-available for experiments that prefer a steady rise. Both generator and discriminator schedulers expose Plateau parameters,
-including a shared `cooldown` period (epochs to wait before resuming plateau checks) and a `min_lr` floor so the learning rate
-never collapses to zero. Separate monitor keys (`metric_g`, `metric_d`) can be provided when generator and discriminator use
-different validation metrics.
-
-## Logging
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `num_val_images` | `5` | Number of validation batches visualised and logged to Weights & Biases each epoch. |
-
-## Tips for managing configurations
-
-* **Version control your YAML files.** Tracking them alongside experiment logs makes it easy to reproduce results.
-* **Leverage OmegaConf interpolation.** You can reference other fields (e.g., reuse a base path) to avoid duplication.
-* **Use descriptive filenames.** Include dataset, scale, and generator type in the config name to keep experiments organised.
-* **Override selectively.** When launching through scripts or notebooks, you can load a base config and override specific fields at
-  runtime using `OmegaConf.merge`.
-
-With a clear understanding of these fields, you can rapidly iterate on architectures, datasets, and training strategies without modifying the underlying code.
+Armed with these configuration knobs, you can adapt OpenSR GAN Lab to any dataset, architecture, or training philosophy.

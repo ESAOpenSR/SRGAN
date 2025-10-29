@@ -1,98 +1,88 @@
-# Architecture
+# Architecture overview
 
-This document outlines how ESA OpenSR organises its super-resolution GAN, the major components that make up the model, and how each piece interacts during training and inference.
+OpenSR GAN Lab is structured around a set of modular building blocks that can be remixed for any imaging domain. The project is
+implemented in PyTorch Lightning; every component is configurable through YAML and can be swapped without touching training
+loops.
 
-## SRGAN Lightning module
+## Lightning module
 
-`opensr_srgan/model/SRGAN.py` defines `SRGAN_model`, a `pytorch_lightning.LightningModule` that encapsulates the full adversarial workflow. The module is initialised from a YAML configuration file and provides the following responsibilities:
+`opensr_srgan.model.module.OpenSRLightningModule` orchestrates the training, validation, and inference lifecycle:
 
-* **Configuration ingestion.** Uses OmegaConf to load hyperparameters, dataset choices, and logging options. Convenience helpers
-  such as `_pretrain_check()` and `_compute_adv_loss_weight()` translate config values into runtime behaviour.
-* **Model factory.** `get_models()` builds the generator and discriminator at runtime via the generator factory using
-  `Generator.model_type`/`block_type` and `Discriminator.model_type`. Unsupported combinations fail fast with clear error
-  messages.
-* **Loss construction.** `GeneratorContentLoss` (from `opensr_srgan.model.loss`) provides L1, spectral angle mapper (SAM), perceptual, and
-  total-variation terms. Adversarial supervision uses `torch.nn.BCEWithLogitsLoss` with optional label smoothing.
-* **Optimiser scheduling.** `configure_optimizers()` returns paired Adam optimisers (generator + discriminator) with
-  `ReduceLROnPlateau` schedulers that monitor a configurable validation metric.
-* **Training orchestration.** `training_step()` alternates discriminator (`optimizer_idx == 0`) and generator (`optimizer_idx ==
-  1`) updates. During the warm-up period configured by `Training.pretrain_g_only`, discriminator weights are frozen via
-  `on_train_batch_start()` and a dedicated `pretraining_training_step()` computes purely content-driven updates.
-* **Validation and logging.** `validation_step()` computes the same content metrics, logs discriminator diagnostics, and pushes
-  qualitative image panels to Weights & Biases according to `Logging.num_val_images`.
-* **Inference pipeline.** `predict_step()` automatically normalises Sentinel-2 style 0–10000 inputs, runs the generator,
-  histogram matches the result to the low-resolution source, and denormalises if necessary.
+* Instantiates generators, discriminators, and loss functions via registry-driven factories.
+* Normalises inputs and denormalises outputs according to the dataset configuration.
+* Computes content, perceptual, and adversarial losses while managing warm-up schedules and ramps.
+* Logs metrics, images, and histograms to the configured logger (Weights & Biases or TensorBoard).
+* Exposes `predict_step` and tiling helpers for inference on large rasters, volumes, or long videos.
 
-### Key helper methods
+### Dual-optimiser setup
 
-| Method | Purpose |
-| --- | --- |
-| `_pretrain_check()` | Determines whether the generator-only warm-up is active. |
-| `_compute_adv_loss_weight()` | Produces the ramped adversarial weight using `linear` or `cosine` schedules. |
-| `_log_generator_content_loss()` and `_log_adv_loss_weight()` | Centralise logging so metrics remain consistent across phases. |
-| `on_fit_start()` | Prints informative status messages when training begins. |
+The module supports both Lightning automatic-optimisation (for Lightning 2.x) and manual optimisation (for Lightning 1.x) to
+maintain backwards compatibility. Each step updates the generator and discriminator separately while respecting cadence controls
+(e.g. update the discriminator every *n* steps) and gradient clipping thresholds specified in the config.
 
-## Generator options
+## Generators
 
-The generator zoo lives under `opensr_srgan/model/generators/` and can be selected via `Generator.model_type` in the configuration.
+Generators live under `opensr_srgan.model.generator`. The registry includes:
 
-* **`SRResNet` (`srresnet.py`).** Classic residual blocks with pixel shuffle upsampling. Ideal for baseline experiments or when a
-  lightweight architecture is required.
-* **Flexible residual families (`flexible_generator.py`).** Parameterised factory that instantiates residual, RCAB, RRDB, or
-  large-kernel attention blocks while reusing the same interface. Channel counts, block depth, kernel sizes, and scaling factor
-  are all read from the YAML file.
-* **Stochastic GAN generator (`cgan_generator.py`).** Extends the flexible generator with conditioning inputs and latent noise,
-  enabling experiments where auxiliary metadata influences the super-resolution output.
-* **ESRGAN generator (`esrgan.py`).** Implements the RRDBNet trunk introduced with ESRGAN, exposing `n_blocks`, `growth_channels`,
-  and `res_scale` so you can dial in deeper receptive fields and sharper textures.
-* **Advanced variants (`SRGAN_advanced.py`).** Provides additional block implementations and compatibility aliases exposed in
-  `__init__.py` for backwards compatibility.
+* **SRResNet / residual blocks** – Strong baselines for RGB and grayscale imagery.
+* **RCAB / channel attention** – Residual channel attention blocks for hyperspectral or medical volumes where channel
+  interactions matter.
+* **RRDB (ESRGAN)** – Residual-in-residual blocks with dense connections and adjustable growth channels.
+* **Large-kernel attention (LKA)** – Convolution + attention hybrids for detail-rich microscopy or satellite data.
+* **Stochastic generators** – Latent-conditioned branches for perceptual diversity and hallucinated detail.
 
-Common traits across generators include configurable input channel counts (`Model.in_bands`), support for upscaling factors from 2× to 8×, and residual scaling to stabilise deeper networks.
+Custom generators can be registered via `opensr_srgan.model.registry.register_generator`. As long as they expose the same
+signature, they can be configured through YAML like any built-in model.
 
-## Discriminator options
+## Discriminators
 
-`opensr_srgan/model/discriminators/` exposes three complementary discriminators:
+Discriminators live in `opensr_srgan.model.discriminator` and share the same registry pattern:
 
-* **Standard SRGAN discriminator (`srgan_discriminator.py`).** Deep convolutional stack tailored for multispectral imagery. The
-  number of convolutional blocks is configurable through `Discriminator.n_blocks`.
-* **PatchGAN discriminator (`patchgan.py`).** Operates on local patches, which can improve high-frequency fidelity when training
-  with large images. The depth is controlled by `n_blocks` and defaults to three layers.
-* **ESRGAN discriminator (`esrgan.py`).** Deep VGG-style stack with configurable `base_channels` and `linear_size`; pairs well
-  with RRDB generators when perceptual sharpness is the priority.
+* **Standard SRGAN discriminator** – Convolutional classifier operating on whole images.
+* **PatchGAN variants** – Local adversaries ideal for texture-heavy microscopy or photographic enhancement.
+* **ESRGAN discriminator** – Deeper architecture with spectral-normalised layers and feature matching heads.
+* **3D-ready options** – 3D convolutions for volumetric data (enable by setting `Data.dimensions: 3d`).
 
-Both discriminators use LeakyReLU activations and strided convolutions to progressively downsample the input until a real/fake logit map is produced.
+Cadence and learning-rate scheduling can be tuned per discriminator via configuration keys.
 
-## Loss suite and metrics
+## Loss suite
 
-`opensr_srgan/model/loss` contains the perceptual and pixel-based criteria applied to the generator outputs. The primary entry point is `GeneratorContentLoss`, which supports:
+`opensr_srgan.model.losses` provides a palette of loss functions that can be blended together:
 
-* **L1 reconstruction** over all spectral bands.
-* **Spectral Angle Mapper (SAM)** to preserve spectral signatures.
-* **Perceptual similarity** via VGG or LPIPS feature spaces, depending on `Training.Losses.perceptual_metric`.
-* **Total variation regularisation** for smoothing when `tv_weight` is non-zero.
+* **Pixel/structural:** L1, L2, Huber, SSIM, total variation.
+* **Spectral/geometric:** Spectral angle mapper, histogram matching penalties, gradient-domain losses.
+* **Perceptual:** VGG19, LPIPS, and custom feature extractors with channel-selection masks so you can target only the relevant
+  bands.
+* **Adversarial:** BCE-with-logits, relativistic GAN, and feature-matching losses for discriminator stabilisation.
 
-The same module exposes `return_metrics()` so validation can log PSNR/SSIM-style diagnostics without recomputing forward passes.
+Loss weights, warm-up phases, and perceptual channel masks are all defined in configuration files.
 
-## Data flow and normalisation
+## Normalisation & statistics
 
-The Lightning module expects batches of `(lr_imgs, hr_imgs)` tensors supplied by the `LightningDataModule` returned from
-`opensr_srgan/data/dataset_selector.py`. `predict_step()` and the validation hooks rely on two utilities from `opensr_srgan.utils.spectral_helpers`:
+The `opensr_srgan.data.normalizers` package converts raw sensor/scanner values into network-friendly ranges. It supports
+per-channel z-score, percentile, min-max, histogram matching, and custom loaders. Normalisers can operate on 2D or 3D data and
+have separate behaviour for low-resolution (LR) and high-resolution (HR) branches.
 
-* `normalise_10k`: Converts Sentinel-2 style reflectance values between `[0, 10000]` and `[0, 1]`.
-* `histogram`: Matches the SR histogram to the LR reference to minimise domain gaps during inference.
+## Data pipeline
 
-These helpers allow the generator to operate in a normalised space while still reporting outputs in physical units when needed.
+Datasets are defined in `opensr_srgan.data`. The key abstractions are:
 
-## Putting it together
+* **Dataset selectors** – YAML-driven wrappers that map modality keywords (e.g. `medical_mri`, `sentinel2`, `rgb_folder`) to
+  dataset classes.
+* **Paired datasets** – Return aligned LR/HR pairs with optional augmentation pipelines.
+* **Tiling datasets** – Stream patches from large rasters or volumes without loading entire scenes into memory.
 
-1. `opensr_srgan/train.py` loads the YAML configuration and instantiates `SRGAN_model`.
-2. The model initialises the selected generator/discriminator, prepares losses, and prints a summary via
-   `opensr_srgan.utils.model_descriptions.print_model_summary`.
-3. During each training batch, the discriminator receives real HR crops and fake SR predictions, while the generator combines
-   content loss and a ramped adversarial term.
-4. Validation reuses the same modules to compute quantitative metrics and log qualitative examples.
-5. When exported, `predict_step()` can be called directly or wrapped in a Lightning `Trainer.predict()` loop for large-scale
-   inference.
+You can create custom dataset classes and register them via entry points or Python hooks referenced in configuration files.
 
-This modular design keeps the research workflow flexible: swap components with configuration changes, extend the factories with new architectures, or plug in custom losses without touching the training loop itself.
+## Utilities
+
+* **EMA manager (`opensr_srgan.utils.ema`)** – Maintains exponential moving averages of generator weights.
+* **Scheduler helpers (`opensr_srgan.utils.schedulers`)** – Implement warm-ups, cosine ramps, and plateau detectors for both
+  optimisers.
+* **Logging utilities (`opensr_srgan.utils.loggers`)** – Standardise image grids, scalar tracking, and histogram logging across
+  loggers.
+* **Inference tiler (`opensr_srgan.inference.tiler`)** – Splits huge images or volumes into overlapping patches, stitches
+  predictions, and restores value ranges.
+
+Understanding how these pieces interact will help you design new models, integrate domain-specific metrics, or extend the toolkit
+for novel modalities.

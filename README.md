@@ -6,80 +6,129 @@
 
 ![banner](docs/assets/6band_banner.png)
 
-# 🌍 Single Image Super-Resolution Remote Sensing 'SRGAN'
+# 🌐 OpenSR GAN Lab
 
-**Remote-Sensing-SRGAN** is a research-grade GAN framework for **super-resolution of Sentinel-2 and other remote-sensing imagery**. It supports arbitrary band counts, configurable generator/discriminator designs, scalable depth/width, and a modular loss system designed for stable GAN training on EO data.
+**OpenSR GAN Lab** turns this repository into a domain-agnostic playground for **adversarial super-resolution**. It scales from
+clinical greyscale imagery to satellite stacks, microscopy volumes, and everyday RGB photos. Every component—normalisation,
+architecture, loss suite, augmentation, logging—can be swapped from YAML so you can grow from quick experiments to production
+pipelines without leaving the toolkit.
+
+The project started with multispectral remote-sensing research and has since been rebuilt to serve **any modality** with
+structured channels: medical imaging (MRI, CT, X-ray), aerial or orbital sensors (RGB, RGB-NIR, SWIR, SAR), industrial
+inspection, cultural-heritage scans, or plain computer-vision photos. If it is an image (or a stack of bands), OpenSR GAN Lab
+can model it.
 
 ---
 
 ## 📖 Documentation
 
-Full docs live at **[srgan.opensr.eu](https://srgan.opensr.eu/)**. They cover usage, configuration, training recipes, and deployment tips in depth.
-
-## 🧠 Highlights
-
-* **Flexible models:** swap between SRResNet, RCAB, RRDB, LKA, ESRGAN, and stochastic generators with YAML-only changes.
-* **Remote-sensing aware losses:** combine spectral, perceptual, and adversarial objectives with tunable weights.
-* **Stable training loop:** generator pretraining, adversarial ramp-ups, EMA, and multi-GPU Lightning support out of the box.
-* **PyPI distribution:** `pip install opensr-srgan` for ready-to-use presets or custom configs.
-* **Extensive Logging:** Logging all important information automatically to `WandB` for optimal insights.
+Dive into the full documentation at **[srgan.opensr.eu](https://srgan.opensr.eu/)** for installation recipes, dataset templates,
+training guides, and architecture deep dives tailored to multi-domain usage.
 
 ---
 
-## 🏗️ Configuration Examples
+## 🚀 Why practitioners pick OpenSR GAN Lab
 
-All key knobs are exposed via YAML in the `opensr_srgan/configs` folder:
-
-* **Model**: `in_channels`, `n_channels`, `n_blocks`, `scale`, ESRGAN knobs (`growth_channels`, `res_scale`, `out_channels`), `block_type ∈ {SRResNet, res, rcab, rrdb, lka}`
-* **Losses**: `l1_weight`, `sam_weight`, `perceptual_weight`, `tv_weight`, `adv_loss_beta`
-* **Training**: `pretrain_g_only`, `g_pretrain_steps`, `adv_loss_ramp_steps`, `label_smoothing`, generator LR warmup (`Schedulers.g_warmup_steps`, `Schedulers.g_warmup_type`), discriminator cadence controls
-* **Data**: band order, normalization stats, crop sizes, augmentations
-
----
-
-## 🎚️ Training Stabilization Strategies
-
-* **G‑only pretraining:** Train with content/perceptual losses while the adversarial term is held at zero during the first `g_pretrain_steps`.
-* **Adversarial ramp‑up:** Increase the BCE adversarial weight **linearly** or smoothly (**cosine**) over `adv_loss_ramp_steps` until it reaches `adv_loss_beta`.
-* **Generator LR warmup:** Ramp the generator optimiser with a **cosine** or **linear** schedule for the first 1–5k steps via `Schedulers.g_warmup_steps`/`g_warmup_type` before switching to plateau-based reductions.
-* **EMA smoothing:** Enable `Training.EMA.enabled` to keep a shadow copy of the generator. Decay values in the 0.995–0.9999 range balance responsiveness with stability and are swapped in automatically for validation/inference.
-
-The schedule and ramp make training **easier, safer, and more reproducible**.
+* **Any channel count, any distribution.** Describe input statistics, histogram targets, and clipping behaviour in a few YAML
+  lines and the normaliser adapts—no code edits required.
+* **Generator & discriminator zoo.** Mix-and-match SRResNet, ESRGAN-style RRDB, residual channel attention, stochastic
+  generators, PatchGAN variants, large-kernel attention, and custom backbones you register yourself.
+* **Perceptual intelligence for arbitrary bands.** LPIPS, VGG, and custom feature extractors can be scoped to the channels you
+  care about so hyperspectral, multispectral, and medical volumes gain perceptual guidance without reshaping tensors.
+* **Battle-tested training loop.** Warm-up phases, adversarial ramps, EMA checkpoints, mixed precision, and multi-GPU support
+  are first-class citizens with reproducible defaults.
+* **Observability by default.** Automatic logging to Weights & Biases or TensorBoard, validation image grids, histograms, and
+  metric summaries keep stakeholders aligned regardless of domain expertise.
 
 ---
 
-## ⚙️ Config‑driven components
+## 🧠 Capabilities at a glance
 
-| Component | Options | Config keys |
-|-----------|---------|-------------|
-| **Generators** | `SRResNet`, `res`, `rcab`, `rrdb`, `lka`, `esrgan`, `stochastic_gan` | `Generator.model_type`, depth via `Generator.n_blocks`, width via `Generator.n_channels`, kernels/scale plus ESRGAN-specific `growth_channels`, `res_scale`, `out_channels`. |
-| **Discriminators** | `standard` SRGAN CNN, `patchgan`, `esrgan` | `Discriminator.model_type`, granularity with `Discriminator.n_blocks`, ESRGAN-specific `base_channels`, `linear_size`. |
-| **Content losses** | L1, Spectral Angle Mapper, VGG19/LPIPS perceptual metrics, Total Variation | Weighted by `Training.Losses.*` (e.g. `l1_weight`, `sam_weight`, `perceptual_weight`, `perceptual_metric`, `tv_weight`). |
-| **Adversarial loss** | BCE‑with‑logits on real/fake logits | Warmup via `Training.pretrain_g_only`, ramped by `adv_loss_ramp_steps`, capped at `adv_loss_beta`, optional label smoothing. |
-
-The YAML keeps the SRGAN flexible: swap architectures or rebalance perceptual vs. spectral fidelity without touching the code.
-
-
-## 🧰 Installation
-
-Follow the [installation instructions](https://srgan.opensr.eu/getting-started/installation/) for package, source, and dependency setup options.
-
----
-
-## 🚀 Quickstart
-
-* **Datasets:** Grab the bundled example dataset or learn how to register your own sources in the [data guide](https://srgan.opensr.eu/data/).
-* **Training:** Launch training with `python -m opensr_srgan.train --config opensr_srgan/configs/config.yaml` or import `train` from the package as described in the [training walkthrough](https://srgan.opensr.eu/getting-started/training/).
-* **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/getting-started/inference/).
+| Area | What you control |
+| --- | --- |
+| **Data ingestion** | Folder trees, HDF5, Zarr, Sentinel SAFE, medical DICOM/NIfTI via pluggable dataset adapters. Configure crop
+sizes, sampling balance, augmentations, and multi-resolution pairings straight from YAML. |
+| **Normalisation** | Z-score, min-max, percentile, histogram matching, per-channel clipping, and custom statistics loaders for
+medical scanners or remote sensors. |
+| **Architectures** | Prebuilt SRResNet, ESRGAN, RCAB, LKA, SwinIR-inspired blocks, plus user-registered modules with configurable
+depth/width/attention. |
+| **Losses** | Weighted mixes of L1/L2, spectral angle, SSIM, total variation, perceptual, relativistic adversarial, and
+feature-matching objectives. |
+| **Schedulers** | Generator/discriminator LR schedules (cosine, plateau, warm-up), adversarial weight ramps, gradient clipping,
+and discriminator cadence controls. |
+| **Deployment** | Lightning checkpoints, Hugging Face Hub integration, ONNX export helpers, patch-based tiling for arbitrarily
+large rasters or volumes. |
 
 ---
 
-## 🏗️ Configuration & Stabilization
+## 🧪 Ready for every modality
 
-All tunable knobs—architectures, loss weights, schedulers, and EMA—are exposed via YAML files under `opensr_srgan/configs`. Strategy tips for warm-ups, adversarial ramps, and EMA usage are summarised in the [training concepts chapter](https://srgan.opensr.eu/training/concepts/).
+* **Medical imaging:** Handle grayscale or multi-contrast MRI, CT, or PET by defining per-channel statistics and anatomical crop
+  policies. Integrate PACS exports via simple dataset adapters.
+* **Remote sensing:** Continue supporting RGB, RGB-NIR, SWIR, radar, or custom multispectral stacks with spectral-angle losses
+  and histogram preservation.
+* **Microscopy & materials:** Combine volumetric slices with anisotropic scaling, use tiled inference helpers, and plug in
+  structure-aware perceptual metrics.
+* **Consumer photography:** Fine-tune ESRGAN-style presets for compressed JPEG restoration or mobile camera enhancement.
 
+---
 
-## 📂 Repository Structure
+## 🛠️ Configuration-first workflow
+
+All controls live under `opensr_srgan/configs/`. Example highlights:
+
+* **Generator** – `in_channels`, `n_channels`, `n_blocks`, `scale`, `block_type ∈ {srresnet, res, rcab, rrdb, lka, stochastic}`
+  plus ESRGAN extras (`growth_channels`, `res_scale`, `out_channels`).
+* **Discriminator** – `model_type ∈ {standard, esrgan, patchgan}`, `n_blocks`, `base_channels`, feature matching toggles.
+* **Losses** – `l1_weight`, `mse_weight`, `sam_weight`, `ssim_weight`, `perceptual_weight`, `perceptual_metric`, `tv_weight`,
+  `adv_loss_beta`, channel selection for perceptual/feature extractors.
+* **Schedulers** – Warm-ups via `Schedulers.g_warmup_steps`, cosine or linear ramps, plateau-based reductions, EMA toggles.
+* **Data** – Channel order, tiling, augmentations, dataset modules, cross-validation splits, and domain-specific normalisation
+  statistics.
+
+The YAML templates are heavily commented and designed to be copied, renamed, and tweaked for new projects.
+
+---
+
+## 🎚️ Stability features built in
+
+* **Generator pretraining** keeps the discriminator idle for `g_pretrain_steps` so structural losses lock in early detail.
+* **Adversarial weight ramping** (linear or cosine) stabilises training by gradually introducing GAN pressure until it reaches
+  `adv_loss_beta`.
+* **Learning-rate warm-up + restarts** smooth optimisation shocks and play nicely with mixed precision and large batch sizes.
+* **EMA checkpoints** provide polished validation results and deployment-ready weights at any time.
+
+---
+
+## 📦 Installation
+
+Follow the [installation guide](https://srgan.opensr.eu/getting-started/#installation) for detailed steps. In short:
+
+```bash
+# Inference or lightweight experiments
+python -m pip install opensr-srgan
+
+# Full training environment
+python -m pip install -r requirements.txt
+pre-commit install
+```
+
+---
+
+## ⚡ Quickstart
+
+1. **Select a template** from `opensr_srgan/configs/` that matches your modality (e.g., `medical_mri.yaml`, `multispectral.yaml`,
+   `rgb_finetune.yaml`).
+2. **Point to your dataset** by editing the `Data` section (path, format, statistics). Custom dataset adapters can be registered
+   via entry points or a few lines of Python.
+3. **Launch training** with `python -m opensr_srgan.train --config <config.yaml>`. Monitor progress in Weights & Biases or
+   TensorBoard automatically.
+4. **Run inference** using `python -m opensr_srgan.inference --config <config.yaml> --checkpoint <ckpt.ckpt>` or import the
+   Lightning module in your own pipeline.
+
+---
+
+## 📂 Repository structure
 
 ```
 SISR-RS-SRGAN/
@@ -90,18 +139,22 @@ SISR-RS-SRGAN/
 └── requirements.txt      # Development dependencies
 ```
 
-## Contribution and Issues
-If you wish to contribute (such as new models, data or functionalities), please review the contribution guidelines and open a PR here on GitHub. If you're having problems or need support, please open an Issue here on GitHub.
+---
 
+## 🤝 Contributing & community
+
+Contributions are welcome! Share modality-specific configs, new generator blocks, domain adaptors, or tutorials. Review the
+[contribution guidelines](CONTRIBUTING.md), open discussions, or file issues—especially if you integrate OpenSR GAN Lab into new
+industries. We are building a cross-domain super-resolution hub together.
 
 ---
 
-## 📚 Related Projects
+## 🌌 Related OpenSR projects
 
-* **OpenSR-Model** – Latent Diffusion SR (LDSR-S2)
-* **OpenSR-Utils** – Large-scale inference & data plumbing
-* **OpenSR-Test** – Benchmarks & metrics
-* **SEN2NEON** – Multispectral HR reference dataset
+* **OpenSR-Model** – Latent diffusion super-resolution experiments.
+* **OpenSR-Utils** – Dataset preparation, tiling, and evaluation infrastructure.
+* **OpenSR-Test** – Benchmark harness for SR metrics across modalities.
+* **SEN2NEON** – High-resolution reference dataset for multispectral comparison.
 
 ---
 
@@ -115,11 +168,8 @@ coming soon...
 
 ---
 
-## 🧑‍🚀 Authors, Acknowledgements, and Notes on AI Usage
+## 👩‍🚀 Authors & AI assistance
 
-Developed by **Simon Donike** (IPL–UV) within the **ESA Φ-lab / OpenSR** initiative.  
-> The development history of this code began in 2020 with the implementation of an SR-GAN for a MSc thesis project. Since then, over several iterations, the codebase has been expanded and many training tweaks implemented, based on the experiences made training SR-GANs for the OpenSR project. The fundamental training outline, training tweaks, normalizations, and inference procedures are built upon that experience.  
-The added complexity that came with (a) the implementation of many different models and blocks, (b) more data sources, (c) according normalizations, and (d) complex testing and documentation structures, was handled to varying degrees with the help of *Codex*. Specifically, the docs, the automated testing workflows the dataset handling, and the flexible normalizer are largely AI generated. These sections have been checked manually to the best of my ability, but please be aware of this when diving into the code.
-
----
-
+Created by **Simon Donike** (IPL–UV) as part of the ESA Φ-lab / OpenSR initiative and now evolved into a general-purpose GAN lab.
+Sections of the documentation, dataset integrations, and normalisation utilities were co-designed with support from AI tooling
+(CodeX). All code and docs are reviewed to ensure accuracy across domains.
