@@ -207,8 +207,11 @@ def training_step_PL2(self, batch, batch_idx):
     # optional gradient clipping support (norm-based)
     gradient_clip_val = self.config.Schedulers.get("gradient_clip_val", 0.0)
 
-    def _maybe_clip_gradients(module):
+    def _maybe_clip_gradients(module, optimizer=None):
         if gradient_clip_val > 0.0 and module is not None:
+            precision_plugin = getattr(self.trainer, "precision_plugin", None)
+            if optimizer is not None and precision_plugin is not None and hasattr(precision_plugin, "unscale_optimizer"):
+                precision_plugin.unscale_optimizer(optimizer)
             torch.nn.utils.clip_grad_norm_(module.parameters(), gradient_clip_val)
 
     # ======================================================================
@@ -242,7 +245,7 @@ def training_step_PL2(self, batch, batch_idx):
         if hasattr(self, "toggle_optimizer"): self.toggle_optimizer(opt_g)
         opt_g.zero_grad()
         self.manual_backward(content_loss)
-        _maybe_clip_gradients(self.generator)
+        _maybe_clip_gradients(self.generator, opt_g)
         opt_g.step()
         if hasattr(self, "untoggle_optimizer"): self.untoggle_optimizer(opt_g)
         
@@ -277,7 +280,7 @@ def training_step_PL2(self, batch, batch_idx):
     self.log("discriminator/D(G(x))_prob", d_fake_prob, prog_bar=True, sync_dist=True)
 
     self.manual_backward(adversarial_loss)
-    _maybe_clip_gradients(self.discriminator)
+    _maybe_clip_gradients(self.discriminator, opt_d)
     opt_d.step()
     if hasattr(self, "untoggle_optimizer"): self.untoggle_optimizer(opt_d)
 
@@ -304,7 +307,7 @@ def training_step_PL2(self, batch, batch_idx):
     self.log("generator/total_loss", total_loss, sync_dist=True)
 
     self.manual_backward(total_loss)
-    _maybe_clip_gradients(self.generator)
+    _maybe_clip_gradients(self.generator, opt_g)
     opt_g.step()
     if hasattr(self, "untoggle_optimizer"): self.untoggle_optimizer(opt_g)
     
