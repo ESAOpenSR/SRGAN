@@ -28,6 +28,47 @@ Each section maps directly to parameters consumed inside `opensr_srgan/model/SRG
 | `num_workers` | 6 | Number of worker processes for both dataloaders. |
 | `prefetch_factor` | 2 | Additional batches prefetched by each worker. Ignored when `num_workers == 0`. |
 | `dataset_type` | `ExampleDataset` | Dataset selector consumed by `opensr_srgan.data.dataset_selector.select_dataset`. |
+| `normalization` | `'sen2_stretch'` | Normalisation strategy applied to input tensors. Accepts a string alias or a mapping (see below). |
+
+### Normalization policies
+
+The :class:`~opensr_srgan.data.utils.normalizer.Normalizer` centralises all
+normalisation logic. Pick one of the built-in aliases that matches your data:
+
+| Method | Description |
+| --- | --- |
+| `sen2_stretch` | Multiply by 10/3 for a light Sentinel-2 contrast stretch. |
+| `normalise_10k` / `reflectance` | Scale Sentinel-2 style 0–10000 reflectance values to `[0, 1]`. |
+| `normalise_10k_signed` / `reflectance_signed` | Scale 0–10000 reflectance to `[-1, 1]` (`/5000 - 1`). |
+| `normalise_s2` | Symmetric Sentinel-2 stretch used during training (maps to `[-1, 1]` and back). |
+| `zero_one` | Clamp incoming values to `[0, 1]` without otherwise changing them. |
+| `zero_one_signed` | Convert `[0, 1]` inputs to `[-1, 1]` via the common `tensor * 2 - 1` rule. |
+| `identity` / `none` | Leave tensors unchanged (use when data is already normalised). |
+
+Aliases such as `reflectance`, `sentinel2`, or `zero_to_one` map to the canonical
+entries above. Call :meth:`opensr_srgan.data.utils.normalizer.Normalizer.available_methods`
+to inspect the current list programmatically.
+
+#### Using custom callables
+
+When you need a bespoke policy, provide a mapping instead of a string. The
+normaliser will import and wrap your functions:
+
+```yaml
+Data:
+  normalization:
+    name: custom
+    normalize: my_package.normalization:scale_to_unit
+    denormalize: my_package.normalization:unit_to_scale
+    # Optional keyword arguments applied when calling the functions
+    normalize_kwargs:
+      clip: true
+```
+
+The callables receive a single `torch.Tensor` argument and must return a tensor.
+If you need to reuse the same function for both directions (for example
+`opensr_srgan.utils.radiometrics.normalise_10k`), add `normalize_kwargs` /
+`denormalize_kwargs` with the appropriate `stage` parameter.
 
 ## Model
 
