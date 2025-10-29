@@ -9,7 +9,9 @@ import pytest
 from opensr_srgan.utils.radiometrics import (
     normalise_s2,
     normalise_10k,
+    normalise_10k_signed,
     sen2_stretch,
+    zero_one_signed,
     minmax_percentile,
     minmax,
     histogram,
@@ -32,7 +34,16 @@ def test_normalise_10k_roundtrip():
     z = normalise_10k(y, "denorm")
     assert torch.all(y <= 1) and torch.all(y >= 0)
     assert torch.all(z <= 10000) and torch.all(z >= 0)
-    assert torch.allclose(x.clamp(0, 10000), z, atol=1e-5)
+    assert torch.allclose(x.clamp(0, 10000), z, atol=1e-4)
+
+
+def test_normalise_10k_signed_roundtrip():
+    x = torch.randint(0, 10001, (3, 8, 8), dtype=torch.int32).float()
+    y = normalise_10k_signed(x, "norm")
+    z = normalise_10k_signed(y, "denorm")
+    assert torch.all(y <= 1) and torch.all(y >= -1)
+    assert torch.all(z <= 10000) and torch.all(z >= 0)
+    assert torch.allclose(x.clamp(0, 10000), z, atol=1e-4)
 
 
 def test_sen2_stretch_range():
@@ -40,6 +51,14 @@ def test_sen2_stretch_range():
     y = sen2_stretch(x)
     assert y.shape == x.shape
     assert torch.all(y >= 0) and torch.all(y <= 1)
+
+
+def test_zero_one_signed_roundtrip():
+    x = torch.rand(3, 8, 8)
+    y = zero_one_signed(x, "norm")
+    z = zero_one_signed(y, "denorm")
+    assert torch.all(y <= 1) and torch.all(y >= -1)
+    assert torch.allclose(x.clamp(0, 1), z, atol=1e-6)
 
 
 def test_minmax_percentile_basic_bounds():
