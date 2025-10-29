@@ -84,7 +84,6 @@ Generator:
   scaling_factor: 8            # Upscaling factor (e.g., 2×, 4×, 8×)
   growth_channels: 32          # ESRGAN-specific RRDB growth channels (ignored otherwise)
   res_scale: 0.2               # Residual scaling used by stochastic/ESRGAN variants
-  out_channels: 6              # Optional ESRGAN output band override (defaults to Model.in_bands)
 
 Discriminator:
   model_type: 'standard'       # Discriminator architecture selector ['standard', 'patchgan', 'esrgan']
@@ -113,7 +112,7 @@ Schedulers:
   g_warmup_steps: 2500         # Generator warmup duration in steps (0 disables warmup)
   g_warmup_type: 'cosine'      # Generator warmup curve: ['cosine', 'linear']
   metric_g: 'val_metrics/l1'      # Metric monitored for Generator LR scheduler
-  metric_d: 'validation/DISC_adversarial_loss'     # Metric monitored for Discriminator LR scheduler
+  metric_d: 'discriminator/adversarial_loss'     # Metric monitored for Discriminator LR scheduler
   patience_g: 50              # Patience (epochs) for Generator LR scheduler
   patience_d: 50              # Patience (epochs) for Discriminator LR scheduler
   factor_g: 0.5                # LR reduction factor for Generator

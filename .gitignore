@@ -1,3 +1,9 @@
+# Modular Extension ignores
+opensr_srgan/data/chestxrays/
+opensr_srgan/configs/config_xray.yaml
+opensr_srgan/data/MRI/
+opensr_srgan/configs/config_MRI.yaml
+
 # large Files
 *.zip
 

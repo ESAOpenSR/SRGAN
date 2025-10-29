@@ -68,7 +68,6 @@ def select_dataset(config):
         )
 
     elif dataset_selection == "S2_4b":
-        # FYI: You import from S2_6b_ds for the 4-band case too (as per your snippet).
         # If there is a dedicated 4-band dataset file, swap the import accordingly.
         from .SEN2_SAFE.S2_6b_ds import S2SAFEDataset
 
@@ -115,6 +114,12 @@ def select_dataset(config):
         path = "example_dataset/"
         ds_train = ExampleDataset(folder=path, phase="train")
         ds_val = ExampleDataset(folder=path, phase="val")
+        
+    elif dataset_selection == "ChestXRay":
+        from opensr_srgan.data.chestxrays.dataset import XRayDataset
+
+        ds_train = XRayDataset(phase="train", sr_factor=config.Generator.scaling_factor)
+        ds_val = XRayDataset(phase="val", sr_factor=config.Generator.scaling_factor)
     else:
         # Centralized error so unsupported keys fail loudly & clearly.
         raise NotImplementedError(
@@ -209,6 +214,6 @@ def datamodule_from_datasets(config, ds_train, ds_val):
 if __name__ == "__main__":
     from omegaconf import OmegaConf
 
-    config_path = "opensr_srgan/configs/config_training_example.yaml"
+    config_path = "opensr_srgan/configs/config_xray.yaml"
     config = OmegaConf.load(config_path)
     _ = select_dataset(config)
