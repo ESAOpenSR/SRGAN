@@ -81,17 +81,14 @@ Nevertheless, GAN-based approaches continue to be actively explored [@g1] and re
 
 ## Problem Statement
 
-Despite their success in computer vision, Generative Adversarial Networks (GANs) remain notoriously difficult to train [@p1; @p2; @p3].  
-The simultaneous optimization of generator and discriminator networks often leads to unstable dynamics, mode collapse, and high sensitivity to hyperparameters.  
+Despite their success in computer vision, Generative Adversarial Networks (GANs) remain notoriously difficult to train [@p1; @p2; @p3]. The simultaneous optimization of generator and discriminator networks often leads to unstable dynamics, mode collapse, and high sensitivity to hyperparameters.  
 
 In remote-sensing applications, these issues are amplified by domain-specific challenges such as multispectral or hyperspectral inputs, high dynamic range reflectance values, varying sensor characteristics, and limited availability of perfectly aligned high-resolution ground-truth data.  
 
-Moreover, researchers in remote sensing rarely work with fixed RGB imagery.  
-They frequently need to adapt existing GAN architectures to support arbitrary numbers of spectral bands, retrain models for different satellite sensors (e.g., Sentinel-2, SPOT, Pleiades, PlanetScope), or implement benchmarks for newly collected datasets.  
+Moreover, researchers in remote sensing rarely work with fixed RGB imagery. They frequently need to adapt existing GAN architectures to support arbitrary numbers of spectral bands, retrain models for different satellite sensors (e.g., Sentinel-2, SPOT, Pleiades, PlanetScope), or implement benchmarks for newly collected datasets.  
 These modifications usually require non-trivial changes to the model architecture, preprocessing pipeline, and loss configuration, making reproducibility and experimentation cumbersome.  
 
-Implementing the full set of heuristics that make GAN training stable—such as generator pretraining, adversarial loss ramping, label smoothing, learning-rate warmup, and exponential moving-average (EMA) tracking—adds another layer of complexity.  
-Consequently, reproducing and extending GAN-based SR models in the Earth-Observation (EO) domain is often time-consuming, fragile, and inconsistent across studies.
+Implementing the full set of heuristics that make GAN training stable, such as generator pretraining, adversarial loss ramping, label smoothing, learning-rate warmup, and exponential moving-average (EMA) tracking, adds another layer of complexity. Consequently, reproducing and extending GAN-based SR models in the Earth-Observation (EO) domain is often time-consuming, fragile, and inconsistent across studies.
 
 
 ## Contribution Summary
@@ -224,8 +221,7 @@ Table: **Implemented training features for stable adversarial optimization.**
 
 #### Exponential Moving Average (EMA) Stabilisation
 
-The EMA mechanism [@ema] is an optional stabilisation technique applied to the generator weights to produce smoother outputs and more reliable validation metrics.  
-Instead of evaluating the generator using its raw, rapidly fluctuating parameters, an auxiliary set of shadow weights $\theta_{\text{EMA}}$ is maintained as a smoothed version of the online weights $\theta$. After each training step, the model parameters are updated as an exponential moving average:
+The EMA mechanism [@ema] is an optional stabilisation technique applied to the generator weights to produce smoother outputs and more reliable validation metrics, commonly used throughout model training pipelines in general and generative image applications in particular. Instead of evaluating the generator using its raw, rapidly fluctuating parameters, an auxiliary set of duplicate weights $\theta_{\text{EMA}}$ is maintained as a smoothed version of the online weights $\theta$. After each training step, the model parameters are updated as an exponential moving average:
 
 $$
 \theta_{\text{EMA}}^{(t)} = \beta \, \theta_{\text{EMA}}^{(t-1)} + (1 - \beta)\, \theta^{(t)}
