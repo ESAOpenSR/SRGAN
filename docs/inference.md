@@ -10,7 +10,7 @@ pip install opensr-srgan
 
 * `opensr-srgan` exposes helpers that reconstruct Lightning checkpoints from YAML configs or download ready-to-run presets.
 * The optional `huggingface` extra adds `huggingface-hub`, which `load_inference_model` uses internally when fetching preset weights from the Hub.
-* `opensr-utils` provides the tiling/mosaicking pipeline that can super-resolve whole Sentinel-2 SAFE folders, GeoTIFFs, or other large rasters.
+* `opensr-utils` provides the tiling/mosaicking pipeline that can super-resolve whole Sentinel-2 SAFE folders, GeoTIFFs, or other large rasters. 
 
 ## 2.1 Instantiate a Preset 
 
