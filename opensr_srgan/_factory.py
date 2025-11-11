@@ -156,6 +156,7 @@ def load_inference_model(
     )
 
 
+"""
 if __name__ == "__main__":
     # simple test
     # Create Model
@@ -171,3 +172,4 @@ if __name__ == "__main__":
     lr = torch.randn(1, 4, 64, 64)
     sr = model.forward(lr)
     print(lr.shape, "->", sr.shape)
+"""

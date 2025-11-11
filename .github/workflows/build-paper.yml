@@ -1,11 +1,11 @@
-name: Build PDF
+name: Build JOSS PDF
 
 on:
   push:
     branches:
       - main
     paths:
-      - "docs/**"
+      - "paper/**"
   workflow_dispatch:
 
 jobs:
