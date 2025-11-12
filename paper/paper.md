@@ -97,7 +97,7 @@ The system consists of four main components:
 
 ## Generator Architectures
 
-The generator network can be configured with different backbone types, each providing a unique trade-off between complexity, receptive field, and textural detail (see Table~\ref{tab:arch} in ~\ref{app:components}).  
+The generator network can be configured with different backbone types, each providing a unique trade-off between complexity, receptive field, and textural detail (see Table [@tbl-arch] in [@app-components]).  
 
 The `Generator` class provides a unified implementation of SR backbones that share a common convolutional structure while differing in their internal residual block design.
 The module is initialized with a `model_type` flag selecting one of `res`, `rcab`, `rrdb`, `lka`, `esrgan`, `cgan`, each drawn from a shared registry of block factories or dedicated ESRGAN implementation.
@@ -129,7 +129,7 @@ where $s$ is a residual scaling factor. This mechanism maintains spatial coheren
 
 ## Discriminator Architectures
 
-The discriminator can be selected to prioritize either global consistency or fine local realism. The different architectures and their purposes are outlined in Table~\ref{tab:disc} in ~\ref{app:components}. Three discriminator variants are implemented to complement the different generator types: a global `Discriminator`, a local `PatchGANDiscriminator`, and the deeper `ESRGANDiscriminator`. All are built from shared convolutional blocks with LeakyReLU activations and instance normalization.
+The discriminator can be selected to prioritize either global consistency or fine local realism. The different architectures and their purposes are outlined in Table [@tbl-disc] in [@app-components]. Three discriminator variants are implemented to complement the different generator types: a global `Discriminator`, a local `PatchGANDiscriminator`, and the deeper `ESRGANDiscriminator`. All are built from shared convolutional blocks with LeakyReLU activations and instance normalization.
 
 The standard discriminator follows the original SRGAN \cite{ledig2017photo} design and evaluates the realism of the entire super-resolved image and the actual HR image. It stacks a sequence of strided convolutional layers with progressively increasing feature channels, an adaptive average pooling layer to a fixed spatial size, and two fully connected layers producing a scalar real/fake score. This 'global' discriminator promotes coherent large-scale structure and overall photorealism.
 
@@ -141,7 +141,7 @@ Together, these architectures allow users to select the appropriate adversarial 
 
 # Training Features
 
-Training stability is improved through several built-in mechanisms that address common issues of adversarial optimization (summarized in Table~\ref{tab:train}, ~\ref{app:components}). These are configured in the `Training` section of the YAML `config` file.
+Training stability is improved through several built-in mechanisms that address common issues of adversarial optimization (summarized in Table [@tbl-train], [@app-components]). These are configured in the `Training` section of the YAML `config` file.
 
 ## General Training Optimizations
 Several additional methods contribute to stable adversarial optimization. Label smoothing replaces hard discriminator targets (1 for real, 0 for fake) with softened values such as 0.9 and 0.1, preventing overconfidence and promoting smoother gradients. A short generator warmup phase allows $G$ to learn basic low-frequency structure before adversarial feedback is introduced, often combined with a linear or cosine learning-rate ramp to avoid abrupt updates. The discriminator holdback delays $D$ updates for the first few epochs so that $G$ can stabilise; when enabled, $D$ also follows a short warmup schedule to balance learning rates. Finally, both optimisers employ adaptive scheduling via `ReduceLROnPlateau`, lowering the learning rate when progress stagnates. These implementations mitigate divergence and improve convergence stability in adversarial training. All of these techniques can be configured from the `config` file as the unified entry-point.
@@ -166,12 +166,12 @@ where $\hat{y}_{\text{SR}}$ denotes the final super-resolved output produced by 
 
 ## Loss Functions
 
-Each loss term (see Table~\ref{tab:loss} in ~\ref{app:components}) can be weighted independently, allowing users to balance spectral accuracy and perceptual realism. Typical configurations combine L1, Perceptual, and Adversarial losses, optionally augmented by SAM and TV for multispectral consistency and smoothness. The overall objective is a weighted sum of these terms defined in the `Training.Losses ` section of the configuration. A detailed description of the internal training and validation metrics logged alongside these losses is given in ~\ref{app:metrics}.
+Each loss term (see Table [@tbl-loss] in [@app-components]) can be weighted independently, allowing users to balance spectral accuracy and perceptual realism. Typical configurations combine L1, Perceptual, and Adversarial losses, optionally augmented by SAM and TV for multispectral consistency and smoothness. The overall objective is a weighted sum of these terms defined in the `Training.Losses ` section of the configuration. A detailed description of the internal training and validation metrics logged alongside these losses is given in [@app-metrics].
 
 
 # Limitations
-Super-resolution techniques, including those implemented in *Remote-Sensing-SRGAN*, can enhance apparent spatial detail but can never substitute for true high-resolution observations acquired by native sensors.  
-While *Remote-Sensing-SRGAN* provides a stable and extensible foundation for GAN-based super-resolution in remote sensing, several limitations remain. First, the framework focuses on the engineering and reproducibility aspects of model development rather than achieving state-of-the-art quantitative performance. It is therefore intended as a research and benchmarking blueprint, not as an optimized production model. Second, although the modular configuration system greatly simplifies experimentation, users are still responsible for ensuring proper data preprocessing, radiometric normalization, and accurate LR–HR alignment, factors that strongly influence training stability and reconstruction quality. Third, adversarial optimization in multispectral domains remains sensitive to dataset size and diversity; small or unbalanced datasets may still yield mode collapse or spectral inconsistencies despite the provided stabilization mechanisms. Finally, the current release does not include native uncertainty estimation or automatic hyperparameter tuning; these remain open areas for future extension.
+Super-resolution techniques, including those implemented in OpenSR-SRGAN, can enhance apparent spatial detail but can never substitute for true high-resolution observations acquired by native sensors.  
+While OpenSR-SRGAN provides a stable and extensible foundation for GAN-based super-resolution in remote sensing, several limitations remain. First, the framework focuses on the engineering and reproducibility aspects of model development rather than achieving state-of-the-art quantitative performance. It is therefore intended as a research and benchmarking blueprint, not as an optimized production model. Second, although the modular configuration system greatly simplifies experimentation, users are still responsible for ensuring proper data preprocessing, radiometric normalization, and accurate LR–HR alignment, factors that strongly influence training stability and reconstruction quality. Third, adversarial optimization in multispectral domains remains sensitive to dataset size and diversity; small or unbalanced datasets may still yield mode collapse or spectral inconsistencies despite the provided stabilization mechanisms. Finally, the current release does not include native uncertainty estimation or automatic hyperparameter tuning; these remain open areas for future extension.
 
 # Licensing and Availability
 `OpenSR-SRGAN` is licensed under the Apache-2.0 license, with all source code stored at [ESAOpenSR/OpenSR-SRGAN](https://github.com/ESAOpenSR/SRGAN) Github repository. In the spirit of open science and collaboration, we encourage feature requests and updates, bug fixes and reports, as well as general questions and concerns via direct interaction with the repository. A reproducible notebook is permanently hosted on [Google Colab](https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing).
@@ -182,7 +182,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 # Appendix
 ## Appendix A – Architecture and Training Components
 
-**Table A1. Implemented generator types and their characteristics.**
+**Table A1. Implemented generator types and their characteristics.** {#tbl-arch}
 
 | **Generator Type** | **Description** |
 |:-------------------|:----------------|
@@ -194,7 +194,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `cgan` [@cgan]| Stochastic Conditional Generator with `NoiseResBlock`. |
 
 
-**Table A2. Implemented discriminator types and their purposes.**
+**Table A2. Implemented discriminator types and their purposes.** {#tbl-disc}
 
 | **Discriminator Type** | **Description** |
 |:-----------------------|:----------------|
@@ -203,7 +203,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `esrgan` [@rrdb] | ESRGAN discriminator with configurable base channels and linear head size to complement RRDB generators. |
 
 
-**Table A3. Implemented training features for stable adversarial optimization.**
+**Table A3. Implemented training features for stable adversarial optimization.** {#tbl-train}
 
 | **Feature** | **Description** |
 |:-------------|:----------------|
@@ -220,7 +220,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `Training.gpus` | Enables distributed data-parallel training when multiple GPU indices are listed, scaling training efficiently via PyTorch Lightning. |
 
 
-**Table A4. Supported loss components and configuration parameters.**
+**Table A4. Supported loss components and configuration parameters.** {#tbl-loss}
 
 | **Loss Type** | **Description** |
 |:---------------|:----------------|
@@ -235,18 +235,19 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 
 During training, scalar metrics are continuously logged in **Weights & Biases**. These indicators quantify loss dynamics, adversarial balance, and stability. Table B1 summarises the most relevant internal metrics tracked by *OpenSR-SRGAN*.
 
-**Table B1. Key internal metrics tracked during training and validation.**
+**Table B1. Key internal metrics tracked during training and validation.** {#tbl-metrics}
 
 | **Metric** | **Description and Expected Behaviour** |
-|:------------|:--------------------------------------|
-| `training/<br>pretrain_phase` | Binary flag indicating whether generator-only warm-up is active. Remains 1 during pretraining and switches to 0 once adversarial learning begins. |
-| `discriminator/<br>adversarial_loss` | Binary cross-entropy loss separating real HR from generated SR samples. Decreases below ~0.7 during stable co-training; large oscillations may indicate imbalance. |
-| `discriminator/<br>D(y)_prob` | Mean discriminator confidence that ground-truth HR inputs are real. Should rise toward 0.8–1.0 and stay high when *D* is healthy. |
-| `discriminator/<br>D(G(x))_prob` | Mean discriminator confidence that generated SR outputs are real. Starts near 0 and climbs toward 0.4–0.6 as *G* improves realism. |
+|:-----------|:--------------------------------------|
+| `training/`<br/>`pretrain_phase` | Binary flag indicating whether generator-only warm-up is active. Remains 1 during pretraining and switches to 0 once adversarial learning begins. |
+| `discriminator/`<br/>`adversarial_loss` | Binary cross-entropy loss separating real HR from generated SR samples. Decreases below ~0.7 during stable co-training; large oscillations may indicate imbalance. |
+| `discriminator/`<br/>`D(y)_prob` | Mean discriminator confidence that ground-truth HR inputs are real. Should rise toward 0.8–1.0 and stay high when *D* is healthy. |
+| `discriminator/`<br/>`D(G(x))_prob` | Mean discriminator confidence that generated SR outputs are real. Starts near 0 and climbs toward 0.4–0.6 as *G* improves realism. |
 | `generator/content_loss` | Weighted content component of the generator objective (e.g., L1 or spectral loss). Dominant during pretraining; gradually decreases over time. |
-| `generator/<br>total_loss` | Full generator objective combining content and adversarial terms. Tracks `content_loss` early, then stabilises once the adversarial weight ramps up. |
-| `training/<br>adv_loss_weight` | Current adversarial weight applied to the generator loss. Stays at 0 during pretrain and linearly ramps to its configured maximum value. |
-| `validation/<br>DISC_adversarial_loss` | Discriminator loss on validation batches. Should roughly mirror the training curve; strong divergence may signal overfitting or instability. |
+| `generator/`<br/>`total_loss` | Full generator objective combining content and adversarial terms. Tracks `content_loss` early, then stabilises once the adversarial weight ramps up. |
+| `training/`<br/>`adv_loss_weight` | Current adversarial weight applied to the generator loss. Stays at 0 during pretrain and linearly ramps to its configured maximum value. |
+| `validation/`<br/>`DISC_adversarial_loss` | Discriminator loss on validation batches. Should roughly mirror the training curve; strong divergence may signal overfitting or instability. |
+
 
 
 ## Appendix C – Experimental Configuration and Quantitative Results
@@ -266,9 +267,9 @@ EMA (β = 0.999) stabilises validation.
 
 Qualitative results show sharper fields, buildings, and roads compared to bicubic upsampling, with minimal spectral distortion (Figure C1).
 
-![False-color visual comparison for 4× RGB SR on SEN2NAIP. Left to right: LR input, model output, HR reference.](figures/rgb_example.png)
+![False-color visual comparison for 4× RGB SR on SEN2NAIP. Left to right: LR input, model output, HR reference.](figures/rgb_example.png){#fig-exp1}
 
-**Table C1. Configuration summary for the SEN2NAIP RGB experiment.**
+**Table C1. Configuration summary for the SEN2NAIP RGB experiment.** {#tbl-exp1config}
 
 | **Parameter** | **Setting** |
 |:---------------|:------------|
@@ -279,7 +280,7 @@ Qualitative results show sharper fields, buildings, and roads compared to bicubi
 | Training schedule | Pretrain 150k steps; Ramp 50k steps; EMA β = 0.999 |
 | Hardware | Dual A100 (DDP), 16-bit precision |
 
-**Table C2. Validation performance of the SEN2NAIP RGB experiment (4×).**
+**Table C2. Validation performance of the SEN2NAIP RGB experiment (4×).** {#tbl-exp1results}
 
 | **Model** | **PSNR↑** | **SSIM↑** | **LPIPS↑** | **SAM↓** |
 |:-----------|:----------:|:----------:|:-----------:|:----------:|
@@ -296,7 +297,7 @@ A PatchGAN discriminator ensures local realism; EMA is disabled.
 **Performance:** mid-20 dB PSNR, SSIM ≈ 0.7–0.75, low SAM values.  
 Figure C2 shows sharper edges and preserved spectral structure relative to bicubic interpolation.
 
-![Visual comparison for 8× multispectral SR (6-band Sentinel-2). Left to right: LR input, model output, HR reference.](figures/swir_example.png)
+![Visual comparison for 8× multispectral SR (6-band Sentinel-2). Left to right: LR input, model output, HR reference.](figures/swir_example.png){#fig-exp2}
 
 **Table C3. Configuration summary for the 6-band Sentinel-2 experiment.**
 
