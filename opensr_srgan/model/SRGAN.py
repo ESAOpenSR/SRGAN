@@ -17,7 +17,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from opensr_srgan.utils.logging_helpers import plot_tensors
 from opensr_srgan.utils.model_descriptions import print_model_summary
 from opensr_srgan.utils.radiometrics import histogram as histogram_match
-from opensr_srgan.utils.radiometrics import normalise_10k
+from opensr_srgan.data.utils import Normalizer
 from opensr_srgan.model.generators import build_generator
 from opensr_srgan.model.model_blocks import ExponentialMovingAverage
 
@@ -148,6 +148,7 @@ class SRGAN_model(pl.LightningModule):
         self.config = config
         self.mode = mode
         self.pl_version = tuple(int(x) for x in pl.__version__.split("."))
+        self.normalizer = Normalizer(self.config)
 
         # ======================================================================
         # SECTION: Get Training settings
@@ -397,9 +398,9 @@ class SRGAN_model(pl.LightningModule):
 
         Performs forward inference using the generator (optionally under EMA weights)
         to produce super-resolved (SR) outputs from low-resolution (LR) inputs.
-        The method automatically normalizes input values if required (e.g., raw
-        Sentinel-2 reflectance), applies histogram matching, and denormalizes the
-        outputs back to their original scale.
+        The method normalizes input values using the configured strategy (e.g., raw
+        Sentinel-2 reflectance via ``normalise_10k``), applies histogram matching, and
+        denormalizes the outputs back to their original scale.
 
         Args:
             lr_imgs (torch.Tensor): Batch of input low-resolution images
@@ -419,13 +420,8 @@ class SRGAN_model(pl.LightningModule):
         ), "Generator must be in eval mode for prediction."  # ensure eval mode
         lr_imgs = lr_imgs.to(self.device)  # move to device (GPU or CPU)
 
-        # --- Check if normalization is needed ---
-        lr_min, lr_max = lr_imgs.min().item(), lr_imgs.max().item()  # get value range
-        if lr_max > 1.5:  # Sentinel-2 style raw reflectance → normalize
-            lr_imgs = normalise_10k(lr_imgs, stage="norm")  # normalize to 0–1 range
-            needs_normalization = True
-        else:
-            needs_normalization = False  # already normalized
+        # --- Normalize inputs according to configuration ---
+        normalized_lr = self.normalizer.normalize(lr_imgs)
 
         # --- Perform super-resolution (optionally using EMA weights) ---
         context = (
@@ -434,16 +430,13 @@ class SRGAN_model(pl.LightningModule):
             else nullcontext()
         )
         with context:
-            sr_imgs = self.generator(lr_imgs)  # forward pass (SR prediction)
+            sr_imgs = self.generator(normalized_lr)  # forward pass (SR prediction)
 
         # --- Histogram match SR to LR ---
-        sr_imgs = histogram_match(lr_imgs, sr_imgs)  # match distributions
-
-        # --- Denormalize only if normalization was applied ---
-        if needs_normalization:
-            sr_imgs = normalise_10k(
-                sr_imgs, stage="denorm"
-            )  # convert back to original scale
+        sr_imgs = histogram_match(normalized_lr, sr_imgs)  # match distributions
+        
+        # --- Denormalize output back to original range ---
+        sr_imgs = self.normalizer.denormalize(sr_imgs)
 
         # --- Move to CPU and return ---
         sr_imgs = sr_imgs.cpu().detach()  # detach from graph for inference output
