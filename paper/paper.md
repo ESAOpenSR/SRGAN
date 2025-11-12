@@ -20,9 +20,9 @@ authors:
     orcid: 0000-0003-3924-1269
     affiliation: 1
 affiliations:
-  - name: Image and Signal Processing Group, University of Valencia, Spain
-    index: 1
-date:  25 October 2025
+  - index: 1
+    name: Image and Signal Processing Group, University of Valencia, Spain
+date:  15 November 2025
 bibliography: paper.bib
 version:
   report: v0.1.0
@@ -31,27 +31,23 @@ doi: 10.5281/zenodo.17590993
 number-sections: true
 ---
 
-# OpenSR-SRGAN: A Flexible Super-Resolution Framework for Multispectral Earth Observation Data
-
-## Summary
+# Summary
 
 We present OpenSR-SRGAN, an open and modular framework for single-image super-resolution in Earth Observation. The software provides a unified implementation of SRGAN-style models that is easy to configure, extend, and apply to multispectral satellite data such as Sentinel-2. Instead of requiring users to modify model code, OpenSR-SRGAN exposes generators, discriminators, loss functions, and training schedules through concise configuration files, making it straightforward to switch between architectures, scale factors, and band setups. The framework is designed as a practical tool and benchmark implementation rather than a state-of-the-art model. It ships with ready-to-use configurations for common remote-sensing scenarios, sensible default settings for adversarial training, and built-in hooks for logging, validation, and large-scene inference.
 By turning GAN-based super-resolution into a configuration-driven workflow, OpenSR-SRGAN lowers the entry barrier for researchers and practitioners who wish to experiment with SRGANs, compare models in a reproducible way, and deploy super-resolution pipelines across diverse Earth-observation datasets.
 
 
-## Introduction
+# Introduction
 
 Optical satellite imagery plays a key role in monitoring the Earth's surface for applications such as agriculture [@agriculture], land cover mapping [@mapping], ecosystem assessment [@ecosysetm], and disaster management [@disaster]. The European Space Agency’s Sentinel-2 mission provides freely available multispectral imagery at 10 m spatial resolution with a revisit time of five days, enabling dense temporal monitoring at global scale. In contrast, very-high-resolution sensors, such as Pleiades or SPOT, offer much richer spatial detail but limited temporal coverage and high acquisition costs.  
 Consequently, a trade-off exists between spatial and temporal resolution in Earth-Observation (EO) imagery.
 
-%\subsection{Super-Resolution}
 Single-image super-resolution (SISR) aims to enhance the spatial detail of low-resolution (LR) observations by learning a mapping to a plausible high-resolution (HR) counterpart.  
 In remote sensing, SR can bridge the gap between freely available medium-resolution imagery and costly commercial data, potentially improving downstream tasks such as land-cover classification, object detection, and change detection.  
 The advent of deep convolutional networks led to major breakthroughs in both reconstruction fidelity and perceptual realism [@dong2015imagesuperresolutionusingdeep] [@kim2016deeplyrecursiveconvolutionalnetworkimage].
 
-%\subsection{GANs}
 Generative Adversarial Networks (GANs) [@goodfellow2014generativeadversarialnetworks] introduced an adversarial learning framework in which a generator and a discriminator are trained in competition, enabling the synthesis of realistic, high-frequency image details.  
-Since their introduction, GANs have been rapidly adopted in the remote-sensing community for tasks such as cloud removal, image translation, domain adaptation, and data synthesis [@{11159252] [@su2024intriguingpropertycounterfactualexplanation].  
+Since their introduction, GANs have been rapidly adopted in the remote-sensing community for tasks such as cloud removal, image translation, domain adaptation, and data synthesis [@11159252] [@su2024intriguingpropertycounterfactualexplanation].  
 These applications demonstrated the potential of adversarial training to generate spatially coherent and perceptually plausible remote-sensing imagery.
 
 Building on these successes, the computer-vision community introduced the Super-Resolution GAN (SRGAN) [@ledig2017photo], which combined perceptual and adversarial losses to reconstruct photo-realistic high-resolution images from their low-resolution counterparts.  
@@ -60,7 +56,7 @@ The approach inspired a wave of research applying SRGAN-like architectures to re
 Recent advances in diffusion and transformer-based architectures have shifted the state of the art in image super-resolution toward generative models with stronger probabilistic and contextual reasoning [@s1] [@s2] [@s3].  
 Nevertheless, GAN-based approaches continue to be actively explored [@g1] and remain a practical choice for operational production settings [@allen].
 
-## Problem Statement
+# Problem Statement
 
 Despite their success in computer vision, Generative Adversarial Networks (GANs) remain notoriously difficult to train [@p1] [@p2] [@p3]. The simultaneous optimization of generator and discriminator networks often leads to unstable dynamics, mode collapse, and high sensitivity to hyperparameters.  
 
@@ -73,7 +69,7 @@ Implementing the full set of heuristics that make GAN training stable, such as g
 
 
 
-## Contribution Summary
+# Contribution Summary
 
 OpenSR-SRGAN was developed to address these challenges by providing a unified, modular, and extensible framework for training and evaluating GAN-based super-resolution models in remote sensing.  
 The software integrates multiple state-of-the-art SR architectures, loss functions, and training strategies within a configuration-driven design that allows users to flexibly adapt experiments without modifying the source code.
@@ -88,7 +84,7 @@ The main contributions of this work include:
 
 Together, these features make OpenSR-SRGAN a reliable boilerplate for researchers and practitioners to train, benchmark, and deploy GAN-based SR models across diverse Earth-observation datasets and sensor types.
 
-## Software Overview and Framework Design
+# Software Overview and Framework Design
 
 OpenSR-SRGAN follows a modular and configuration-driven architecture. All model definitions, loss compositions, and training schedules are controlled through a single YAML configuration file, ensuring that experiments remain reproducible and easily adaptable to new sensors, band configurations, or datasets. The framework is implemented in PyTorch and PyTorch Lightning, providing seamless GPU acceleration and built-in experiment logging.  
 
@@ -99,7 +95,7 @@ The system consists of four main components:
 - A robust **training pipeline** with pretraining, warmup, ramp-up, and EMA stabilization mechanisms.  
 - Integration with the **OpenSR ecosystem** for dataset access, evaluation (`opensr-test`), and large-scale inference (`opensr-utils`).  
 
-### Generator Architectures
+## Generator Architectures
 
 The generator network can be configured with different backbone types, each providing a unique trade-off between complexity, receptive field, and textural detail (see Table~\ref{tab:arch} in ~\ref{app:components}).  
 
@@ -113,7 +109,7 @@ $$
 
 This modular structure allows researchers to experiment with different block designs, standard residual, channel attention (RCAB), dense residual (RRDB), large-kernel attention (LKA), or noise-augmented variants, without altering the training pipeline or configuration schema. All models share identical input-output interfaces and residual scaling for stability, ensuring drop-in interchangeability across experiments.
 
-#### Conditional Generator with Noise Injection
+### Conditional Generator with Noise Injection
 
 The `cgan` variant extends the standard generator by conditioning on both the low-resolution image and a latent noise vector $z$.  
 It replaces standard residual blocks with *NoiseResBlocks*, which introduce controlled stochasticity. Each `NoiseResBlock` uses a small Multi-Layer Perceptron (MLP) to project the noise code $z\!\in\!\mathbb{R}^{d}$ into per-channel scale and bias parameters $(\gamma, \beta)$ that modulate intermediate activations before the nonlinearity:
@@ -131,7 +127,7 @@ $$
 where $s$ is a residual scaling factor. This mechanism maintains spatial coherence while enabling the generation of multiple plausible high-frequency realizations for the same LR input. During training, a random noise vector is sampled per image; during inference, users may supply explicit latent codes or fix random seeds for deterministic behavior. The module also exposes `sample_noise(batch_size)` and a `return_noise` flag for reproducibility and logging.  
 
 
-### Discriminator Architectures
+## Discriminator Architectures
 
 The discriminator can be selected to prioritize either global consistency or fine local realism. The different architectures and their purposes are outlined in Table~\ref{tab:disc} in ~\ref{app:components}. Three discriminator variants are implemented to complement the different generator types: a global `Discriminator`, a local `PatchGANDiscriminator`, and the deeper `ESRGANDiscriminator`. All are built from shared convolutional blocks with LeakyReLU activations and instance normalization.
 
@@ -143,16 +139,16 @@ Finally, the `ESRGANDiscriminator` mirrors the deeper VGG-style stack from ESRGA
 
 Together, these architectures allow users to select the appropriate adversarial granularity: global consistency through SRGAN-style discrimination, local realism through PatchGAN, or sharper perceptual contrast via ESRGAN.
 
-## Training Features
+# Training Features
 
 Training stability is improved through several built-in mechanisms that address common issues of adversarial optimization (summarized in Table~\ref{tab:train}, ~\ref{app:components}). These are configured in the `Training` section of the YAML `config` file.
 
-### General Training Optimizations
+## General Training Optimizations
 Several additional methods contribute to stable adversarial optimization. Label smoothing replaces hard discriminator targets (1 for real, 0 for fake) with softened values such as 0.9 and 0.1, preventing overconfidence and promoting smoother gradients. A short generator warmup phase allows $G$ to learn basic low-frequency structure before adversarial feedback is introduced, often combined with a linear or cosine learning-rate ramp to avoid abrupt updates. The discriminator holdback delays $D$ updates for the first few epochs so that $G$ can stabilise; when enabled, $D$ also follows a short warmup schedule to balance learning rates. Finally, both optimisers employ adaptive scheduling via `ReduceLROnPlateau`, lowering the learning rate when progress stagnates. These implementations mitigate divergence and improve convergence stability in adversarial training. All of these techniques can be configured from the `config` file as the unified entry-point.
 
 
 
-### Exponential Moving Average (EMA) Stabilisation
+## Exponential Moving Average (EMA) Stabilisation
 
 The EMA mechanism [@ema] is an optional stabilisation technique applied to the generator weights to produce smoother outputs and more reliable validation metrics, commonly used throughout model training pipelines in general and generative image applications in particular. Instead of evaluating the generator using its raw, rapidly fluctuating parameters, an auxiliary set of duplicate weights $\theta_{\text{EMA}}$ is maintained as a smoothed version of the online weights $\theta$. After each training step, the model parameters are updated as an exponential moving average:
 $$
@@ -168,23 +164,23 @@ The inference process thus evaluates:
 \end{equation}
 where $\hat{y}_{\text{SR}}$ denotes the final super-resolved output produced by the EMA-stabilised generator. Empirically, applying EMA has been shown to stabilise adversarial training by mitigating oscillations between the generator and discriminator and by improving the perceptual smoothness and reproducibility of the resulting super-resolved images [@ema2].
 
- ## Loss Functions
+## Loss Functions
 
 Each loss term (see Table~\ref{tab:loss} in ~\ref{app:components}) can be weighted independently, allowing users to balance spectral accuracy and perceptual realism. Typical configurations combine L1, Perceptual, and Adversarial losses, optionally augmented by SAM and TV for multispectral consistency and smoothness. The overall objective is a weighted sum of these terms defined in the `Training.Losses ` section of the configuration. A detailed description of the internal training and validation metrics logged alongside these losses is given in ~\ref{app:metrics}.
 
 
-## Limitations
-
+# Limitations
 Super-resolution techniques, including those implemented in *Remote-Sensing-SRGAN*, can enhance apparent spatial detail but can never substitute for true high-resolution observations acquired by native sensors.  
 While *Remote-Sensing-SRGAN* provides a stable and extensible foundation for GAN-based super-resolution in remote sensing, several limitations remain. First, the framework focuses on the engineering and reproducibility aspects of model development rather than achieving state-of-the-art quantitative performance. It is therefore intended as a research and benchmarking blueprint, not as an optimized production model. Second, although the modular configuration system greatly simplifies experimentation, users are still responsible for ensuring proper data preprocessing, radiometric normalization, and accurate LR–HR alignment, factors that strongly influence training stability and reconstruction quality. Third, adversarial optimization in multispectral domains remains sensitive to dataset size and diversity; small or unbalanced datasets may still yield mode collapse or spectral inconsistencies despite the provided stabilization mechanisms. Finally, the current release does not include native uncertainty estimation or automatic hyperparameter tuning; these remain open areas for future extension.
 
-## Acknowledgement
+# Licensing and Availability
+`OpenSR-SRGAN` is licensed under the Apache-2.0 license, with all source code stored at [ESAOpenSR/OpenSR-SRGAN](https://github.com/ESAOpenSR/SRGAN) GitHub repository. In the spirit of open science and collaboration, we encourage feature requests and updates, bug fixes and reports, as well as general questions and concerns via direct interaction with the repository. A reproducible notebook is permanently hosted on [Google Colab](https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing).
+
+# Acknowledgement
 This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, within the framework of the ['Explainable AI: Application to Trustworthy Super-Resolution (OpenSR)'](https://eo4society.esa.int/projects/opensr/) Project.
 
-## References
-
-## Appendix
-### Appendix A – Architecture and Training Components
+# Appendix
+## Appendix A – Architecture and Training Components
 
 **Table A1. Implemented generator types and their characteristics.**
 
@@ -235,7 +231,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | Adversarial Loss | Binary cross-entropy loss on discriminator predictions; drives realism and high-frequency texture generation. |
 
 
-### Appendix B – Internal Metrics
+## Appendix B – Internal Metrics
 
 During training, scalar metrics are continuously logged in **Weights & Biases**. These indicators quantify loss dynamics, adversarial balance, and stability. Table B1 summarises the most relevant internal metrics tracked by *OpenSR-SRGAN*.
 
@@ -253,12 +249,12 @@ During training, scalar metrics are continuously logged in **Weights & Biases**.
 | `validation/DISC_adversarial_loss` | Discriminator loss on validation batches. Should roughly mirror the training curve; strong divergence may signal overfitting or instability. |
 
 
-### Appendix C – Experimental Configuration and Quantitative Results
+## Appendix C – Experimental Configuration and Quantitative Results
 
 This appendix provides detailed configurations, qualitative previews, and quantitative results for two representative experiments with *OpenSR-SRGAN*.
 
 
-#### Experiment 1 – 4× RGB Super-Resolution on SEN2NAIP
+### Experiment 1 – 4× RGB Super-Resolution on SEN2NAIP
 
 In the first experiment, a **residual channel-attention (RCAB)** generator is trained on the SEN2NAIP dataset ([Aybar et al., 2023](#ref-sen2naip)).  
 The model maps Sentinel-2 RGB-NIR patches at 10 m to NAIP RGB-NIR targets at 2.5 m (4× upscaling).  
@@ -290,7 +286,7 @@ Qualitative results show sharper fields, buildings, and roads compared to bicubi
 | RCAB–SRResNet + Standard Discriminator | 31.45 | 0.81 | 0.82 | 0.069 |
 
 
-#### Experiment 2 – 8× 6-Band SWIR Sentinel-2 Super-Resolution
+### Experiment 2 – 8× 6-Band SWIR Sentinel-2 Super-Resolution
 
 This experiment targets **six 20 m Sentinel-2 bands** (including SWIR) using a synthetic LR–HR setup:  
 the original 20 m image serves as HR, and 160 m downsampled inputs as LR.  
