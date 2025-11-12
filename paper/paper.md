@@ -182,7 +182,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 # Appendix
 ## Appendix A – Architecture and Training Components
 
-**Table A1. Implemented generator types and their characteristics.** {#tbl-arch}
+**Table A1. Implemented generator types and their characteristics.** {#tbl:arch}
 
 | **Generator Type** | **Description** |
 |:-------------------|:----------------|
@@ -194,7 +194,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `cgan` [@cgan]| Stochastic Conditional Generator with `NoiseResBlock`. |
 
 
-**Table A2. Implemented discriminator types and their purposes.** {#tbl-disc}
+**Table A2. Implemented discriminator types and their purposes.** {#tbl:disc}
 
 | **Discriminator Type** | **Description** |
 |:-----------------------|:----------------|
@@ -203,7 +203,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `esrgan` [@rrdb] | ESRGAN discriminator with configurable base channels and linear head size to complement RRDB generators. |
 
 
-**Table A3. Implemented training features for stable adversarial optimization.** {#tbl-train}
+**Table A3. Implemented training features for stable adversarial optimization.** {#tbl:train}
 
 | **Feature** | **Description** |
 |:-------------|:----------------|
@@ -213,14 +213,14 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `g_warmup_steps`, `g_warmup_type` | Warmup schedule for the generator’s learning rate, linear or cosine, ensuring smooth optimizer convergence. |
 | `EMA.enabled` | Enables Exponential Moving Average tracking of generator weights for smoother validation and inference outputs. |
 | TTUR LRs (`optim_g_lr`, `optim_d_lr`) | Two-time-scale update rule with discriminator LR defaulting to a slower schedule than the generator to maintain balance. |
-| Adam betas/epsilon (`betas`, `eps`) | GAN-friendly defaults (0.0, 0.99) and 10⁻⁷ avoid stale momentum and numerical noise during adversarial updates. |
+| Adam betas/epsilon (`betas`, `eps`) | GAN-friendly defaults (0.0, 0.99) and $10^{-7}$ avoid stale momentum and numerical noise during adversarial updates. |
 | Weight-decay exclusions | Normalization and bias parameters are automatically removed from decay groups so regularization targets convolutional kernels only. |
 | Plateau scheduler controls (`cooldown`, `min_lr`) | `ReduceLROnPlateau` schedulers for *G* and *D* now support cooldown periods and minimum learning-rate floors. |
 | `gradient_clip_val` | Optional global-norm clipping applied after every optimizer step to suppress discriminator-induced spikes. |
 | `Training.gpus` | Enables distributed data-parallel training when multiple GPU indices are listed, scaling training efficiently via PyTorch Lightning. |
 
 
-**Table A4. Supported loss components and configuration parameters.** {#tbl-loss}
+**Table A4. Supported loss components and configuration parameters.** {#tbl:loss}
 
 | **Loss Type** | **Description** |
 |:---------------|:----------------|
@@ -235,7 +235,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 
 During training, scalar metrics are continuously logged in **Weights & Biases**. These indicators quantify loss dynamics, adversarial balance, and stability. Table B1 summarises the most relevant internal metrics tracked by *OpenSR-SRGAN*.
 
-**Table B1. Key internal metrics tracked during training and validation.** {#tbl-metrics}
+**Table B1. Key internal metrics tracked during training and validation.** {#tbl:metrics}
 
 | **Metric** | **Description and Expected Behaviour** |
 |:-----------|:--------------------------------------|
@@ -267,9 +267,9 @@ EMA (β = 0.999) stabilises validation.
 
 Qualitative results show sharper fields, buildings, and roads compared to bicubic upsampling, with minimal spectral distortion (Figure C1).
 
-![False-color visual comparison for 4× RGB SR on SEN2NAIP. Left to right: LR input, model output, HR reference.](figures/rgb_example.png){#fig-exp1}
+![False-color visual comparison for 4× RGB SR on SEN2NAIP. Left to right: LR input, model output, HR reference.](figures/rgb_example.png){#fig:exp1}
 
-**Table C1. Configuration summary for the SEN2NAIP RGB experiment.** {#tbl-exp1config}
+**Table C1. Configuration summary for the SEN2NAIP RGB experiment.** {#tbl:exp1config}
 
 | **Parameter** | **Setting** |
 |:---------------|:------------|
@@ -280,7 +280,7 @@ Qualitative results show sharper fields, buildings, and roads compared to bicubi
 | Training schedule | Pretrain 150k steps; Ramp 50k steps; EMA β = 0.999 |
 | Hardware | Dual A100 (DDP), 16-bit precision |
 
-**Table C2. Validation performance of the SEN2NAIP RGB experiment (4×).** {#tbl-exp1results}
+**Table C2. Validation performance of the SEN2NAIP RGB experiment (4×).** {#tbl:exp1results}
 
 | **Model** | **PSNR↑** | **SSIM↑** | **LPIPS↑** | **SAM↓** |
 |:-----------|:----------:|:----------:|:-----------:|:----------:|
@@ -297,7 +297,7 @@ A PatchGAN discriminator ensures local realism; EMA is disabled.
 **Performance:** mid-20 dB PSNR, SSIM $\approx$ 0.7–0.75, low SAM values.  
 Figure C2 shows sharper edges and preserved spectral structure relative to bicubic interpolation.
 
-![Visual comparison for 8× multispectral SR (6-band Sentinel-2). Left to right: LR input, model output, HR reference.](figures/swir_example.png){#fig-exp2}
+![Visual comparison for 8× multispectral SR (6-band Sentinel-2). Left to right: LR input, model output, HR reference.](figures/swir_example.png){#fig:exp2}
 
 **Table C3. Configuration summary for the 6-band Sentinel-2 experiment.**
 
