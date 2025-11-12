@@ -94,7 +94,7 @@ SISR-RS-SRGAN/
 ```
 
 ## Contribution and Issues
-If you wish to contribute (such as new models, data or functionalities), please review the contribution guidelines and open a PR here on GitHub. If you're having problems or need support, please open an Issue here on GitHub.
+If you wish to contribute (such as new models, data or functionalities), please review the contribution guidelines and open a PR here on Github. If you're having problems or need support, please open an Issue here on Github.
 
 
 ---
