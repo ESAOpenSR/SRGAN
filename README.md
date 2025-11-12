@@ -122,6 +122,7 @@ If you use this work, please cite:
   doi          = {10.5281/zenodo.17590993},
   url          = {https://doi.org/10.5281/zenodo.17590993}
 }
+```
 ---
 
 ## 🧑‍🚀 Authors, Acknowledgements, and Notes on AI Usage
