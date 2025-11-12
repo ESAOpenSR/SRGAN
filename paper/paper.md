@@ -131,7 +131,7 @@ where $s$ is a residual scaling factor. This mechanism maintains spatial coheren
 
 The discriminator can be selected to prioritize either global consistency or fine local realism. The different architectures and their purposes are outlined in Table~\ref{tab:disc} in~\ref{app:components}. Three discriminator variants are implemented to complement the different generator types: a global `Discriminator`, a local `PatchGANDiscriminator`, and the deeper `ESRGANDiscriminator`. All are built from shared convolutional blocks with LeakyReLU activations and instance normalization.
 
-The standard discriminator follows the original SRGAN \cite{ledig2017photo} design and evaluates the realism of the entire super-resolved image and the actual HR image. It stacks a sequence of strided convolutional layers with progressively increasing feature channels, an adaptive average pooling layer to a fixed spatial size, and two fully connected layers producing a scalar real/fake score. This 'global' discriminator promotes coherent large-scale structure and overall photorealism.
+The standard discriminator follows the original SRGAN [@ledig2017photo] design and evaluates the realism of the entire super-resolved image and the actual HR image. It stacks a sequence of strided convolutional layers with progressively increasing feature channels, an adaptive average pooling layer to a fixed spatial size, and two fully connected layers producing a scalar real/fake score. This 'global' discriminator promotes coherent large-scale structure and overall photorealism.
 
 The `PatchGANDiscriminator` instead outputs a grid of patch-level predictions, classifying each overlapping region as real or fake. Built upon the CycleGAN/pix2pix [@cyclegan; @px2px] reference implementation, it uses a configurable number of convolutional layers and normalization schemes (batch, instance, or none). The resulting patch map acts as a spatial realism prior, emphasizing texture fidelity and fine detail.
 
@@ -182,7 +182,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 # Appendix
 ## Appendix A – Architecture and Training Components
 
-**Table A1. Implemented generator types and their characteristics.** \label{tbl-arch}
+**Table A1. Implemented generator types and their characteristics.** {#tbl-arch}
 
 | **Generator Type** | **Description** |
 |:-------------------|:----------------|
@@ -194,7 +194,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `cgan` [@cgan]| Stochastic Conditional Generator with `NoiseResBlock`. |
 
 
-**Table A2. Implemented discriminator types and their purposes.** \label{tbl-disc}
+**Table A2. Implemented discriminator types and their purposes.** {#tbl-disc}
 
 | **Discriminator Type** | **Description** |
 |:-----------------------|:----------------|
@@ -203,7 +203,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `esrgan` [@rrdb] | ESRGAN discriminator with configurable base channels and linear head size to complement RRDB generators. |
 
 
-**Table A3. Implemented training features for stable adversarial optimization.** \label{tbl-train}
+**Table A3. Implemented training features for stable adversarial optimization.** {#tbl-train}
 
 | **Feature** | **Description** |
 |:-------------|:----------------|
@@ -220,7 +220,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `Training.gpus` | Enables distributed data-parallel training when multiple GPU indices are listed, scaling training efficiently via PyTorch Lightning. |
 
 
-**Table A4. Supported loss components and configuration parameters.** \label{tbl-loss}
+**Table A4. Supported loss components and configuration parameters.** {#tbl-loss}
 
 | **Loss Type** | **Description** |
 |:---------------|:----------------|
@@ -235,7 +235,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 
 During training, scalar metrics are continuously logged in **Weights & Biases**. These indicators quantify loss dynamics, adversarial balance, and stability. Table B1 summarises the most relevant internal metrics tracked by *OpenSR-SRGAN*.
 
-**Table B1. Key internal metrics tracked during training and validation.** \label{tbl-metrics}
+**Table B1. Key internal metrics tracked during training and validation.** {#tbl-metrics}
 
 | **Metric** | **Description and Expected Behaviour** |
 |:-----------|:--------------------------------------|
@@ -257,19 +257,19 @@ This appendix provides detailed configurations, qualitative previews, and quanti
 
 ### Experiment 1 – 4× RGB Super-Resolution on SEN2NAIP
 
-In the first experiment, a **residual channel-attention (RCAB)** generator is trained on the SEN2NAIP dataset ([Aybar et al., 2023](#ref-sen2naip)).  
+In the first experiment, a **residual channel-attention (RCAB)** generator is trained on the SEN2NAIP dataset [@sen2naip].  
 The model maps Sentinel-2 RGB-NIR patches at 10 m to NAIP RGB-NIR targets at 2.5 m (4× upscaling).  
 The training objective combines **L1 + LPIPS + adversarial** terms, with generator-only warm-up and gradual adversarial ramp-up.  
 EMA (β = 0.999) stabilises validation.  
 
 **Hardware:** Dual A100 (DDP, mixed precision).  
-**Performance:** ~31 dB PSNR, SSIM≈ 0.8, low SAM, strong perceptual quality.  
+**Performance:** ~31 dB PSNR, SSIM$\approx$ 0.8, low SAM, strong perceptual quality.  
 
 Qualitative results show sharper fields, buildings, and roads compared to bicubic upsampling, with minimal spectral distortion (Figure C1).
 
-![False-color visual comparison for 4× RGB SR on SEN2NAIP. Left to right: LR input, model output, HR reference.](figures/rgb_example.png)\label{fig-exp1}
+![False-color visual comparison for 4× RGB SR on SEN2NAIP. Left to right: LR input, model output, HR reference.](figures/rgb_example.png){#fig-exp1}
 
-**Table C1. Configuration summary for the SEN2NAIP RGB experiment.** \label{tbl-exp1config}
+**Table C1. Configuration summary for the SEN2NAIP RGB experiment.** {#tbl-exp1config}
 
 | **Parameter** | **Setting** |
 |:---------------|:------------|
@@ -280,7 +280,7 @@ Qualitative results show sharper fields, buildings, and roads compared to bicubi
 | Training schedule | Pretrain 150k steps; Ramp 50k steps; EMA β = 0.999 |
 | Hardware | Dual A100 (DDP), 16-bit precision |
 
-**Table C2. Validation performance of the SEN2NAIP RGB experiment (4×).** \label{tbl-exp1results}
+**Table C2. Validation performance of the SEN2NAIP RGB experiment (4×).** {#tbl-exp1results}
 
 | **Model** | **PSNR↑** | **SSIM↑** | **LPIPS↑** | **SAM↓** |
 |:-----------|:----------:|:----------:|:-----------:|:----------:|
@@ -294,10 +294,10 @@ the original 20 m image serves as HR, and 160 m downsampled inputs as LR.
 The generator (SRResNet backbone, 32 blocks, 96 channels, scale = 8) is trained with **L1 + SAM + adversarial** losses.  
 A PatchGAN discriminator ensures local realism; EMA is disabled.
 
-**Performance:** mid-20 dB PSNR, SSIM ≈ 0.7–0.75, low SAM values.  
+**Performance:** mid-20 dB PSNR, SSIM $\approx$ 0.7–0.75, low SAM values.  
 Figure C2 shows sharper edges and preserved spectral structure relative to bicubic interpolation.
 
-![Visual comparison for 8× multispectral SR (6-band Sentinel-2). Left to right: LR input, model output, HR reference.](figures/swir_example.png)\label{fig-exp2}
+![Visual comparison for 8× multispectral SR (6-band Sentinel-2). Left to right: LR input, model output, HR reference.](figures/swir_example.png){#fig-exp2}
 
 **Table C3. Configuration summary for the 6-band Sentinel-2 experiment.**
 
@@ -305,7 +305,7 @@ Figure C2 shows sharper edges and preserved spectral structure relative to bicub
 |:---------------|:------------|
 | Dataset | Sentinel-2 6-band subset (160 m → 20 m, 8× upscaling) |
 | Generator | SRResNet backbone (`block_type=res`, 32 blocks, 96 channels, scale = 8) |
-| Discriminator | PatchGAN (`n_blocks=4`, patch ≈ 70×70) |
+| Discriminator | PatchGAN (`n_blocks=4`, patch $\approx$ 70×70) |
 | Loss composition | L1 (1.0) + SAM (0.2) + Adversarial (0.005) |
 | Training schedule | Pretrain 100k steps; Ramp 40k steps; EMA disabled |
 | Hardware | Dual A100 GPU, 32-bit precision |
