@@ -1,5 +1,10 @@
-"""Flexible generator variants built from shared model blocks."""
+"""Flexible generator variants built from shared model blocks.
 
+Provides a modular SR backbone with pluggable residual blocks:
+`res` (ResidualBlockNoBN), `rcab` (attention), `rrdb` (dense-in-residual),
+and `lka` (large-kernel). Uses a head → body → tail design with PixelShuffle
+upsampling for {×2, ×4, ×8}.
+"""
 from __future__ import annotations
 
 from typing import Callable, Dict
@@ -122,6 +127,28 @@ class FlexibleGenerator(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the flexible SR generator.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Low-resolution input tensor of shape (B, C, H, W).
+
+        Returns
+        -------
+        torch.Tensor
+            Super-resolved output tensor of shape (B, C, sH, sW),
+            where `s` ∈ {2, 4, 8} is the configured upscaling factor.
+
+        Workflow
+        --------
+        1) Extract shallow features with the head conv.
+        2) Transform via a stack of residual blocks (type = `block_type`).
+        3) Fuse with a 3×3 body tail conv and add a long skip.
+        4) Upsample via PixelShuffle-based `make_upsampler`.
+        5) Project back to image space with the output conv.
+        """
         feat = self.head(x)
         res = self.body(feat)
         res = self.body_tail(res)

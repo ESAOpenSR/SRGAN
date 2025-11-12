@@ -1,4 +1,15 @@
-"""Factory helpers for constructing generator backbones from a config object."""
+"""Factory helpers for constructing generator backbones from a config object.
+
+Resolves user-friendly aliases (e.g., "rrdb", "rcab", "srresnet") to concrete
+implementations and instantiates the corresponding generator with parameters
+taken from a Hydra/OmegaConf-like `config` object.
+
+Supported model types
+---------------------
+- SRResNet family (standard / res / rcab / rrdb / lka via FlexibleGenerator)
+- ESRGAN (RRDBNet-style)
+- Stochastic conditional GAN (noise-modulated)
+"""
 
 from __future__ import annotations
 
@@ -38,10 +49,38 @@ _MODEL_TYPE_ALIASES = {
 
 
 def _normalise(value: str) -> str:
+    """
+    Canonicalize a string for alias matching.
+
+    Parameters
+    ----------
+    value : str
+        Raw user-provided identifier (e.g., "SR-ResNet", "  rrdb ").
+
+    Returns
+    -------
+    str
+        Normalized key: lowercased, trimmed, spaces and hyphens replaced by underscores.
+    """
     return value.strip().lower().replace(" ", "_").replace("-", "_")
 
 
 def _match_alias(value: str, mapping: dict[str, set[str]]) -> str | None:
+    """
+    Resolve an identifier to its canonical key from an alias mapping.
+
+    Parameters
+    ----------
+    value : str
+        Raw identifier to resolve.
+    mapping : dict[str, set[str]]
+        Dict of canonical -> aliases (including canonical itself if desired).
+
+    Returns
+    -------
+    str or None
+        Canonical key if matched, otherwise ``None``.
+    """
     norm = _normalise(value)
     for canonical, aliases in mapping.items():
         if norm == canonical or norm in aliases:
@@ -50,8 +89,31 @@ def _match_alias(value: str, mapping: dict[str, set[str]]) -> str | None:
 
 
 def _resolve_srresnet_block(generator_cfg: Any, model_type_hint: str) -> str:
-    """Determine which SRResNet variant should be instantiated."""
+    """
+    Determine which SRResNet block variant to instantiate.
 
+    Precedence:
+      1) `generator_cfg.block_type` if provided
+      2) `model_type_hint` (when the top-level model_type encoded the block)
+      3) "standard" as a fallback
+
+    Parameters
+    ----------
+    generator_cfg : Any
+        Configuration section for the generator.
+    model_type_hint : str
+        Optional hint derived from legacy configs (e.g., "rcab").
+
+    Returns
+    -------
+    str
+        Canonical block variant: {"standard","res","rcab","rrdb","lka"}.
+
+    Raises
+    ------
+    ValueError
+        If the block type cannot be resolved to a known variant.
+    """
     block_type = getattr(generator_cfg, "block_type", None)
     if block_type is None:
         block_type = model_type_hint
@@ -74,8 +136,18 @@ def _resolve_srresnet_block(generator_cfg: Any, model_type_hint: str) -> str:
 
 
 def _warn_overridden_options(component: str, model: str, options: list[str]) -> None:
-    """Emit a user-facing notice when configuration options are ignored."""
+    """
+    Emit a user-facing notice when configuration options are ignored.
 
+    Parameters
+    ----------
+    component : str
+        Logical component name (e.g., "Generator").
+    model : str
+        Selected model family (e.g., "esrgan").
+    options : list[str]
+        Option keys that are not applicable and will be ignored.
+    """
     if not options:
         return
 
@@ -84,6 +156,21 @@ def _warn_overridden_options(component: str, model: str, options: list[str]) -> 
 
 
 def _collect_overridden(generator_cfg: Any, *keys: str) -> list[str]:
+    """
+    Return a list of config keys that are set (non-None) and will be overridden/ignored.
+
+    Parameters
+    ----------
+    generator_cfg : Any
+        Generator config section.
+    *keys : str
+        Candidate option names to check.
+
+    Returns
+    -------
+    list[str]
+        Keys from `keys` that exist in `generator_cfg` and are not None.
+    """
     overridden: list[str] = []
     for key in keys:
         value = getattr(generator_cfg, key, None)
@@ -93,19 +180,31 @@ def _collect_overridden(generator_cfg: Any, *keys: str) -> list[str]:
 
 
 def build_generator(config: Any) -> nn.Module:
-    """Instantiate a generator module from the user configuration.
+    """
+    Instantiate a generator module from the provided configuration.
 
     Parameters
     ----------
-    config:
-        Resolved configuration object. The function expects at least the
-        ``Model`` and ``Generator`` sections used throughout the training
-        scripts.
+    config : Any
+        Resolved configuration object with at least:
+          - `config.Model.in_bands`
+          - `config.Generator.model_type` (or SRResNet block alias)
+          - Additional generator-specific fields (e.g., n_blocks, n_channels, scaling_factor).
 
     Returns
     -------
     torch.nn.Module
-        Fully constructed generator ready for training or inference.
+        A fully constructed generator (SRResNet/Flexible, ESRGAN, or StochasticGenerator).
+
+    Raises
+    ------
+    ValueError
+        If the model type or block variant cannot be resolved to a known implementation.
+
+    Notes
+    -----
+    - Accepts legacy configs where `Generator.model_type` was a block alias (e.g., "rcab").
+    - Non-applicable options are reported (not fatal) for clarity.
     """
 
     generator_cfg = config.Generator
