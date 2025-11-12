@@ -6,6 +6,55 @@ import wandb
 
 
 def sen2_test_step(self):
+    """
+    Run a quick Sentinel-2 sanity check: load a few test tiles, run SR inference,
+    and log a side-by-side LR/SR panel to Weights & Biases.
+
+    This utility:
+      1) Samples 4 patches from `Sentinel2TestDataSet` (default config).
+      2) Moves the batch to `self.device` and switches the module to eval mode if needed.
+      3) Calls `self.predict_step(ims)` to obtain SR outputs.
+      4) Keeps only the first 3 channels (RGB), rescales for visualization, and renders a 2×N grid
+         (top row: LR, bottom row: SR).
+      5) Exports the figure to a PIL image and logs it to W&B under the key `"S2 SR"` if enabled.
+
+    Notes
+    -----
+    - Assumes input tensors are in BCHW with values roughly in [0, 1] (Sentinel-2 style).
+      A simple visualization stretch (×3.5, clipped to [0, 1]) is applied for display only.
+    - Only the first 3 channels are visualized (RGB). Additional bands, if present, are ignored.
+    - Requires `self.predict_step` to accept a batch (B, C, H, W) and return a tensor of the same
+      batch size and image dimensions appropriate for display.
+    - If `self.training` is True, the method temporarily switches to eval mode before inference.
+    - If Weights & Biases logging is enabled via `self.config.Logging.wandb.enabled` and
+      `self.logger.experiment` exists, the composed panel is uploaded as an image.
+
+    Dependencies
+    ------------
+    - `opensr_srgan.data.sen2_test.sen2_test_dataset.Sentinel2TestDataSet`
+    - Matplotlib, PIL, and (optionally) Weights & Biases.
+
+    Side Effects
+    ------------
+    - Produces and closes a Matplotlib figure.
+    - Logs an image to W&B (key: "S2 SR") when enabled.
+
+    Returns
+    -------
+    None
+        The figure is not returned; it is converted to a PIL image for logging, then discarded.
+
+    Raises
+    ------
+    RuntimeError
+        If `self.predict_step` fails or returns an unexpected shape.
+    ImportError
+        If the Sentinel-2 test dataset module cannot be imported.
+
+    Example
+    -------
+    >>> model.sen2_test_step()  # renders a 2x4 LR/SR panel and logs to W&B if configured
+    """
     from opensr_srgan.data.sen2_test.sen2_test_dataset import Sentinel2TestDataSet
 
     ds_test = Sentinel2TestDataSet()

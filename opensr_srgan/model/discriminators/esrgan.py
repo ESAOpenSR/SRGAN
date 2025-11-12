@@ -1,5 +1,13 @@
-"""Discriminator architecture used in ESRGAN."""
+"""ESRGAN discriminator architecture (VGG-style).
 
+Implements the deep convolutional discriminator introduced in
+*Enhanced Super-Resolution Generative Adversarial Networks (ESRGAN)*
+by Wang et al., ECCV 2018.
+
+References
+----------
+- Wang et al., ESRGAN
+"""
 from __future__ import annotations
 
 from torch import Tensor, nn
@@ -15,6 +23,27 @@ def _conv_block(
     stride: int,
     use_batch_norm: bool = True,
 ) -> nn.Sequential:
+    """
+    Construct a convolutional block with optional batch normalization and LeakyReLU.
+
+    Parameters
+    ----------
+    in_channels : int
+        Number of input channels.
+    out_channels : int
+        Number of output channels.
+    kernel_size : int
+        Convolution kernel size.
+    stride : int
+        Convolution stride.
+    use_batch_norm : bool, default=True
+        Whether to include a batch normalization layer.
+
+    Returns
+    -------
+    nn.Sequential
+        A sequential block: Conv2d → (BatchNorm2d) → LeakyReLU(0.2).
+    """
     padding = kernel_size // 2
     layers: list[nn.Module] = [
         nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding=padding),
@@ -26,8 +55,47 @@ def _conv_block(
 
 
 class ESRGANDiscriminator(nn.Module):
-    """Deep VGG-style discriminator introduced with ESRGAN."""
+    """
+    VGG-style discriminator network used in ESRGAN.
 
+    This discriminator processes high-resolution image patches and predicts
+    a scalar realism score. It follows the VGG-style design with progressively
+    increasing channel depth and downsampling via strided convolutions.
+
+    Parameters
+    ----------
+    in_channels : int, default=3
+        Number of input channels (e.g., 3 for RGB, 4 for RGB-NIR).
+    base_channels : int, default=64
+        Number of channels in the first convolutional layer; subsequent layers
+        scale as powers of two.
+    linear_size : int, default=1024
+        Size of the intermediate fully-connected layer before the output scalar.
+
+    Attributes
+    ----------
+    features : nn.Sequential
+        Convolutional feature extractor backbone.
+    pool : nn.AdaptiveAvgPool2d
+        Global pooling layer to aggregate spatial features.
+    classifier : nn.Sequential
+        Fully connected layers producing a single output value.
+    n_layers : int
+        Total number of convolutional blocks (for metadata/reference only).
+
+    Raises
+    ------
+    ValueError
+        If `base_channels` or `linear_size` is not a positive integer.
+
+    Examples
+    --------
+    >>> disc = ESRGANDiscriminator(in_channels=3)
+    >>> x = torch.randn(8, 3, 128, 128)
+    >>> y = disc(x)
+    >>> y.shape
+    torch.Size([8, 1])
+    """
     def __init__(
         self,
         *,
@@ -70,6 +138,20 @@ class ESRGANDiscriminator(nn.Module):
         self.n_layers = 1 + 10  # first conv + stacked blocks
 
     def forward(self, x: Tensor) -> Tensor:
+        """
+        Forward pass through the ESRGAN discriminator.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input image tensor of shape (B, C, H, W).
+
+        Returns
+        -------
+        torch.Tensor
+            Discriminator logits of shape (B, 1), where higher values
+            indicate more realistic images.
+        """
         feats = self.features(x)
         pooled = self.pool(feats).view(x.size(0), -1)
         return self.classifier(pooled)

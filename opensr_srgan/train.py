@@ -1,4 +1,11 @@
-# Package Imports
+"""
+Training entry point for SRGAN using PyTorch Lightning.
+
+- Accepts a YAML path, dict, or OmegaConf for configuration.
+- Builds/loads the model, constructs the DataModule, configures logging,
+  checkpointing, early stopping, and launches training.
+"""
+
 import datetime
 import os
 from pathlib import Path
@@ -12,9 +19,21 @@ from pytorch_lightning import Trainer
 
 
 def train(config):
+    """
+    Train SRGAN from a configuration.
 
-    #############################################################################################################
-    """LOAD CONFIG"""
+    Parameters
+    ----------
+    config : str | Path | dict | OmegaConf
+        Path to a YAML file, a Python dict, or an OmegaConf object describing
+        Model, Data, Training, Logging, and Schedulers sections.
+
+    Notes
+    -----
+    - Supports both PL < 2.0 and >= 2.0 via `build_lightning_kwargs`.
+    - If `Model.load_checkpoint` is set, weights are loaded before training.
+    - If `Model.continue_training` is set, training resumes from that checkpoint.
+    """
     # either path to config file or omegaconf object
 
     if isinstance(config, str) or isinstance(config, Path):
@@ -142,6 +161,19 @@ def train(config):
 
 # Run training if called from command line
 if __name__ == "__main__":
+    """
+    CLI entry point.
+
+    Usage
+    -----
+    python -m opensr_srgan.train --config path/to/config.yaml
+
+    Arguments
+    ---------
+    --config, -c : str
+        Path to YAML config. Defaults to `opensr_srgan/configs/config_10m.yaml`.
+    """
+    
     import argparse
     from multiprocessing import freeze_support
 

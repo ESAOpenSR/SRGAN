@@ -53,6 +53,30 @@ class NoiseResBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the noise-modulated residual block.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input feature tensor of shape (B, C, H, W).
+        noise : torch.Tensor
+            Latent noise vector of shape (B, D), where D = `noise_dim`.
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape (B, C, H, W) with per-channel affine
+            modulation applied as:
+            ``y = Conv(x) * (1 + γ) + β``
+
+        Notes
+        -----
+        - The latent vector is transformed via an internal MLP to produce
+          (γ, β) modulation parameters.
+        - A residual scaling factor (`res_scale`) stabilizes training
+          by controlling the magnitude of the residual branch.
+        """
         style = self.noise_mlp(noise)
         gamma, beta = style.chunk(2, dim=1)
         gamma = gamma.unsqueeze(-1).unsqueeze(-1)
@@ -151,8 +175,30 @@ class StochasticGenerator(nn.Module):
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> torch.Tensor:
-        """Sample latent noise compatible with the module configuration."""
+        """
+        Sample a latent noise tensor consistent with the generator configuration.
 
+        Parameters
+        ----------
+        batch_size : int
+            Number of noise vectors to generate.
+        device : torch.device, optional
+            Device on which to allocate the tensor. Defaults to the model's current device.
+        dtype : torch.dtype, optional
+            Tensor dtype. Defaults to the model's parameter dtype.
+
+        Returns
+        -------
+        torch.Tensor
+            Random latent tensor sampled from a standard normal distribution,
+            shape (B, D) where B = `batch_size` and D = `self.noise_dim`.
+
+        Notes
+        -----
+        - Used for stochastic generation when no latent vector is provided to ``forward()``.
+        - Ensures type and device consistency with the current model parameters.
+        - The resulting noise can be reused to reproduce identical stochastic outputs.
+        """
         if device is None:
             device = next(self.parameters()).device
         if dtype is None:
@@ -165,8 +211,35 @@ class StochasticGenerator(nn.Module):
         noise: Optional[torch.Tensor] = None,
         return_noise: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        """Generate a super-resolved image from an LR input and latent noise."""
+        """
+        Forward pass of the stochastic super-resolution generator.
 
+        Parameters
+        ----------
+        lr : torch.Tensor
+            Low-resolution input tensor of shape (B, C, H, W).
+        noise : torch.Tensor, optional
+            Latent noise tensor of shape (B, D), where D = `noise_dim`.
+            If None, a random vector is sampled internally.
+        return_noise : bool, default=False
+            If True, returns both the super-resolved image and the
+            latent noise used for generation.
+
+        Returns
+        -------
+        torch.Tensor or (torch.Tensor, torch.Tensor)
+            - ``sr``: Super-resolved output image of shape (B, C, sH, sW),
+              where s is the upscaling factor.
+            - Optionally, ``noise``: The latent vector used (if `return_noise=True`).
+
+        Notes
+        -----
+        - The latent code is broadcast and applied to all residual blocks.
+        - Supports both deterministic (fixed noise) and stochastic (random noise)
+          inference modes.
+        - The upsampling is performed via sub-pixel convolution (PixelShuffle)
+          defined in `make_upsampler()`.
+        """
         if noise is None:
             noise = torch.randn(
                 lr.size(0),

@@ -54,7 +54,7 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 | Path | Description |
 | --- | --- |
 | `opensr_srgan/model/` | Lightning module, generator and discriminator implementations, and loss definitions. |
-| `opensr_srgan/data/` | Dataset wrappers and helper utilities for Sentinel-2 SAFE archives and the SEN2NAIP world-wide corpus. |
+| `opensr_srgan/data/` | Dataset wrappers and helper utilities for custom and preconfigured SR datasets. |
 | `opensr_srgan/configs/` | Ready-to-run YAML presets covering common scale factors, band selections, and architecture pairings. |
 | `opensr_srgan/utils/` | Logging helpers, spectral normalisation utilities, and model summary functions used across the stack. |
 | `opensr_srgan/train.py` | Command-line entry point that wires configuration, data module, loggers, and the Lightning trainer together. |

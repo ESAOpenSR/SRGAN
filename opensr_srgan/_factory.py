@@ -1,5 +1,18 @@
-"""Utility helpers to instantiate pretrained SRGAN models."""
+"""Utility helpers to instantiate pretrained SRGAN models.
 
+This module provides convenience functions to:
+  - Load ``SRGAN_model`` instances from local YAML configuration files and optional checkpoints.
+  - Download and instantiate predefined pretrained models from the Hugging Face Hub
+    (e.g., RGB-NIR and SWIR variants).
+  - Transparently handle local or remote checkpoints, temporary file storage, and EMA restoration.
+
+Typical usage
+-------------
+>>> from opensr_srgan.model.loading import load_inference_model
+>>> model = load_inference_model("RGB-NIR")
+>>> model.eval()
+>>> sr = model(torch.randn(1, 4, 64, 64))
+"""
 from __future__ import annotations
 
 import dataclasses
@@ -18,8 +31,17 @@ __all__ = ["load_from_config", "load_inference_model"]
 
 @dataclasses.dataclass(frozen=True)
 class _Preset:
-    """Metadata describing an inference-ready configuration."""
+    """Metadata describing a pretrained SRGAN configuration.
 
+    Attributes
+    ----------
+    repo_id : str
+        Repository ID on the Hugging Face Hub containing the config and checkpoint.
+    config_filename : str
+        Name of the YAML configuration file inside the repository.
+    checkpoint_filename : str
+        Name of the model checkpoint file inside the repository.
+    """
     repo_id: str
     config_filename: str
     checkpoint_filename: str
@@ -41,8 +63,27 @@ _PRESETS = {
 
 @contextmanager
 def _maybe_download(checkpoint_uri: Union[str, Path]) -> Iterator[Path]:
-    """Resolve a checkpoint URI to a local file path."""
+    """Resolve a checkpoint URI to a local file path.
 
+    This helper transparently supports:
+      - Existing local file paths.
+      - Remote HTTP(S) URLs (downloaded temporarily into a secure temp file).
+
+    Parameters
+    ----------
+    checkpoint_uri : str or Path
+        Path or URL of the checkpoint to resolve.
+
+    Yields
+    ------
+    Path
+        A valid local path to a checkpoint file, guaranteed to exist within the context.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the provided path does not exist or the URI cannot be resolved.
+    """
     uri_str = str(checkpoint_uri)
     candidate = Path(checkpoint_uri)
     if candidate.is_file():
@@ -69,23 +110,37 @@ def load_from_config(
     map_location: Optional[Union[str, torch.device]] = None,
     mode: str = "train",
 ) -> LightningModule:
-    """Instantiate ``SRGAN_model`` from a YAML config and optional checkpoint.
+    """Instantiate an :class:`SRGAN_model` from a configuration and optional checkpoint.
 
     Parameters
     ----------
-    config_path:
-        Filesystem path to the YAML configuration that describes the generator
-        and discriminator architecture. This should match the configuration the
-        checkpoint was trained with.
-    checkpoint_uri:
-        Optional path or HTTP(S) URL pointing to a Lightning checkpoint. When
-        omitted, the factory returns an untrained model initialised from the
-        supplied config.
-    map_location:
-        Optional argument forwarded to :func:`torch.load` during checkpoint
-        deserialisation.
-    mode:
-        Mode in which to instantiate the model. Either "train" or "eval".
+    config_path : str or Path
+        Filesystem path to the YAML configuration describing generator/discriminator
+        architecture and training parameters.
+    checkpoint_uri : str or Path, optional
+        Path or URL to a pretrained model checkpoint. If omitted, returns an untrained model.
+    map_location : str or torch.device, optional
+        Device mapping passed to :func:`torch.load` when deserializing the checkpoint.
+    mode : {"train", "eval"}, default="train"
+        Desired mode in which to initialize the model.
+
+    Returns
+    -------
+    LightningModule
+        A fully initialized SRGAN Lightning module, optionally loaded with pretrained weights.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the provided configuration file does not exist.
+    RuntimeError
+        If checkpoint deserialization or state restoration fails.
+
+    Notes
+    -----
+    - If the checkpoint contains an exponential moving average (EMA) state, it is restored as well.
+    - The model is returned in evaluation mode regardless of `mode` to prevent accidental training
+      until explicitly switched with ``model.train()``.
     """
 
     config_path = Path(config_path)
@@ -113,11 +168,42 @@ def load_inference_model(
     cache_dir: Optional[Union[str, Path]] = None,
     map_location: Optional[Union[str, torch.device]] = None,
 ) -> LightningModule:
-    """Instantiate an off-the-shelf pretrained SRGAN.
+    """Load a pretrained SRGAN model from the Hugging Face Hub.
 
-    The function downloads a known-good configuration + checkpoint pair from
-    the Hugging Face Hub (unless it is already cached) and restores the
-    packaged Lightning module.
+    Downloads both the configuration and checkpoint associated with the requested
+    preset, instantiates the model, restores weights, and returns it ready for inference.
+
+    Parameters
+    ----------
+    preset : {"RGB-NIR", "SWIR"}
+        Name of the pretrained model variant to load.
+    cache_dir : str or Path, optional
+        Directory to cache the downloaded files. Uses the default HF cache if omitted.
+    map_location : str or torch.device, optional
+        Device mapping for checkpoint deserialization.
+
+    Returns
+    -------
+    LightningModule
+        Pretrained SRGAN model ready for inference.
+
+    Raises
+    ------
+    ValueError
+        If an unknown preset name is provided.
+    ImportError
+        If ``huggingface_hub`` is not installed.
+    FileNotFoundError
+        If download or local resolution fails.
+
+    Examples
+    --------
+    >>> model = load_inference_model("RGB-NIR")
+    >>> model.eval()
+    >>> x = torch.randn(1, 4, 64, 64)
+    >>> y = model(x)
+    >>> print(y.shape)
+    torch.Size([1, 4, 256, 256])
     """
 
     key = preset.strip().replace("_", "-").upper()
@@ -157,6 +243,9 @@ def load_inference_model(
 
 
 """
+# -------------------------------------------------------------------------
+# Example test block (optional)
+# -------------------------------------------------------------------------
 if __name__ == "__main__":
     # simple test
     # Create Model
