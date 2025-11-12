@@ -97,7 +97,7 @@ The system consists of four main components:
 
 ## Generator Architectures
 
-The generator network can be configured with different backbone types, each providing a unique trade-off between complexity, receptive field, and textural detail (see Table [@tbl-arch] in [@app-components]).  
+The generator network can be configured with different backbone types, each providing a unique trade-off between complexity, receptive field, and textural detail (see Table~\ref{tab:arch} in~\ref{app:components}).  
 
 The `Generator` class provides a unified implementation of SR backbones that share a common convolutional structure while differing in their internal residual block design.
 The module is initialized with a `model_type` flag selecting one of `res`, `rcab`, `rrdb`, `lka`, `esrgan`, `cgan`, each drawn from a shared registry of block factories or dedicated ESRGAN implementation.
@@ -129,7 +129,7 @@ where $s$ is a residual scaling factor. This mechanism maintains spatial coheren
 
 ## Discriminator Architectures
 
-The discriminator can be selected to prioritize either global consistency or fine local realism. The different architectures and their purposes are outlined in Table [@tbl-disc] in [@app-components]. Three discriminator variants are implemented to complement the different generator types: a global `Discriminator`, a local `PatchGANDiscriminator`, and the deeper `ESRGANDiscriminator`. All are built from shared convolutional blocks with LeakyReLU activations and instance normalization.
+The discriminator can be selected to prioritize either global consistency or fine local realism. The different architectures and their purposes are outlined in Table~\ref{tab:disc} in~\ref{app:components}. Three discriminator variants are implemented to complement the different generator types: a global `Discriminator`, a local `PatchGANDiscriminator`, and the deeper `ESRGANDiscriminator`. All are built from shared convolutional blocks with LeakyReLU activations and instance normalization.
 
 The standard discriminator follows the original SRGAN \cite{ledig2017photo} design and evaluates the realism of the entire super-resolved image and the actual HR image. It stacks a sequence of strided convolutional layers with progressively increasing feature channels, an adaptive average pooling layer to a fixed spatial size, and two fully connected layers producing a scalar real/fake score. This 'global' discriminator promotes coherent large-scale structure and overall photorealism.
 
@@ -141,7 +141,7 @@ Together, these architectures allow users to select the appropriate adversarial 
 
 # Training Features
 
-Training stability is improved through several built-in mechanisms that address common issues of adversarial optimization (summarized in Table [@tbl-train], [@app-components]). These are configured in the `Training` section of the YAML `config` file.
+Training stability is improved through several built-in mechanisms that address common issues of adversarial optimization (summarized in Table~\ref{tab:train}, ~\ref{app:components}). These are configured in the `Training` section of the YAML `config` file.
 
 ## General Training Optimizations
 Several additional methods contribute to stable adversarial optimization. Label smoothing replaces hard discriminator targets (1 for real, 0 for fake) with softened values such as 0.9 and 0.1, preventing overconfidence and promoting smoother gradients. A short generator warmup phase allows $G$ to learn basic low-frequency structure before adversarial feedback is introduced, often combined with a linear or cosine learning-rate ramp to avoid abrupt updates. The discriminator holdback delays $D$ updates for the first few epochs so that $G$ can stabilise; when enabled, $D$ also follows a short warmup schedule to balance learning rates. Finally, both optimisers employ adaptive scheduling via `ReduceLROnPlateau`, lowering the learning rate when progress stagnates. These implementations mitigate divergence and improve convergence stability in adversarial training. All of these techniques can be configured from the `config` file as the unified entry-point.
@@ -166,7 +166,7 @@ where $\hat{y}_{\text{SR}}$ denotes the final super-resolved output produced by 
 
 ## Loss Functions
 
-Each loss term (see Table [@tbl-loss] in [@app-components]) can be weighted independently, allowing users to balance spectral accuracy and perceptual realism. Typical configurations combine L1, Perceptual, and Adversarial losses, optionally augmented by SAM and TV for multispectral consistency and smoothness. The overall objective is a weighted sum of these terms defined in the `Training.Losses ` section of the configuration. A detailed description of the internal training and validation metrics logged alongside these losses is given in [@app-metrics].
+Each loss term (see Table~\ref{tab:loss} in~\ref{app:components}) can be weighted independently, allowing users to balance spectral accuracy and perceptual realism. Typical configurations combine L1, Perceptual, and Adversarial losses, optionally augmented by SAM and TV for multispectral consistency and smoothness. The overall objective is a weighted sum of these terms defined in the `Training.Losses ` section of the configuration. A detailed description of the internal training and validation metrics logged alongside these losses is given in ~\ref{tab:metrics}.
 
 
 # Limitations
@@ -182,7 +182,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 # Appendix
 ## Appendix A – Architecture and Training Components
 
-**Table A1. Implemented generator types and their characteristics.** {#tbl-arch}
+**Table A1. Implemented generator types and their characteristics.** \label{#tbl-arch}
 
 | **Generator Type** | **Description** |
 |:-------------------|:----------------|
@@ -194,7 +194,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `cgan` [@cgan]| Stochastic Conditional Generator with `NoiseResBlock`. |
 
 
-**Table A2. Implemented discriminator types and their purposes.** {#tbl-disc}
+**Table A2. Implemented discriminator types and their purposes.** \label{#tbl-disc}
 
 | **Discriminator Type** | **Description** |
 |:-----------------------|:----------------|
@@ -203,7 +203,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `esrgan` [@rrdb] | ESRGAN discriminator with configurable base channels and linear head size to complement RRDB generators. |
 
 
-**Table A3. Implemented training features for stable adversarial optimization.** {#tbl-train}
+**Table A3. Implemented training features for stable adversarial optimization.** \label{#tbl-train}
 
 | **Feature** | **Description** |
 |:-------------|:----------------|
@@ -220,7 +220,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 | `Training.gpus` | Enables distributed data-parallel training when multiple GPU indices are listed, scaling training efficiently via PyTorch Lightning. |
 
 
-**Table A4. Supported loss components and configuration parameters.** {#tbl-loss}
+**Table A4. Supported loss components and configuration parameters.** \label{#tbl-loss}
 
 | **Loss Type** | **Description** |
 |:---------------|:----------------|
@@ -235,7 +235,7 @@ This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, with
 
 During training, scalar metrics are continuously logged in **Weights & Biases**. These indicators quantify loss dynamics, adversarial balance, and stability. Table B1 summarises the most relevant internal metrics tracked by *OpenSR-SRGAN*.
 
-**Table B1. Key internal metrics tracked during training and validation.** {#tbl-metrics}
+**Table B1. Key internal metrics tracked during training and validation.** \label{#tbl-metrics}
 
 | **Metric** | **Description and Expected Behaviour** |
 |:-----------|:--------------------------------------|
@@ -267,9 +267,9 @@ EMA (β = 0.999) stabilises validation.
 
 Qualitative results show sharper fields, buildings, and roads compared to bicubic upsampling, with minimal spectral distortion (Figure C1).
 
-![False-color visual comparison for 4× RGB SR on SEN2NAIP. Left to right: LR input, model output, HR reference.](figures/rgb_example.png){#fig-exp1}
+![False-color visual comparison for 4× RGB SR on SEN2NAIP. Left to right: LR input, model output, HR reference.](figures/rgb_example.png)\label{#fig-exp1}
 
-**Table C1. Configuration summary for the SEN2NAIP RGB experiment.** {#tbl-exp1config}
+**Table C1. Configuration summary for the SEN2NAIP RGB experiment.** \label{#tbl-exp1config}
 
 | **Parameter** | **Setting** |
 |:---------------|:------------|
@@ -280,7 +280,7 @@ Qualitative results show sharper fields, buildings, and roads compared to bicubi
 | Training schedule | Pretrain 150k steps; Ramp 50k steps; EMA β = 0.999 |
 | Hardware | Dual A100 (DDP), 16-bit precision |
 
-**Table C2. Validation performance of the SEN2NAIP RGB experiment (4×).** {#tbl-exp1results}
+**Table C2. Validation performance of the SEN2NAIP RGB experiment (4×).** \label{#tbl-exp1results}
 
 | **Model** | **PSNR↑** | **SSIM↑** | **LPIPS↑** | **SAM↓** |
 |:-----------|:----------:|:----------:|:-----------:|:----------:|
@@ -297,7 +297,7 @@ A PatchGAN discriminator ensures local realism; EMA is disabled.
 **Performance:** mid-20 dB PSNR, SSIM ≈ 0.7–0.75, low SAM values.  
 Figure C2 shows sharper edges and preserved spectral structure relative to bicubic interpolation.
 
-![Visual comparison for 8× multispectral SR (6-band Sentinel-2). Left to right: LR input, model output, HR reference.](figures/swir_example.png){#fig-exp2}
+![Visual comparison for 8× multispectral SR (6-band Sentinel-2). Left to right: LR input, model output, HR reference.](figures/swir_example.png)\label{#fig-exp2}
 
 **Table C3. Configuration summary for the 6-band Sentinel-2 experiment.**
 
