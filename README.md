@@ -112,10 +112,16 @@ If you wish to contribute (such as new models, data or functionalities), please 
 
 If you use this work, please cite:
 
-```bibtex
-coming soon...
-```
-
+```bibtex  
+@software{donike2025opensr_srgan,
+  author       = {Simon Donike and Luis Gómez-Chova},
+  title        = {OpenSR-SRGAN: An Open and Modular Framework for Super-Resolution in Earth Observation},
+  year         = {2025},
+  publisher    = {Zenodo},
+  version      = {v0.3.0},
+  doi          = {10.5281/zenodo.17590993},
+  url          = {https://doi.org/10.5281/zenodo.17590993}
+}
 ---
 
 ## 🧑‍🚀 Authors, Acknowledgements, and Notes on AI Usage
