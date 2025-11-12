@@ -1,9 +1,10 @@
 cff-version: 1.2.0
-title: SISR-RS-SRGAN
+title: OpenSR-SRGAN
 message: >-
   If you use this software, please cite it using the
   metadata from this file.
 type: software
+
 authors:
   - given-names: Simon
     family-names: Donike
@@ -12,10 +13,20 @@ authors:
   - given-names: Luis
     family-names: Gomez-Chova
     orcid: 'https://orcid.org/0000-0003-3924-1269'
-repository-code: 'https://github.com/simon-donike/SISR-RS-SRGAN'
-url: 'http://srgan.opensr.eu/'
+
+repository-code: 'https://github.com/ESAOpenSR/SRGAN'
+url: 'https://srgan.opensr.eu/'
+doi: 10.5281/zenodo.17590993
+version: 0.3.0
+date-released: 2025-11-12
+
 keywords:
   - super-resolution
   - remote sensing
   - GAN
+  - Earth observation
+  - Sentinel-2
+  - PyTorch
+  - OpenSR
+
 license: Apache-2.0
