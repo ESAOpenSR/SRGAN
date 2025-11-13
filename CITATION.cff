@@ -10,8 +10,14 @@ authors:
     family-names: Donike
     email: accounts@donike.net
     orcid: 'https://orcid.org/0000-0002-4440-3835'
+  - given-names: Cesar
+    family-names: Aybar
+    orcid: 'https://orcid.org/0000-0003-2745-9535'
+  - given-names: Julio
+    family-names: Contreras
+    orcid: 'https://orcid.org/0009-0001-5408-7055'
   - given-names: Luis
-    family-names: Gomez-Chova
+    family-names: Gómez-Chova
     orcid: 'https://orcid.org/0000-0003-3924-1269'
 
 repository-code: 'https://github.com/ESAOpenSR/SRGAN'

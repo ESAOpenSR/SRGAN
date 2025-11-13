@@ -367,8 +367,6 @@ class GeneratorContentLoss(nn.Module):
 
         # --- Quality metrics ---
         with torch.no_grad():
-            # sr_metric = self.normalizer.normalize(sr)
-            # hr_metric = self.normalizer.normalize(hr)
             safe_max_val = max(self.max_val, LOSS_EPS)
             sr_metric = torch.clamp(sr, 0.0, safe_max_val)
             hr_metric = torch.clamp(hr, 0.0, safe_max_val)
