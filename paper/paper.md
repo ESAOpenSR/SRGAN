@@ -16,6 +16,12 @@ authors:
     corresponding: true
     email: simon.donike@uv.es
     affiliation: 1
+  - name: Cesar Aybar
+    orcid: 0000-0003-2745-9535
+    affiliation: 1
+  - name: Julio Contreras
+    orcid: 0009-0001-5408-7055
+    affiliation: 1
   - name: Luis Gómez-Chova
     orcid: 0000-0003-3924-1269
     affiliation: 1
@@ -27,7 +33,6 @@ bibliography: paper.bib
 version:
   report: v0.1.0
   software: v0.1.0
-doi: 10.5281/zenodo.17590993
 number-sections: true
 ---
 

@@ -127,9 +127,9 @@ If you use this work, please cite:
 
 ## 🧑‍🚀 Authors, Acknowledgements, and Notes on AI Usage
 
-Developed by **Simon Donike** (IPL–UV) within the **ESA Φ-lab / OpenSR** initiative.  
+Developed within the **ESA Φ-lab / OpenSR** initiative.  
 > The development history of this code began in 2020 with the implementation of an SR-GAN for a MSc thesis project. Since then, over several iterations, the codebase has been expanded and many training tweaks implemented, based on the experiences made training SR-GANs for the OpenSR project. The fundamental training outline, training tweaks, normalizations, and inference procedures are built upon that experience.  
-The added complexity that came with (a) the implementation of many different models and blocks, (b) more data sources, (c) according normalizations, and (d) complex testing and documentation structures, was handled to varying degrees with the help of *Codex*. Specifically, the docs, the automated testing workflows the dataset handling, and the flexible normalizer are largely AI generated. These sections have been checked manually to the best of my ability, but please be aware of this when diving into the code.
+The added complexity that came with (a) the implementation of many different models and blocks, (b) more data sources, (c) according normalizations, and (d) complex testing and documentation structures, was handled to varying degrees with the help of *Codex*. Specifically, the docs, the automated testing workflows, and the normalizer class are in part AI generated. This code and its funcitonalities have been rigorously verified and tested to the best of my ability.
 
 ---
 
