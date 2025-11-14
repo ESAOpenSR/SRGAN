@@ -1,6 +1,6 @@
 # Trainer details
 
-This page walks through the control flow that powers adversarial optimisation in SISR-RS-SRGAN. It cross-references the exact helper functions in the codebase so you can trace which checks run on every batch, how pretraining vs. adversarial steps are chosen, and how the PyTorch Lightning integration remains compatible with both 1.x and 2.x releases.
+This page walks through the control flow that powers adversarial optimisation in OpenSR-SRGAN. It cross-references the exact helper functions in the codebase so you can trace which checks run on every batch, how pretraining vs. adversarial steps are chosen, and how the PyTorch Lightning integration remains compatible with both 1.x and 2.x releases.
 
 ## Version-aware bootstrap
 
