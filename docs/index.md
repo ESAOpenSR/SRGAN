@@ -1,6 +1,6 @@
 <img src="https://github.com/ESAOpenSR/opensr-model/blob/main/resources/opensr_logo.png?raw=true" width="250"/>
 
-# SISR-RS-SRGAN
+# OpenSR-SRGAN
 
 | **Runtime** | **Docs / License** | **Tests** |
 |:-----------:|:------------------:|:---------:|
@@ -8,7 +8,7 @@
 
 ![Super-resolved Sentinel-2 example](assets/6band_banner.png)
 
-SISR-RS-SRGAN is a comprehensive toolkit for training and evaluating super-resolution GANs on remote-sensing imagery. It packages a flexible generator/discriminator zoo, composable perceptual and reconstruction losses, and the training heuristics
+OpenSR-SRGAN is a comprehensive toolkit for training and evaluating super-resolution GANs on remote-sensing imagery. It packages a flexible generator/discriminator zoo, composable perceptual and reconstruction losses, and the training heuristics
 that make adversarial optimisation tractable—generator warm-up phases, learning-rate scheduling, adversarial-weight ramping, and more. All options are driven by concise YAML configuration files so you can explore new architectures or datasets without
 rewriting pipelines.  
   
