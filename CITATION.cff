@@ -36,3 +36,32 @@ keywords:
   - OpenSR
 
 license: Apache-2.0
+
+
+references:
+  - type: article
+    title: "OpenSR-SRGAN: A Flexible Super-Resolution Framework for Multispectral Earth Observation Data"
+    authors:
+      - family-names: Donike
+        given-names: Simon
+      - family-names: Aybar
+        given-names: Cesar
+      - family-names: Contreras
+        given-names: Julio
+      - family-names: Gómez-Chova
+        given-names: Luis
+    year: 2025
+    journal: "arXiv preprint"
+    identifer: "arXiv:2511.10461"
+    url: "https://arxiv.org/abs/2511.10461"
+    notes: "Preprint version of the OpenSR-SRGAN paper."
+
+related-identifiers:
+  - type: doi
+    identifier: 10.5281/zenodo.17590993
+    relation-type: isSupplementTo
+    description: "Zenodo software archive"
+  - type: other
+    identifier: arXiv:2511.10461
+    relation-type: isSupplementTo
+    description: "arXiv preprint"
