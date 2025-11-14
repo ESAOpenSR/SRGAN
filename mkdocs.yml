@@ -1,9 +1,9 @@
 site_name: SRGAN Docs
-site_description: Flexible Super-Resolution GANs for satellite imagery
+site_description: OpenSR-SRGAN: Flexible Super-Resolution GANs for satellite imagery
 site_url: https://srgan.opensr.eu/
 copyright: "2023-2024, Simon Donike et al."
-repo_url: https://github.com/simon-donike/SISR-RS-SRGAN
-repo_name: simon-donike/SISR-RS-SRGAN
+repo_url: https://github.com/ESAOpenSR/SRGAN
+repo_name: ESAOpenSR/SRGAN
 edit_uri: edit/main/docs/
 
 docs_dir: docs
@@ -73,7 +73,7 @@ edit_uri: edit/main/docs/
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/simon-donike/SISR-RS-SRGAN
+      link: https://github.com/ESAOpenSR/SRGAN
   generator: false
 
 nav:  
