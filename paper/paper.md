@@ -60,7 +60,7 @@ Nevertheless, GAN-based approaches continue to be actively explored [@g1] and re
 
 # Problem Statement
 
-Despite their success in computer vision, Generative Adversarial Networks (GANs) remain notoriously difficult to train [@p1; @p2; @p3]. The simultaneous optimization of generator and discriminator networks often leads to unstable dynamics, mode collapse, and high sensitivity to hyperparameters. In remote-sensing applications, these issues are amplified by domain-specific challenges such as multispectral or hyperspectral inputs, high dynamic range reflectance values, varying sensor characteristics, and limited availability of perfectly aligned high-resolution ground-truth data. Moreover, researchers in remote sensing rarely work with fixed RGB imagery. They frequently need to adapt existing GAN architectures to support arbitrary numbers of spectral bands, retrain models for different satellite sensors (e.g., Sentinel-2, SPOT, Pleiades, PlanetScope), or implement benchmarks for newly collected datasets. These modifications usually require non-trivial changes to the model architecture, preprocessing pipeline, and loss configuration, making reproducibility and experimentation cumbersome. Implementing the full set of heuristics that make GAN training stable, such as generator pretraining, adversarial loss ramping, label smoothing, learning-rate warmup, and exponential moving-average (EMA) tracking, adds another layer of complexity. Consequently, reproducing and extending GAN-based SR models in the Earth-Observation (EO) domain is often time-consuming, fragile, and inconsistent across studies.
+Despite their success in computer vision, GANs remain notoriously difficult to train [@p1; @p2; @p3]. The simultaneous optimization of generator and discriminator networks often leads to unstable dynamics, mode collapse, and high sensitivity to hyperparameters. In remote-sensing applications, these issues are amplified by domain-specific challenges such as multispectral or hyperspectral inputs, high dynamic range reflectance values, varying sensor characteristics, and limited availability of perfectly aligned high-resolution ground-truth data. Moreover, researchers in remote sensing rarely work with fixed RGB imagery. They frequently need to adapt existing GAN architectures to support arbitrary numbers of spectral bands, retrain models for different satellite sensors (e.g., Sentinel-2, SPOT, Pleiades, PlanetScope), or implement benchmarks for newly collected datasets. These modifications usually require non-trivial changes to the model architecture, preprocessing pipeline, and loss configuration, making reproducibility and experimentation cumbersome. Implementing the full set of heuristics that make GAN training stable, such as generator pretraining, adversarial loss ramping, label smoothing, learning-rate warmup, and exponential moving-average (EMA) tracking, adds another layer of complexity. Consequently, reproducing and extending GAN-based SR models in the Earth-Observation (EO) domain is often time-consuming, fragile, and inconsistent across studies.
 
 
 
@@ -103,23 +103,6 @@ $$
 
 This modular structure allows researchers to experiment with different block designs, standard residual, channel attention (RCAB), dense residual (RRDB), large-kernel attention (LKA), or noise-augmented variants, without altering the training pipeline or configuration schema. All models share identical input-output interfaces and residual scaling for stability, ensuring drop-in interchangeability across experiments.
 
-### Conditional Generator with Noise Injection
-
-The `cgan` variant extends the standard generator by conditioning on both the low-resolution image and a latent noise vector $z$.  
-It replaces standard residual blocks with *NoiseResBlocks*, which introduce controlled stochasticity. Each `NoiseResBlock` uses a small Multi-Layer Perceptron (MLP) to project the noise code $z\!\in\!\mathbb{R}^{d}$ into per-channel scale and bias parameters $(\gamma, \beta)$ that modulate intermediate activations before the nonlinearity:
-
-$$
-x_{\text{mod}} = (1 + \gamma)\odot \mathrm{Conv}_1(x) + \beta
-$$
-
-followed by a second convolution and residual fusion:
-
-$$
-x' = x + \mathrm{Conv}(\mathrm{PReLU}(x_{\text{mod}})) \cdot s
-$$
-
-where $s$ is a residual scaling factor. This mechanism maintains spatial coherence while enabling the generation of multiple plausible high-frequency realizations for the same LR input. During training, a random noise vector is sampled per image; during inference, users may supply explicit latent codes or fix random seeds for deterministic behavior. The module also exposes `sample_noise(batch_size)` and a `return_noise` flag for reproducibility and logging.  
-
 
 ## Discriminator Architectures
 
@@ -139,8 +122,6 @@ Training stability is improved through several built-in mechanisms that address 
 
 ## General Training Optimizations
 Several additional methods contribute to stable adversarial optimization. Label smoothing replaces hard discriminator targets (1 for real, 0 for fake) with softened values such as 0.9 and 0.1, preventing overconfidence and promoting smoother gradients. A short generator warmup phase allows $G$ to learn basic low-frequency structure before adversarial feedback is introduced, often combined with a linear or cosine learning-rate ramp to avoid abrupt updates. The discriminator holdback delays $D$ updates for the first few epochs so that $G$ can stabilise; when enabled, $D$ also follows a short warmup schedule to balance learning rates. Finally, both optimisers employ adaptive scheduling via `ReduceLROnPlateau`, lowering the learning rate when progress stagnates. These implementations mitigate divergence and improve convergence stability in adversarial training. All of these techniques can be configured from the `config` file as the unified entry-point.
-
-
 
 ## Exponential Moving Average (EMA) Stabilisation
 
