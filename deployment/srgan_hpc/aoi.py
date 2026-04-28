@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import shapefile
-from pyproj import CRS, Transformer
-from shapely.geometry import box, shape
-from shapely.geometry.base import BaseGeometry
-from shapely.ops import transform, unary_union
+if TYPE_CHECKING:
+    from shapely.geometry.base import BaseGeometry
 
 from deployment.srgan_hpc.patching import Patch, build_patches, meters_to_lat_deg, meters_to_lon_deg
 
@@ -38,7 +36,9 @@ def resolve_aoi_source_path(path: str | Path) -> Path:
     return source_path
 
 
-def _load_source_crs(shp_path: Path) -> CRS:
+def _load_source_crs(shp_path: Path):
+    from pyproj import CRS
+
     prj_path = shp_path.with_suffix(".prj")
     if not prj_path.exists():
         raise ValueError(f"AOI shapefile is missing .prj sidecar: {prj_path}")
@@ -49,6 +49,11 @@ def _load_source_crs(shp_path: Path) -> CRS:
 
 
 def load_aoi_geometry(path: str | Path) -> tuple[Path, BaseGeometry]:
+    import shapefile
+    from pyproj import CRS, Transformer
+    from shapely.geometry import shape
+    from shapely.ops import transform, unary_union
+
     shp_path = resolve_aoi_source_path(path)
     source_crs = _load_source_crs(shp_path)
 
@@ -82,6 +87,8 @@ def load_aoi_geometry(path: str | Path) -> tuple[Path, BaseGeometry]:
 
 
 def patch_footprint(patch: Patch, resolution_m: float) -> BaseGeometry:
+    from shapely.geometry import box
+
     patch_size_m = patch.edge_size * resolution_m
     half_lat = meters_to_lat_deg(patch_size_m) / 2.0
     half_lon = meters_to_lon_deg(patch_size_m, patch.latitude) / 2.0
