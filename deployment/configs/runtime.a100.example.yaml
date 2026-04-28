@@ -1,0 +1,77 @@
+# A100 cluster example:
+# 1. Copy this file to a new name before editing it.
+# 2. Replace module, conda_env, partition, account, qos, and gres values with your cluster's names.
+# 3. Validate before submitting:
+#    srgan-hpc validate-config --config deployment/configs/my-a100.yaml
+
+# Names the run and chooses where run folders, manifests, logs, and outputs are written.
+project_name: "srgan"
+output_root: "../../runs"
+mode: "fused"
+
+# Runtime setup for worker jobs. These example values assume a CUDA module and srgan conda env.
+environment:
+  python_executable: "python"
+  modules: ["cuda/12.1"]
+  conda_env: "srgan"
+
+# Optional AOI input for `srgan-hpc submit aoi`. Leave null for patch/grid runs.
+aoi:
+  path: null
+  layer: null
+
+# Sentinel-2 download and cutout settings. edge_size is pixels; larger values use more memory.
+staging:
+  collection: "sentinel-2-l2a"
+  image_index: 0
+  edge_size: 4096
+  nodata: 0
+  output_dtype: "uint16"
+  compression: "deflate"
+  overlap_meters: 128.0
+  retry_on_rate_limit: true
+  rate_limit_retry_delays_seconds: [15, 30, 60, 120, 120, 120]
+
+# RGB/NIR model input. Change model paths only when using your own checkpoint.
+rgbnir:
+  bands: ["B04", "B03", "B02", "B08"]
+  resolution: 10
+  factor: 4
+  model:
+    preset: "RGB-NIR"
+    config_path: null
+    checkpoint_path: null
+    cache_dir: null
+
+# SWIR model input. These defaults match the bundled SWIR preset.
+swir:
+  bands: ["B05", "B06", "B07", "B8A", "B11", "B12"]
+  resolution: 20
+  factor: 8
+  model:
+    preset: "SWIR"
+    config_path: null
+    checkpoint_path: null
+    cache_dir: null
+
+# Inference tiling. A100 GPUs can usually handle a larger batch_size than smaller GPUs.
+inference:
+  window_size: [128, 128]
+  batch_size: 16
+  overlap: 12
+  eliminate_border_px: 2
+  gpus: 0
+  save_preview: false
+
+# Slurm job resources. Update these to match your cluster's GPU partition policy.
+slurm:
+  partition: "gpu"
+  gpu_type: "a100"
+  gpus: 1
+  gres: null
+  cpus_per_task: 16
+  mem_gb: 192
+  time: "02:00:00"
+  account: null
+  qos: null
+  extra_args: []
