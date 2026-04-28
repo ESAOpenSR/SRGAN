@@ -17,6 +17,7 @@ on:
       - 'v*'        # run on tags like v1.2.3
     paths:
       - 'opensr_srgan/**'
+      - 'deployment/**'
       - 'tests/**'
       - 'pyproject.toml'
       - 'requirements.txt'
