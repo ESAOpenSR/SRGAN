@@ -275,6 +275,9 @@ def _icnr_(weight: torch.Tensor, scale: int = 2) -> None:
 def make_upsampler(n_channels: int, scale: int, *, use_icnr: bool = False) -> nn.Sequential:
     """Create a pixel-shuffle upsampler matching the flexible generator implementation."""
 
+    if scale < 1 or (scale & (scale - 1)) != 0:
+        raise ValueError("scale must be a positive power of two (1, 2, 4, 8, ...).")
+
     stages: list[nn.Module] = []
     for _ in range(int(math.log2(scale))):
         conv = nn.Conv2d(n_channels, n_channels * 4, 3, padding=1)
