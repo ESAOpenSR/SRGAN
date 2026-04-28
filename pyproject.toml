@@ -45,14 +45,30 @@ package-dir = {"" = "."}
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["opensr_srgan", "opensr_srgan.*"]
+include = ["opensr_srgan", "opensr_srgan.*", "deployment", "deployment.*"]
 
 [tool.setuptools.package-data]
 opensr_srgan = [
   "configs/*.yaml",
   "configs/**/*.yaml",
 ]
+deployment = [
+  "configs/*.yaml",
+  "srgan_hpc/slurm/*.sh",
+]
 
 [project.optional-dependencies]
 tests = ["pytest", "pytest-cov","numpy"]
 docs = ["mkdocs-material"]
+hpc = [
+  "PyYAML>=6.0",
+  "pyproj>=3.4",
+  "pyshp>=2.3.1",
+  "rioxarray>=0.15",
+  "shapely>=2.0.2",
+  "cubo>=0.3",
+  "opensr-utils>=1.0.0",
+]
+
+[project.scripts]
+srgan-hpc = "deployment.srgan_hpc.cli:main"
