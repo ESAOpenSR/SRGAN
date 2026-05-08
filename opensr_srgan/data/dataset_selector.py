@@ -1,26 +1,17 @@
 from pathlib import Path
 
 
-LRHR_FOLDER_DATASET_ROOT = "data/"
-SEN2NAIP_TACO_FILE = "/data1/datasets/SEN2NAIP/sen2naipv2-crosssensor.taco"
-
-
 def select_dataset(config):
     """
     Build train/val datasets from `config` and wrap them into a LightningDataModule.
 
     Expected `config` fields (OmegaConf/dict-like):
-    - config.Data.dataset_selection : str
-        One of {"S2_6b", "S2_4b"} in this file.
-    - config.Generator.scaling_factor : int
-        Super-resolution scale factor (e.g., 2, 4, 8). Passed to dataset as `sr_factor`.
-
-    Hard-coded choices below (kept as-is, not modified):
-    - manifest_json : Path to prebuilt SAFE window manifest.
-    - band orders   : Fixed lists for each selection.
-    - hr_size       : (512, 512)
-    - group_by      : "granule"
-    - group_regex   : r".*?/GRANULE/([^/]+)/IMG_DATA/.*"
+    - config.Data.dataset_type : str
+        One of {"ExampleDataset", "SEN2NAIP", "LRHRFolderDataset"}.
+    - config.Data.root_dir / config.Data.dataset_root : str, optional
+        Required for LRHRFolderDataset.
+    - config.Data.sen2naip_taco_file : str, optional
+        Required for SEN2NAIP unless the dataset class receives another source.
 
     Returns
     -------
@@ -29,9 +20,7 @@ def select_dataset(config):
     """
     dataset_selection = config.Data.dataset_type
 
-    # Please Note: The "S2_6b","S2_4b","SISR_WW" settings are leftover from previous versions
-    # I dont want to delete them in case they are needed again.
-    # Only the "ExampleDataset" is actively used in the current version.
+    # Legacy keys from older configs intentionally fall through to the error below.
 
     if dataset_selection == "ExampleDataset":
         from opensr_srgan.data.example_data.example_dataset import ExampleDataset
@@ -45,18 +34,26 @@ def select_dataset(config):
     elif str(dataset_selection).lower() == "sen2naip":
         from opensr_srgan.data.sen2naip.sen2naip_dataset import SEN2NAIP
 
-        ds_train = SEN2NAIP(config=config, phase="train", taco_file=SEN2NAIP_TACO_FILE)
-        ds_val = SEN2NAIP(config=config, phase="val", taco_file=SEN2NAIP_TACO_FILE)
+        taco_file = getattr(config.Data, "sen2naip_taco_file", None)
+        ds_train = SEN2NAIP(config=config, phase="train", taco_file=taco_file)
+        ds_val = SEN2NAIP(config=config, phase="val", taco_file=taco_file)
         
     elif dataset_selection == "LRHRFolderDataset":
         from opensr_srgan.data.lrhr_folder.lrhr_folder_dataset import LRHRFolderDataset
 
-        path = Path(LRHR_FOLDER_DATASET_ROOT)
+        root_folder = getattr(config.Data, "root_dir", None)
+        if root_folder is None:
+            root_folder = getattr(config.Data, "dataset_root", None)
+        if root_folder is None:
+            raise ValueError(
+                "LRHRFolderDataset requires Data.root_dir or Data.dataset_root in the config."
+            )
+
+        path = Path(root_folder).expanduser()
         if not path.is_dir():
             raise FileNotFoundError(
                 f"LRHRFolderDataset root path does not exist: '{path}'. "
-                "Set 'LRHR_FOLDER_DATASET_ROOT' in opensr_srgan/data/dataset_selector.py "
-                "to a valid dataset directory."
+                "Set Data.root_dir to a valid dataset directory."
             )
 
         ds_train = LRHRFolderDataset(config=config, root_folder=path, phase="train")

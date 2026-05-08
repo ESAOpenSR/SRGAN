@@ -182,10 +182,9 @@ def test_select_dataset_lrhr_folder_branch(monkeypatch, tmp_path):
         LRHRFolderDataset=_StubLRHRFolderDataset,
     )
 
-    monkeypatch.setattr(dataset_selector, "LRHR_FOLDER_DATASET_ROOT", str(tmp_path))
-
     config = _make_config(
         dataset_type="LRHRFolderDataset",
+        root_dir=str(tmp_path),
         normalization="identity",
         train_batch_size=2,
         val_batch_size=2,
@@ -215,15 +214,18 @@ def test_select_dataset_lrhr_folder_branch_missing_root_raises(monkeypatch, tmp_
         LRHRFolderDataset=_StubLRHRFolderDataset,
     )
     missing = tmp_path / "does_not_exist"
-    monkeypatch.setattr(dataset_selector, "LRHR_FOLDER_DATASET_ROOT", str(missing))
 
-    config = _make_config(dataset_type="LRHRFolderDataset", num_workers=0)
+    config = _make_config(
+        dataset_type="LRHRFolderDataset",
+        root_dir=str(missing),
+        num_workers=0,
+    )
 
     with pytest.raises(FileNotFoundError):
         dataset_selector.select_dataset(config)
 
 
-def test_select_dataset_sen2naip_uses_hardcoded_taco_and_training_config(monkeypatch):
+def test_select_dataset_sen2naip_uses_configured_taco_and_training_config(monkeypatch):
     _StubSEN2NAIPDataset.created_args.clear()
     _install_module(monkeypatch, "opensr_srgan.data.sen2naip", is_package=True)
     _install_module(
@@ -232,11 +234,10 @@ def test_select_dataset_sen2naip_uses_hardcoded_taco_and_training_config(monkeyp
         SEN2NAIP=_StubSEN2NAIPDataset,
     )
 
-    monkeypatch.setattr(dataset_selector, "SEN2NAIP_TACO_FILE", "/tmp/hardcoded.taco")
-
     config = _make_config(
         dataset_type="sen2naip",
         normalization="normalise_10k",
+        sen2naip_taco_file="/tmp/configured.taco",
         sen2naip_val_fraction=0.2,
         train_batch_size=2,
         val_batch_size=2,
@@ -254,8 +255,8 @@ def test_select_dataset_sen2naip_uses_hardcoded_taco_and_training_config(monkeyp
     assert val_cfg is config
     assert train_kwargs["phase"] == "train"
     assert val_kwargs["phase"] == "val"
-    assert train_kwargs["taco_file"] == "/tmp/hardcoded.taco"
-    assert val_kwargs["taco_file"] == "/tmp/hardcoded.taco"
+    assert train_kwargs["taco_file"] == "/tmp/configured.taco"
+    assert val_kwargs["taco_file"] == "/tmp/configured.taco"
     assert isinstance(train_batch, (list, tuple))
     assert len(train_batch) == 2
 
