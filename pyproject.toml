@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opensr-srgan"
-version = "0.4.2"
+version = "0.4.3"
 description = "Modular Super-Resolution GAN Framework for Remote Sensing."
 readme = "README.md"
 authors = [
@@ -57,6 +57,12 @@ opensr_srgan = [
 deployment = [
   "configs/*.yaml",
   "srgan_hpc/slurm/*.sh",
+]
+
+[tool.coverage.run]
+omit = [
+  "opensr_srgan/data/**",
+  "opensr_srgan/configs/**",
 ]
 
 [project.optional-dependencies]

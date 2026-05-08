@@ -50,13 +50,21 @@ def _to_numpy_img(t: torch.Tensor):
         out = _tensor_to_plot_data(t[0])
         return out  # grayscale
 
-    if C in (3, 4):
+    if C >= 3:
         rgb = t[:3]
         out = _tensor_to_plot_data(rgb.permute(1, 2, 0))
         return out
 
     return _tensor_to_plot_data(t.permute(1, 2, 0))
-    # Multichannel (first 3 shown upstream)
+
+
+def _select_display_bands(t: torch.Tensor) -> torch.Tensor:
+    """Keep only bands that can be displayed before contrast stretching."""
+    if t.dim() != 4:
+        raise ValueError(f"Expected (B,C,H,W), got {tuple(t.shape)}")
+    if t.shape[1] > 3:
+        return t[:, :3]
+    return t
 
 
 def plot_tensors(lr, sr, hr, title="Train"):
@@ -85,6 +93,12 @@ def plot_tensors(lr, sr, hr, title="Train"):
         - This function is side-effect free for tensors (uses `.detach()` and
           plots copies), and closes the matplotlib figure after rendering.
     """
+    # Drop non-visible bands before stretching. For RGB-NIR data, including NIR in
+    # the percentile stretch can crush RGB contrast and produce misleading plots.
+    lr = _select_display_bands(lr)
+    sr = _select_display_bands(sr)
+    hr = _select_display_bands(hr)
+
     # --- denorm(?) + stretch  ---
     lr = minmax_percentile(lr)
     sr = minmax_percentile(sr)

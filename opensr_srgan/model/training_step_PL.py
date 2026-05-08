@@ -50,7 +50,7 @@ def training_step_PL2(self, batch, batch_idx):
     opt_d, opt_g = self.optimizers()
 
     # optional gradient clipping support (norm-based)
-    # Keep this aligned with build_lightning_kwargs, which reads Optimizers.gradient_clip_val.
+    # Lightning does not support Trainer-managed clipping with manual optimization.
     optim_cfg = getattr(self.config, "Optimizers", None)
     sched_cfg = getattr(self.config, "Schedulers", None)
     gradient_clip_val = float(

@@ -22,6 +22,16 @@ from opensr_srgan.model.generators import build_generator
 from opensr_srgan.model.model_blocks import ExponentialMovingAverage
 
 
+def _looks_like_zero_one_reflectance(tensor: torch.Tensor) -> bool:
+    """Return True when a tensor appears to already be scaled to 0..1."""
+    if not torch.is_floating_point(tensor):
+        return False
+    finite = tensor[torch.isfinite(tensor)]
+    if finite.numel() == 0:
+        return False
+    return bool((finite.min() >= 0.0).item() and (finite.max() <= 1.5).item())
+
+
 #############################################################################################################
 # Basic SRGAN Model with flexible Generator/Discriminator, scalable losses, pretraining, and ramp-up
 #############################################################################################################
@@ -410,9 +420,16 @@ class SRGAN_model(pl.LightningModule):
         if self.generator.training:
             raise RuntimeError("Generator must be in eval mode for prediction.")
         lr_imgs = lr_imgs.to(self.device)  # move to device (GPU or CPU)
+        input_already_normalized = (
+            getattr(self.normalizer, "method", None) == "normalise_10k"
+            and _looks_like_zero_one_reflectance(lr_imgs)
+        )
 
         # --- Normalize inputs according to configuration ---
-        normalized_lr = self.normalizer.normalize(lr_imgs)
+        if input_already_normalized:
+            normalized_lr = lr_imgs
+        else:
+            normalized_lr = self.normalizer.normalize(lr_imgs)
 
         # --- Perform super-resolution (optionally using EMA weights) ---
         context = (
@@ -427,7 +444,8 @@ class SRGAN_model(pl.LightningModule):
         sr_imgs = histogram_match(normalized_lr, sr_imgs)  # match distributions
 
         # --- Denormalize output back to original range ---
-        sr_imgs = self.normalizer.denormalize(sr_imgs)
+        if not input_already_normalized:
+            sr_imgs = self.normalizer.denormalize(sr_imgs)
 
         # --- Move to CPU and return ---
         sr_imgs = sr_imgs.cpu().detach()  # detach from graph for inference output
