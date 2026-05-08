@@ -45,6 +45,12 @@ def train(config):
         raise TypeError(
             "Config must be a filepath (str or Path), dict, or OmegaConf object."
         )
+
+    seed = getattr(config.Training, "seed", None)
+    if seed is not None:
+        seed_everything = getattr(pl, "seed_everything", None)
+        if seed_everything is not None:
+            seed_everything(int(seed), workers=True)
     #############################################################################################################
 
     " LOAD MODEL "
