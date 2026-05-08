@@ -53,7 +53,7 @@ class SRResNet(nn.Module):
 
         scaling_factor = int(scaling_factor)
         if scaling_factor not in {2, 4, 8}:
-            raise AssertionError("The scaling factor must be 2, 4, or 8!")
+            raise ValueError("The scaling factor must be 2, 4, or 8!")
 
         self.conv_block1 = ConvolutionalBlock(
             in_channels=in_channels,

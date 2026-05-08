@@ -67,7 +67,7 @@ class TruncatedVGG19(nn.Module):
                 break
 
         if not (maxpool_counter == i - 1 and conv_counter == j):
-            raise AssertionError(
+            raise ValueError(
                 f"One or both of i={i} and j={j} are not valid choices for the VGG19!"
             )
 

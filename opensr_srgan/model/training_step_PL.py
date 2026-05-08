@@ -31,9 +31,8 @@ def training_step_PL2(self, batch, batch_idx):
         - `"discriminator/adversarial_loss"`, `"discriminator/D(y)_prob"`, `"discriminator/D(G(x))_prob"`
         - `"training/adv_loss_weight"` (λ_adv from ramp schedule)
     """
-    assert (
-        self.automatic_optimization is False
-    ), "training_step_PL2 requires manual optimization."
+    if self.automatic_optimization is not False:
+        raise RuntimeError("training_step_PL2 requires manual optimization.")
 
     # -------- CREATE SR DATA --------
     lr_imgs, hr_imgs = batch

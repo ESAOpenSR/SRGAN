@@ -20,7 +20,7 @@ from opensr_srgan.model.model_blocks import _icnr_
 
 
 def test_convolutional_block_rejects_unknown_activation() -> None:
-    with pytest.raises(AssertionError, match="activation must be one of"):
+    with pytest.raises(ValueError, match="activation must be one of"):
         ConvolutionalBlock(16, 16, 3, activation="relu")
 
 

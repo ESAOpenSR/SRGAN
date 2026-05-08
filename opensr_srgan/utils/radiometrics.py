@@ -7,6 +7,11 @@ import torch
 from .tensor_conversions import tensor_to_numpy
 
 
+def _validate_stage(stage: str) -> None:
+    if stage not in {"norm", "denorm"}:
+        raise ValueError("stage must be one of {'norm', 'denorm'}")
+
+
 # -------------------------------------------------------------------------
 # SENTINEL-2 NORMALIZATION HELPERS
 # -------------------------------------------------------------------------
@@ -31,7 +36,7 @@ def normalise_s2(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
     torch.Tensor
         The normalized or denormalized image tensor.
     """
-    assert stage in ["norm", "denorm"]
+    _validate_stage(stage)
     value = 3.0  # reference scaling factor
 
     if stage == "norm":
@@ -68,7 +73,7 @@ def normalise_10k(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
     torch.Tensor
         Scaled tensor.
     """
-    assert stage in ["norm", "denorm"]
+    _validate_stage(stage)
 
     if stage == "norm":
         im = im / 10000.0
@@ -97,7 +102,7 @@ def zero_one_signed(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
         Range-adjusted tensor.
     """
 
-    assert stage in ["norm", "denorm"]
+    _validate_stage(stage)
 
     if stage == "norm":
         return torch.clamp((im * 2.0) - 1.0, -1.0, 1.0)
@@ -126,7 +131,7 @@ def normalise_10k_signed(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
         Tensor in the requested range.
     """
 
-    assert stage in ["norm", "denorm"]
+    _validate_stage(stage)
 
     if stage == "norm":
         scaled = normalise_10k(im, stage="norm")
@@ -239,10 +244,10 @@ def histogram(reference: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """
 
     # Ensure both inputs have correct dimensionality: either (C,H,W) or (B,C,H,W)
-    assert target.ndim in (3, 4) and reference.ndim in (
-        3,
-        4,
-    ), "Expected (C,H,W) or (B,C,H,W) for both reference and target"
+    if target.ndim not in (3, 4) or reference.ndim not in (3, 4):
+        raise ValueError(
+            "Expected (C,H,W) or (B,C,H,W) for both reference and target"
+        )
 
     # Save device/dtype for conversion back later
     device, dtype = target.device, target.dtype
@@ -257,7 +262,8 @@ def histogram(reference: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     B_tgt, C_tgt, H_tgt, W_tgt = tgt.shape
 
     # Channel sanity check
-    assert C_ref == C_tgt, f"Channel mismatch: reference={C_ref}, target={C_tgt}"
+    if C_ref != C_tgt:
+        raise ValueError(f"Channel mismatch: reference={C_ref}, target={C_tgt}")
 
     # --- Resize reference spatially to match target ---
     # Uses bilinear interpolation, no corner alignment, safe for float data

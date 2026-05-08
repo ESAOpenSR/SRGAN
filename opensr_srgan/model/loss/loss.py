@@ -103,7 +103,8 @@ class GeneratorContentLoss(nn.Module):
         fixed_idx = _cfg_get(cfg, ["Training", "Losses", "fixed_idx"], None)
         if fixed_idx is not None:
             fixed_idx = torch.as_tensor(fixed_idx, dtype=torch.long)
-            assert fixed_idx.numel() == 3, "fixed_idx must have length 3"
+            if fixed_idx.numel() != 3:
+                raise ValueError("fixed_idx must have length 3")
         self.register_buffer(
             "fixed_idx", fixed_idx if fixed_idx is not None else None, persistent=False
         )

@@ -117,7 +117,8 @@ class Sentinel2TestDataSet(torch.utils.data.Dataset):
     
     def __init__(self,data_folders = None,amount=100,band_selection="R10m"):
         # settings for band selection
-        assert band_selection in ["R10m","R20m"]
+        if band_selection not in ["R10m", "R20m"]:
+            raise ValueError("band_selection must be one of {'R10m', 'R20m'}")
         self.band_selection = band_selection
         self.amount = amount
 
@@ -220,4 +221,3 @@ if __name__ == "__main__":
     dfs = None
     ds = Sentinel2TestDataSet(data_folders=dfs,band_selection="R10m")
     im = ds.__getitem__(20)
-

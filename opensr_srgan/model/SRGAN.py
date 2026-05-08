@@ -136,10 +136,8 @@ class SRGAN_model(pl.LightningModule):
             raise TypeError(
                 "Config must be a filepath (str or Path), dict, or OmegaConf object."
             )
-        assert mode in {
-            "train",
-            "eval",
-        }, "Mode must be 'train' or 'eval'"  # validate mode
+        if mode not in {"train", "eval"}:
+            raise ValueError("Mode must be 'train' or 'eval'")
 
         # ======================================================================
         # SECTION: Set Variables
@@ -409,9 +407,8 @@ class SRGAN_model(pl.LightningModule):
         Raises:
             AssertionError: If the generator is not in evaluation mode (`.eval()`).
         """
-        assert (
-            self.generator.training is False
-        ), "Generator must be in eval mode for prediction."  # ensure eval mode
+        if self.generator.training:
+            raise RuntimeError("Generator must be in eval mode for prediction.")
         lr_imgs = lr_imgs.to(self.device)  # move to device (GPU or CPU)
 
         # --- Normalize inputs according to configuration ---

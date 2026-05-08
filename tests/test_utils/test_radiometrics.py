@@ -89,7 +89,7 @@ def test_histogram_preserves_channels_and_resizes_reference():
 def test_histogram_channel_mismatch_raises():
     reference = torch.zeros(1, 1, 2, 2)
     target = torch.zeros(1, 2, 2, 2)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         histogram(reference, target)
 
 

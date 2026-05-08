@@ -112,7 +112,7 @@ def test_srgan_config_invalid_mode():
             "Logging": {"wandb": {"enabled": False}, "num_val_images": 1},
         }
     )
-    with pytest.raises(AssertionError, match="train"):
+    with pytest.raises(ValueError, match="train"):
         SRGAN_model(config=config, mode="invalid")
 
 

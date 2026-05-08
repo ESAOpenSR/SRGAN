@@ -41,7 +41,9 @@ class ConvolutionalBlock(nn.Module):
         act = activation.lower() if activation is not None else None
         if act is not None:
             if act not in {"prelu", "leakyrelu", "tanh"}:
-                raise AssertionError("activation must be one of {'prelu', 'leakyrelu', 'tanh'}")
+                raise ValueError(
+                    "activation must be one of {'prelu', 'leakyrelu', 'tanh'}"
+                )
 
         layers: list[nn.Module] = [
             nn.Conv2d(
