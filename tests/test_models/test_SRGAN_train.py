@@ -28,8 +28,11 @@ class DummyContentLoss:
 
 
 class DummyConfig:
-    class Schedulers:
+    class Optimizers:
         gradient_clip_val = 0.0
+
+    class Schedulers:
+        pass
 
 
 class TrainingHarness(LoggerMixin):

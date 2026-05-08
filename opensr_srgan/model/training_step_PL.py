@@ -51,10 +51,16 @@ def training_step_PL2(self, batch, batch_idx):
     opt_d, opt_g = self.optimizers()
 
     # optional gradient clipping support (norm-based)
-    try:
-        gradient_clip_val = self.config.Schedulers.gradient_clip_val
-    except AttributeError:
-        gradient_clip_val = 0.0
+    # Keep this aligned with build_lightning_kwargs, which reads Optimizers.gradient_clip_val.
+    optim_cfg = getattr(self.config, "Optimizers", None)
+    sched_cfg = getattr(self.config, "Schedulers", None)
+    gradient_clip_val = float(
+        getattr(
+            optim_cfg,
+            "gradient_clip_val",
+            getattr(sched_cfg, "gradient_clip_val", 0.0),
+        )
+    )
 
     def _maybe_clip_gradients(module, optimizer=None):
         if gradient_clip_val > 0.0 and module is not None:
