@@ -1,5 +1,24 @@
+import os
+from pathlib import Path
+import zipfile
+
 from huggingface_hub import hf_hub_download
-import zipfile, os
+
+
+def _safe_extract_member(
+    zip_file: zipfile.ZipFile, member: str, target: str, out_dir: Path
+) -> None:
+    target_path = (out_dir / target).resolve()
+    if os.path.commonpath([str(out_dir), str(target_path)]) != str(out_dir):
+        raise ValueError(
+            f"Refusing to extract archive member outside target directory: {member}"
+        )
+    if member.endswith("/"):
+        target_path.mkdir(parents=True, exist_ok=True)
+        return
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    with zip_file.open(member) as src, target_path.open("wb") as dst:
+        dst.write(src.read())
 
 
 def get_example_dataset(out_dir: str = "example_dataset/"):
@@ -20,7 +39,7 @@ def get_example_dataset(out_dir: str = "example_dataset/"):
            ``simon-donike/SR-GAN`` on Hugging Face Hub.
         3. Extracts the archive contents into ``out_dir``, removing any redundant
            root folder structure for cleaner layout.
-        4. Deletes the downloaded zip file after extraction.
+        4. Leaves Hugging Face's cache-managed archive in place.
 
     Returns:
         None
@@ -30,7 +49,8 @@ def get_example_dataset(out_dir: str = "example_dataset/"):
         📦 Downloading from Hugging Face Hub...
         ✅ Extracted dataset to: /path/to/example_dataset
     """
-    os.makedirs(out_dir, exist_ok=True)
+    output_dir = Path(out_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     repo_id = "simon-donike/SR-GAN"
     filename = "example_dataset.zip"
@@ -49,12 +69,9 @@ def get_example_dataset(out_dir: str = "example_dataset/"):
                 target = member[len(prefix) :]
                 if not target:  # skip folder itself
                     continue
-                target_path = os.path.join(out_dir, target)
-                os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                with z.open(member) as src, open(target_path, "wb") as dst:
-                    dst.write(src.read())
+                _safe_extract_member(z, member, target, output_dir)
         else:
-            z.extractall(out_dir)
+            for member in members:
+                _safe_extract_member(z, member, member, output_dir)
 
-    os.remove(zip_path)
-    print(f"✅ Extracted dataset to: {os.path.abspath(out_dir)}")
+    print(f"✅ Extracted dataset to: {output_dir}")
