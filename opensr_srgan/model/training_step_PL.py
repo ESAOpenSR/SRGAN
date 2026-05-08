@@ -89,7 +89,13 @@ def training_step_PL2(self, batch, batch_idx):
             zero = torch.tensor(0.0, device=hr_imgs.device, dtype=hr_imgs.dtype)
             self.log("discriminator/D(y)_prob", zero, prog_bar=True, sync_dist=True)
             self.log("discriminator/D(G(x))_prob", zero, prog_bar=True, sync_dist=True)
-            self.log("discriminator/adversarial_loss", zero, sync_dist=True)
+            self.log(
+                "discriminator/adversarial_loss",
+                zero,
+                on_step=True,
+                on_epoch=True,
+                sync_dist=True,
+            )
 
         # --- G step: hardwired L1-only pretraining loss ---
         content_loss = torch.nn.functional.l1_loss(sr_imgs, hr_imgs)
@@ -168,7 +174,13 @@ def training_step_PL2(self, batch, batch_idx):
     adversarial_loss = (
         loss_real + loss_fake + r1_penalty
     )  # sum up loss with R1 (0 when turned off)
-    self.log("discriminator/adversarial_loss", adversarial_loss, sync_dist=True)
+    self.log(
+        "discriminator/adversarial_loss",
+        adversarial_loss,
+        on_step=True,
+        on_epoch=True,
+        sync_dist=True,
+    )
     self.log(
         "discriminator/r1_penalty", r1_penalty.detach(), sync_dist=True
     )  # log R1 penalty regardless, is 0 when turned off
