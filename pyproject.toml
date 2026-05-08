@@ -61,7 +61,7 @@ deployment = [
 
 [project.optional-dependencies]
 tests = ["pytest", "pytest-cov","numpy"]
-docs = ["mkdocs-material"]
+docs = ["mkdocs-material", "mkdocstrings[python]", "pymdown-extensions"]
 hpc = [
   "PyYAML>=6.0",
   "pyproj>=3.4",
