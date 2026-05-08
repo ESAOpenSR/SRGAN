@@ -162,7 +162,7 @@ def sen2_stretch(im: torch.Tensor) -> torch.Tensor:
 
 
 def minmax_percentile(
-    tensor: torch.Tensor, pmin: float = 2, pmax: float = 98
+    tensor: torch.Tensor, pmin: float = 2, pmax: float = 98, eps: float = 1e-12
 ) -> torch.Tensor:
     """
     Perform percentile-based min-max normalization to [0, 1].
@@ -185,14 +185,16 @@ def minmax_percentile(
     """
     min_val = torch.quantile(tensor, pmin / 100.0)
     max_val = torch.quantile(tensor, pmax / 100.0)
-    tensor = (tensor - min_val) / (max_val - min_val)
-    return tensor
+    denom = max_val - min_val
+    if not torch.isfinite(denom) or denom.abs() <= eps:
+        return torch.zeros_like(tensor)
+    return torch.clamp((tensor - min_val) / denom, 0.0, 1.0)
 
 
 # -------------------------------------------------------------------------
 # GENERAL UTILITIES
 # -------------------------------------------------------------------------
-def minmax(img: torch.Tensor) -> torch.Tensor:
+def minmax(img: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
     """
     Standard min-max normalization to [0, 1] over the entire tensor.
 
@@ -208,8 +210,10 @@ def minmax(img: torch.Tensor) -> torch.Tensor:
     """
     min_val = torch.min(img)
     max_val = torch.max(img)
-    normalized_img = (img - min_val) / (max_val - min_val)
-    return normalized_img
+    denom = max_val - min_val
+    if not torch.isfinite(denom) or denom.abs() <= eps:
+        return torch.zeros_like(img)
+    return torch.clamp((img - min_val) / denom, 0.0, 1.0)
 
 
 # ---------------------------------------------------------------
@@ -354,14 +358,21 @@ def moment(reference: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     for ref_ch, tgt_ch in zip(reference_np, target_np):
 
         # --- Compute per-channel mean and std ---
-        ref_mean = np.mean(ref_ch)
-        tgt_mean = np.mean(tgt_ch)
-        ref_std = np.std(ref_ch)
-        tgt_std = np.std(tgt_ch)
+        ref_mean = np.nanmean(ref_ch)
+        tgt_mean = np.nanmean(tgt_ch)
+        ref_std = np.nanstd(ref_ch)
+        tgt_std = np.nanstd(tgt_ch)
 
         # --- Apply moment matching formula ---
         # Normalize target → scale by reference std → shift by reference mean
-        matched_channel = (((tgt_ch - tgt_mean) / tgt_std) * ref_std) + ref_mean
+        if not np.isfinite(ref_mean):
+            ref_mean = 0.0
+        if not np.isfinite(tgt_mean) or not np.isfinite(tgt_std) or tgt_std <= 1e-12:
+            matched_channel = np.full_like(tgt_ch, ref_mean)
+        else:
+            if not np.isfinite(ref_std):
+                ref_std = 0.0
+            matched_channel = (((tgt_ch - tgt_mean) / tgt_std) * ref_std) + ref_mean
         matched_channels.append(matched_channel)
 
     matched_np = np.stack(matched_channels, axis=0)
