@@ -165,8 +165,11 @@ def train(config):
 
     # Start training
     trainer = pl.Trainer(**trainer_kwargs)
-    trainer.fit(model, datamodule=pl_datamodule, **fit_kwargs)
-    wandb.finish()
+    try:
+        trainer.fit(model, datamodule=pl_datamodule, **fit_kwargs)
+    finally:
+        if config.Logging.wandb.enabled:
+            wandb.finish()
 
 
 # Run training if called from command line
