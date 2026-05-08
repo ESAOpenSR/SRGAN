@@ -161,6 +161,12 @@ def stage_cutout(
         resolution=resolution,
     )
     if "time" in cube.dims:
+        time_count = int(cube.sizes["time"])
+        if config.image_index < 0 or config.image_index >= time_count:
+            raise IndexError(
+                f"staging.image_index {config.image_index} out of range "
+                f"for {time_count} images"
+            )
         cube = cube.isel(time=config.image_index)
     cube = cube.transpose("band", "y", "x")
     stats = ensure_cube_has_valid_data(cube)
