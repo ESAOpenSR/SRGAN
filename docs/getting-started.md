@@ -1,6 +1,6 @@
 # Getting started
 
-This guide walks through installing dependencies, configuring datasets, and launching your first ESA OpenSR experiment. The stack uses Python 3.10+, PyTorch Lightning, and Weights & Biases for experiment tracking.
+This guide walks through installing dependencies, configuring datasets, and launching your first ESA OpenSR experiment. The stack supports Python 3.10-3.12, PyTorch Lightning, and Weights & Biases for experiment tracking.
 
 > 💡 **Only need inference?** Install the published package instead: `python -m pip install opensr-srgan`. It exposes `load_from_config` and `load_inference_model` so you can instantiate models without cloning the repository. Continue with the rest of this guide when you want to train, fine-tune, or otherwise modify the codebase.
 
