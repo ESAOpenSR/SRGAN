@@ -14,15 +14,19 @@ from deployment.srgan_hpc.raster import raster_validity_stats, stack_geotiffs
 LOGGER = logging.getLogger("srgan-hpc")
 
 
-def _resolve_patch_manifest(manifest_path: Path, task_index: int | None) -> dict:
+def _resolve_patch_manifest_path(manifest_path: Path, task_index: int | None) -> Path:
     manifest = read_yaml(manifest_path)
     if "tasks" not in manifest:
-        return manifest
+        return manifest_path
     if task_index is None:
         raise ValueError("Array task manifest requires task index")
     task_entries = manifest["tasks"]
+    if task_index < 0 or task_index >= len(task_entries):
+        raise IndexError(
+            f"Task index {task_index} out of range for {len(task_entries)} tasks"
+        )
     task = task_entries[task_index]
-    return read_yaml((manifest_path.parent / Path(task["manifest"])).resolve())
+    return (manifest_path.parent / Path(task["manifest"])).resolve()
 
 
 def _resolve_manifest_local_path(manifest_path: Path, relative_path: str) -> Path:
@@ -72,12 +76,8 @@ def _skip_empty_product(metadata_dir: Path, product_name: str, input_tif: Path, 
 
 def run_task(manifest_path: Path, task_index: int | None = None) -> Path | None:
     manifest_path = manifest_path.resolve()
-    root_manifest = read_yaml(manifest_path)
-    if "tasks" in root_manifest:
-        if task_index is None:
-            raise ValueError("Array task manifest requires task index")
-        manifest_path = (manifest_path.parent / Path(root_manifest["tasks"][task_index]["manifest"])).resolve()
-    manifest = _resolve_patch_manifest(manifest_path, None)
+    manifest_path = _resolve_patch_manifest_path(manifest_path, task_index)
+    manifest = read_yaml(manifest_path)
     config = manifest["config"]
     output_dir = _resolve_manifest_local_path(manifest_path, manifest["paths"]["output_dir"])
     metadata_dir = _resolve_manifest_local_path(manifest_path, manifest["paths"]["metadata_dir"])
