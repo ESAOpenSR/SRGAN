@@ -6,7 +6,6 @@ import types
 import pytest
 from omegaconf import OmegaConf
 
-
 if "pytorch_lightning" not in sys.modules:
     # Provide a lightweight stub so the helper can be imported without the heavy
     # Lightning dependency.  Only the constructor and ``fit`` signatures are

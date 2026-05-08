@@ -12,7 +12,10 @@ from deployment.srgan_hpc.naming import (
 
 
 def test_output_name_helpers_format_expected_names() -> None:
-    assert patch_output_name(45.1234567, 9.9876543) == "output_SR_image_45.123457_9.987654.tif"
+    assert (
+        patch_output_name(45.1234567, 9.9876543)
+        == "output_SR_image_45.123457_9.987654.tif"
+    )
     assert product_output_name("rgbnir") == "rgbnir_sr.tif"
     assert fused_output_name() == "fused_sr.tif"
 

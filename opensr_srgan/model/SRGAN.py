@@ -989,8 +989,8 @@ class SRGAN_model(pl.LightningModule):
             - During pretraining, the discriminator is frozen and only the
             generator is updated.
         """
-        if (
-            self.pretrain_g_only and (self.global_step < self.g_pretrain_steps or self.g_pretrain_steps == -1)
+        if self.pretrain_g_only and (
+            self.global_step < self.g_pretrain_steps or self.g_pretrain_steps == -1
         ):  # true if pretraining active
             return True
         else:

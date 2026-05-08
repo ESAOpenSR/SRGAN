@@ -81,15 +81,15 @@ def sen2_test_step(self):
 
     # Optional: normalize for visualization (0–1)
     def norm(im):
-        im = im*3.5  # assuming input is 0-1 scaled for Sentinel-2
+        im = im * 3.5  # assuming input is 0-1 scaled for Sentinel-2
         im = im.clip(0, 1)
         return im
 
     lr_ims = [norm(im) for im in lr_ims]
     sr_ims = [norm(im) for im in sr_ims]
 
-    #lr_ims = lr_ims[:,:64,:64,:]
-    #sr_ims = sr_ims[:,:256,:256,:]
+    # lr_ims = lr_ims[:,:64,:64,:]
+    # sr_ims = sr_ims[:,:256,:256,:]
 
     # Plot
     fig, axes = plt.subplots(2, len(lr_ims), figsize=(4 * len(lr_ims), 6))

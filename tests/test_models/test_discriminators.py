@@ -28,4 +28,3 @@ def test_discriminator_can_be_instantiated(discriminator_cls, kwargs):
 
     instance = discriminator_cls(**kwargs)
     assert isinstance(instance, nn.Module)
-

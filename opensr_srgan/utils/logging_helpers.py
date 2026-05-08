@@ -95,13 +95,13 @@ def plot_tensors(lr, sr, hr, title="Train"):
 
     # shapes
     B, C, H, W = lr.shape  # (B,C,H,W)
-    
+
     # Determine colormap for grayscale images
     if C == 1:
         cmap = "bone"
     else:
         cmap = None
-    
+
     # limit to max_n (images to plot ontop of each other)
     max_n = 2
     if B > max_n:

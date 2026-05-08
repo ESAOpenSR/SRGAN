@@ -43,7 +43,9 @@ class LRHRFolderDataset(Dataset):
 
     VALID_PHASES = {"train", "val", "test"}
 
-    def __init__(self, config=None, phase="train", root_folder=None, normalization=None):
+    def __init__(
+        self, config=None, phase="train", root_folder=None, normalization=None
+    ):
         """Create an LR/HR folder dataset from project config.
 
         Preferred usage passes the full ``config`` object and lets the dataset
@@ -73,7 +75,9 @@ class LRHRFolderDataset(Dataset):
                 "LRHRFolderDataset received a config with "
                 f"Data.dataset_type='{self.dataset_type}'. Expected 'LRHRFolderDataset'."
             )
-        resolved_root_folder = cfg_root_folder if cfg_root_folder is not None else root_folder
+        resolved_root_folder = (
+            cfg_root_folder if cfg_root_folder is not None else root_folder
+        )
         if resolved_root_folder is None:
             raise ValueError(
                 "LRHRFolderDataset requires Data.root_dir (or legacy Data.dataset_root) "
@@ -100,7 +104,9 @@ class LRHRFolderDataset(Dataset):
                 f"Unknown phase '{phase}'. Expected one of {sorted(self.VALID_PHASES)}."
             )
         if not self.root_folder.is_dir():
-            raise FileNotFoundError(f"Dataset root folder '{self.root_folder}' does not exist.")
+            raise FileNotFoundError(
+                f"Dataset root folder '{self.root_folder}' does not exist."
+            )
 
         phase_dir = self.root_folder / phase
         self.lr_dir = phase_dir / "LR"
@@ -165,7 +171,7 @@ class LRHRFolderDataset(Dataset):
         lr = self.normalizer.normalize(lr)
         hr = self.normalizer.normalize(hr)
 
-        return (lr,hr)
+        return (lr, hr)
 
 
 if __name__ == "__main__":

@@ -104,6 +104,10 @@ def submit_job(
         ) from exc
 
     job_id = parse_job_id(result.stdout)
-    payload = {"job_id": job_id, "stdout": result.stdout.strip(), "stderr": result.stderr.strip()}
+    payload = {
+        "job_id": job_id,
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+    }
     write_json(submission_dir / "slurm_job_ids.json", payload)
     return payload

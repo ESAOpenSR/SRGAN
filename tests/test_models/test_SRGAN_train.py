@@ -88,7 +88,10 @@ def test_setup_lightning_configures_manual_step_for_pl2(monkeypatch):
     model = SRGAN.SRGAN_model.__new__(SRGAN.SRGAN_model)
     model.setup_lightning()
     assert model.automatic_optimization is False
-    assert model._training_step_implementation.__func__ is training_step_PL.training_step_PL2
+    assert (
+        model._training_step_implementation.__func__
+        is training_step_PL.training_step_PL2
+    )
 
 
 def test_setup_lightning_rejects_pre_v2(monkeypatch):

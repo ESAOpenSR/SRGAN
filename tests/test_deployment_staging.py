@@ -14,7 +14,9 @@ def test_retryable_staging_error_detects_rate_limit_status() -> None:
 
 
 def test_retryable_staging_error_detects_planetary_computer_timeout() -> None:
-    error = RuntimeError("The request exceeded the maximum allowed time, please try again.")
+    error = RuntimeError(
+        "The request exceeded the maximum allowed time, please try again."
+    )
 
     assert is_retryable_staging_error(error)
 

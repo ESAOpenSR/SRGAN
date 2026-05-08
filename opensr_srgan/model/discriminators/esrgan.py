@@ -8,6 +8,7 @@ References
 ----------
 - Wang et al., ESRGAN
 """
+
 from __future__ import annotations
 
 from torch import Tensor, nn
@@ -96,6 +97,7 @@ class ESRGANDiscriminator(nn.Module):
     >>> y.shape
     torch.Size([8, 1])
     """
+
     def __init__(
         self,
         *,
@@ -122,7 +124,9 @@ class ESRGANDiscriminator(nn.Module):
             _conv_block(base_channels * 4, base_channels * 8, kernel_size=3, stride=1),
             _conv_block(base_channels * 8, base_channels * 8, kernel_size=4, stride=2),
             _conv_block(base_channels * 8, base_channels * 16, kernel_size=3, stride=1),
-            _conv_block(base_channels * 16, base_channels * 16, kernel_size=4, stride=2),
+            _conv_block(
+                base_channels * 16, base_channels * 16, kernel_size=4, stride=2
+            ),
         ]
 
         self.features = nn.Sequential(*features)

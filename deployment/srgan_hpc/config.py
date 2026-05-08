@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 import yaml
 
-
 DEFAULT_RATE_LIMIT_RETRY_DELAYS_SECONDS = [15, 30, 60, 120, 120, 120]
 RuntimeMode = Literal["rgbnir", "swir", "fused"]
 
@@ -125,7 +124,9 @@ def get_product_config(config: RuntimeConfig, product_name: str) -> ProductConfi
 
 
 def patch_resolution(config: RuntimeConfig) -> int:
-    products = [get_product_config(config, name) for name in enabled_product_names(config)]
+    products = [
+        get_product_config(config, name) for name in enabled_product_names(config)
+    ]
     return min(product.resolution for product in products)
 
 
@@ -158,7 +159,9 @@ def _merge(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def _model_source_from_mapping(data: dict[str, Any], default_preset: str) -> ModelSourceConfig:
+def _model_source_from_mapping(
+    data: dict[str, Any], default_preset: str
+) -> ModelSourceConfig:
     return ModelSourceConfig(
         preset=data.get("preset", default_preset),
         config_path=data.get("config_path"),
@@ -167,7 +170,9 @@ def _model_source_from_mapping(data: dict[str, Any], default_preset: str) -> Mod
     )
 
 
-def _product_from_mapping(data: dict[str, Any], default: ProductConfig) -> ProductConfig:
+def _product_from_mapping(
+    data: dict[str, Any], default: ProductConfig
+) -> ProductConfig:
     model_data = data.get("model", {})
     legacy_config_path = data.get("config_path")
     legacy_checkpoint_path = data.get("checkpoint_path")
@@ -175,7 +180,8 @@ def _product_from_mapping(data: dict[str, Any], default: ProductConfig) -> Produ
         model_data = {
             **model_data,
             "config_path": legacy_config_path or model_data.get("config_path"),
-            "checkpoint_path": legacy_checkpoint_path or model_data.get("checkpoint_path"),
+            "checkpoint_path": legacy_checkpoint_path
+            or model_data.get("checkpoint_path"),
         }
     return ProductConfig(
         bands=list(data.get("bands", default.bands)),
@@ -209,7 +215,9 @@ def _runtime_from_mapping(data: dict[str, Any]) -> RuntimeConfig:
     )
 
 
-def _resolve_optional_path(value: str | None, base_dir: Path, *, must_exist: bool = False) -> str | None:
+def _resolve_optional_path(
+    value: str | None, base_dir: Path, *, must_exist: bool = False
+) -> str | None:
     if value is None:
         return None
     path = Path(value).expanduser()
@@ -223,8 +231,12 @@ def _resolve_optional_path(value: str | None, base_dir: Path, *, must_exist: boo
 
 
 def _resolve_product_paths(product: ProductConfig, base_dir: Path) -> None:
-    product.model.config_path = _resolve_optional_path(product.model.config_path, base_dir, must_exist=True)
-    product.model.checkpoint_path = _resolve_optional_path(product.model.checkpoint_path, base_dir, must_exist=True)
+    product.model.config_path = _resolve_optional_path(
+        product.model.config_path, base_dir, must_exist=True
+    )
+    product.model.checkpoint_path = _resolve_optional_path(
+        product.model.checkpoint_path, base_dir, must_exist=True
+    )
     product.model.cache_dir = _resolve_optional_path(product.model.cache_dir, base_dir)
 
 
@@ -260,7 +272,9 @@ def validate_runtime_config(config: RuntimeConfig) -> None:
     if config.staging.overlap_meters < 0:
         raise ValueError("staging.overlap_meters must be non-negative")
     if any(delay <= 0 for delay in config.staging.rate_limit_retry_delays_seconds):
-        raise ValueError("staging.rate_limit_retry_delays_seconds must contain positive integers")
+        raise ValueError(
+            "staging.rate_limit_retry_delays_seconds must contain positive integers"
+        )
     if len(config.inference.window_size) != 2 or min(config.inference.window_size) <= 0:
         raise ValueError("inference.window_size must contain two positive integers")
     if config.inference.batch_size <= 0:
@@ -283,7 +297,9 @@ def validate_runtime_config(config: RuntimeConfig) -> None:
         if not product.bands:
             raise ValueError(f"{product_name}.bands must not be empty")
         if product.model.preset is None and product.model.config_path is None:
-            raise ValueError(f"{product_name}.model must define a preset or config_path")
+            raise ValueError(
+                f"{product_name}.model must define a preset or config_path"
+            )
         product_edge_size(config, product)
 
 

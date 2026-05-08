@@ -153,14 +153,12 @@ def train(config):
     #############################################################################################################
     from opensr_srgan.utils.build_trainer_kwargs import build_lightning_kwargs
 
-    trainer_kwargs, fit_kwargs = (
-        build_lightning_kwargs(
-            config=config,
-            logger=wandb_logger,
-            checkpoint_callback=checkpoint_callback,
-            early_stop_callback=early_stop_callback,
-            resume_ckpt=resume_ckpt,
-        )
+    trainer_kwargs, fit_kwargs = build_lightning_kwargs(
+        config=config,
+        logger=wandb_logger,
+        checkpoint_callback=checkpoint_callback,
+        early_stop_callback=early_stop_callback,
+        resume_ckpt=resume_ckpt,
     )
 
     # Start training
@@ -186,7 +184,7 @@ if __name__ == "__main__":
     --config, -c : str
         Path to YAML config. Defaults to `opensr_srgan/configs/config_10m.yaml`.
     """
-    
+
     import argparse
     from multiprocessing import freeze_support
 

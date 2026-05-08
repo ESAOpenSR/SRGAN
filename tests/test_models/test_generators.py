@@ -137,7 +137,10 @@ def test_stochastic_generator_warns_about_block_type(capsys):
 
     build_generator(config)
     captured = capsys.readouterr()
-    assert "[Generator:stochastic_gan] Ignoring unsupported configuration options: block_type." in captured.out
+    assert (
+        "[Generator:stochastic_gan] Ignoring unsupported configuration options: block_type."
+        in captured.out
+    )
 
 
 def test_esrgan_generator_warns_about_srresnet_specific_options(capsys):

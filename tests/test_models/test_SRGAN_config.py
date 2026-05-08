@@ -219,6 +219,7 @@ def test_pretrain_check_during_pretraining(base_config):
     model = SRGAN_model(config=base_config, mode="train")
     # Use trainer simulation to set global_step
     from unittest.mock import MagicMock
+
     trainer_mock = MagicMock()
     trainer_mock.global_step = 500
     model.trainer = trainer_mock
@@ -233,6 +234,7 @@ def test_pretrain_check_pretraining_disabled(base_config):
     base_config.Training.pretrain_g_only = False
     model = SRGAN_model(config=base_config, mode="train")
     from unittest.mock import MagicMock
+
     trainer_mock = MagicMock()
     trainer_mock.global_step = 100
     model.trainer = trainer_mock
@@ -247,6 +249,7 @@ def test_adv_loss_weight_linear_ramp(base_config):
     base_config.Training.g_pretrain_steps = 0
     model = SRGAN_model(config=base_config, mode="train")
     from unittest.mock import MagicMock
+
     trainer_mock = MagicMock()
     model.trainer = trainer_mock
 
@@ -275,6 +278,7 @@ def test_adv_loss_weight_cosine_ramp(base_config):
     base_config.Training.g_pretrain_steps = 0
     model = SRGAN_model(config=base_config, mode="train")
     from unittest.mock import MagicMock
+
     trainer_mock = MagicMock()
     model.trainer = trainer_mock
 
@@ -300,6 +304,7 @@ def test_adv_loss_weight_during_pretrain(base_config):
     base_config.Training.adv_loss_ramp_steps = 100
     model = SRGAN_model(config=base_config, mode="train")
     from unittest.mock import MagicMock
+
     trainer_mock = MagicMock()
     trainer_mock.global_step = 50
     model.trainer = trainer_mock
@@ -312,6 +317,7 @@ def test_adv_loss_weight_invalid_schedule(base_config):
     base_config.Training.g_pretrain_steps = 0
     model = SRGAN_model(config=base_config, mode="train")
     from unittest.mock import MagicMock
+
     trainer_mock = MagicMock()
     trainer_mock.global_step = 10
     model.trainer = trainer_mock

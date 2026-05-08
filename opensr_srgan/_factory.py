@@ -13,6 +13,7 @@ Typical usage
 >>> model.eval()
 >>> sr = model(torch.randn(1, 4, 64, 64))
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -43,6 +44,7 @@ class _Preset:
     checkpoint_filename : str
         Name of the model checkpoint file inside the repository.
     """
+
     repo_id: str
     config_filename: str
     checkpoint_filename: str

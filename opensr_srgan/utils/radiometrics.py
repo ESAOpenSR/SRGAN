@@ -249,9 +249,7 @@ def histogram(reference: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
     # Ensure both inputs have correct dimensionality: either (C,H,W) or (B,C,H,W)
     if target.ndim not in (3, 4) or reference.ndim not in (3, 4):
-        raise ValueError(
-            "Expected (C,H,W) or (B,C,H,W) for both reference and target"
-        )
+        raise ValueError("Expected (C,H,W) or (B,C,H,W) for both reference and target")
 
     # Save device/dtype for conversion back later
     device, dtype = target.device, target.dtype

@@ -17,7 +17,6 @@ from ...utils.radiometrics import (
     zero_one_signed,
 )
 
-
 NormalizationFn = Callable[[torch.Tensor], torch.Tensor]
 
 
@@ -145,9 +144,7 @@ class Normalizer:
 
         return tuple(sorted(cls._STANDARD_METHODS.keys()))
 
-    def _resolve_strategy(
-        self, raw_cfg: Any
-    ) -> Tuple[str, NormalizationStrategy]:
+    def _resolve_strategy(self, raw_cfg: Any) -> Tuple[str, NormalizationStrategy]:
         """Resolve ``raw_cfg`` into a normalisation strategy.
 
         Parameters
@@ -192,9 +189,7 @@ class Normalizer:
 
         return method, strategy
 
-    def _build_custom_strategy(
-        self, cfg: Mapping[str, Any]
-    ) -> NormalizationStrategy:
+    def _build_custom_strategy(self, cfg: Mapping[str, Any]) -> NormalizationStrategy:
         """Instantiate a strategy from user-supplied callables."""
 
         if "normalize" not in cfg:

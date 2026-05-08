@@ -24,8 +24,11 @@ def select_dataset(config):
 
     if dataset_selection == "ExampleDataset":
         from opensr_srgan.data.example_data.example_dataset import ExampleDataset
+
         print("WARNING -- Using Example Dataset!")
-        print("This dataset is exclusively meant for demonstration and debugging, not training or evaluation.")
+        print(
+            "This dataset is exclusively meant for demonstration and debugging, not training or evaluation."
+        )
         print("Please use a proper dataset for any serious work.")
         path = "example_dataset/"
         ds_train = ExampleDataset(folder=path, phase="train")
@@ -37,7 +40,7 @@ def select_dataset(config):
         taco_file = getattr(config.Data, "sen2naip_taco_file", None)
         ds_train = SEN2NAIP(config=config, phase="train", taco_file=taco_file)
         ds_val = SEN2NAIP(config=config, phase="val", taco_file=taco_file)
-        
+
     elif dataset_selection == "LRHRFolderDataset":
         from opensr_srgan.data.lrhr_folder.lrhr_folder_dataset import LRHRFolderDataset
 
@@ -58,7 +61,6 @@ def select_dataset(config):
 
         ds_train = LRHRFolderDataset(config=config, root_folder=path, phase="train")
         ds_val = LRHRFolderDataset(config=config, root_folder=path, phase="val")
-
 
     else:
         # Centralized error so unsupported keys fail loudly & clearly.

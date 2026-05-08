@@ -182,15 +182,31 @@ class RCAB(nn.Module):
 class DenseBlock5(nn.Module):
     """ESRGAN-style dense block with five convolutions."""
 
-    def __init__(self, n_features: int = 64, growth_channels: int = 32, kernel_size: int = 3) -> None:
+    def __init__(
+        self, n_features: int = 64, growth_channels: int = 32, kernel_size: int = 3
+    ) -> None:
         super().__init__()
         padding = kernel_size // 2
         self.act = nn.LeakyReLU(0.2, inplace=True)
         self.c1 = nn.Conv2d(n_features, growth_channels, kernel_size, padding=padding)
-        self.c2 = nn.Conv2d(n_features + growth_channels, growth_channels, kernel_size, padding=padding)
-        self.c3 = nn.Conv2d(n_features + 2 * growth_channels, growth_channels, kernel_size, padding=padding)
-        self.c4 = nn.Conv2d(n_features + 3 * growth_channels, growth_channels, kernel_size, padding=padding)
-        self.c5 = nn.Conv2d(n_features + 4 * growth_channels, n_features, kernel_size, padding=padding)
+        self.c2 = nn.Conv2d(
+            n_features + growth_channels, growth_channels, kernel_size, padding=padding
+        )
+        self.c3 = nn.Conv2d(
+            n_features + 2 * growth_channels,
+            growth_channels,
+            kernel_size,
+            padding=padding,
+        )
+        self.c4 = nn.Conv2d(
+            n_features + 3 * growth_channels,
+            growth_channels,
+            kernel_size,
+            padding=padding,
+        )
+        self.c5 = nn.Conv2d(
+            n_features + 4 * growth_channels, n_features, kernel_size, padding=padding
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x1 = self.act(self.c1(x))
@@ -204,7 +220,9 @@ class DenseBlock5(nn.Module):
 class RRDB(nn.Module):
     """Residual-in-Residual Dense Block."""
 
-    def __init__(self, n_features: int = 64, growth_channels: int = 32, res_scale: float = 0.2) -> None:
+    def __init__(
+        self, n_features: int = 64, growth_channels: int = 32, res_scale: float = 0.2
+    ) -> None:
         super().__init__()
         self.db1 = DenseBlock5(n_features, growth_channels)
         self.db2 = DenseBlock5(n_features, growth_channels)
@@ -224,7 +242,9 @@ class LKA(nn.Module):
     def __init__(self, n_channels: int = 64) -> None:
         super().__init__()
         self.dw5 = nn.Conv2d(n_channels, n_channels, 5, padding=2, groups=n_channels)
-        self.dw7d = nn.Conv2d(n_channels, n_channels, 7, padding=9, dilation=3, groups=n_channels)
+        self.dw7d = nn.Conv2d(
+            n_channels, n_channels, 7, padding=9, dilation=3, groups=n_channels
+        )
         self.pw = nn.Conv2d(n_channels, n_channels, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -237,7 +257,9 @@ class LKA(nn.Module):
 class LKAResBlock(nn.Module):
     """Residual block incorporating Large-Kernel Attention."""
 
-    def __init__(self, n_channels: int = 64, kernel_size: int = 3, res_scale: float = 0.2) -> None:
+    def __init__(
+        self, n_channels: int = 64, kernel_size: int = 3, res_scale: float = 0.2
+    ) -> None:
         super().__init__()
         padding = kernel_size // 2
         self.conv1 = nn.Conv2d(n_channels, n_channels, kernel_size, padding=padding)
@@ -274,7 +296,9 @@ def _icnr_(weight: torch.Tensor, scale: int = 2) -> None:
         weight.copy_(subkernel)
 
 
-def make_upsampler(n_channels: int, scale: int, *, use_icnr: bool = False) -> nn.Sequential:
+def make_upsampler(
+    n_channels: int, scale: int, *, use_icnr: bool = False
+) -> nn.Sequential:
     """Create a pixel-shuffle upsampler matching the flexible generator implementation."""
 
     if scale < 1 or (scale & (scale - 1)) != 0:

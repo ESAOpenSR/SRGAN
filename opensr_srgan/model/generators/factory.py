@@ -152,7 +152,9 @@ def _warn_overridden_options(component: str, model: str, options: list[str]) -> 
         return
 
     joined = ", ".join(sorted(options))
-    print(f"[{component}:{model}] Ignoring unsupported configuration options: {joined}.")
+    print(
+        f"[{component}:{model}] Ignoring unsupported configuration options: {joined}."
+    )
 
 
 def _collect_overridden(generator_cfg: Any, *keys: str) -> list[str]:

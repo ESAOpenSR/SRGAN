@@ -121,7 +121,9 @@ def test_run_sen2_inference_invokes_pipeline(monkeypatch, inference_module):
 
 def test_run_sen2_inference_sets_cuda_devices(monkeypatch, inference_module):
     dummy_model = object()
-    monkeypatch.setattr(inference_module, "load_model", lambda **_: (dummy_model, "cuda"))
+    monkeypatch.setattr(
+        inference_module, "load_model", lambda **_: (dummy_model, "cuda")
+    )
 
     class DummyProcessor:
         def __init__(self, **kwargs):

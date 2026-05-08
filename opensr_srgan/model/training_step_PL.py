@@ -152,12 +152,20 @@ def training_step_PL2(self, batch, batch_idx):
             sr_discriminated_rel = sr_discriminated - real_mean
             hr_discriminated_rel = hr_discriminated - fake_mean
 
-            loss_real = self.adversarial_loss_criterion(hr_discriminated_rel, real_target)
-            loss_fake = self.adversarial_loss_criterion(sr_discriminated_rel, fake_target)
+            loss_real = self.adversarial_loss_criterion(
+                hr_discriminated_rel, real_target
+            )
+            loss_fake = self.adversarial_loss_criterion(
+                sr_discriminated_rel, fake_target
+            )
         else:
             # Keep loss scales consistent for non-relativistic BCE.
-            loss_real = self.adversarial_loss_criterion(hr_discriminated, real_target) * 0.5
-            loss_fake = self.adversarial_loss_criterion(sr_discriminated, fake_target) * 0.5
+            loss_real = (
+                self.adversarial_loss_criterion(hr_discriminated, real_target) * 0.5
+            )
+            loss_fake = (
+                self.adversarial_loss_criterion(sr_discriminated, fake_target) * 0.5
+            )
 
     # R1 Gradient Penalty
     r1_penalty = torch.zeros((), device=hr_imgs.device, dtype=hr_imgs.dtype)

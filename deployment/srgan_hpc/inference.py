@@ -10,7 +10,6 @@ from deployment.srgan_hpc.config import InferenceConfig, ProductConfig
 from deployment.srgan_hpc.naming import product_output_name
 from deployment.srgan_hpc.raster import compress_geotiff
 
-
 LOGGER = logging.getLogger("srgan-hpc")
 
 
@@ -48,19 +47,25 @@ def load_srgan_model(product: ProductConfig):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     map_location = torch.device(device)
     if product.model.config_path is not None:
-        return load_from_config(
-            product.model.config_path,
-            product.model.checkpoint_path,
-            map_location=map_location,
-            mode="eval",
-        ).to(device), device
+        return (
+            load_from_config(
+                product.model.config_path,
+                product.model.checkpoint_path,
+                map_location=map_location,
+                mode="eval",
+            ).to(device),
+            device,
+        )
     if product.model.preset is None:
         raise ValueError("Product model source must define preset or config_path")
-    return load_inference_model(
-        product.model.preset,
-        cache_dir=product.model.cache_dir,
-        map_location=map_location,
-    ).to(device), device
+    return (
+        load_inference_model(
+            product.model.preset,
+            cache_dir=product.model.cache_dir,
+            map_location=map_location,
+        ).to(device),
+        device,
+    )
 
 
 def run_inference(
@@ -75,7 +80,7 @@ def run_inference(
         import opensr_utils
     except ImportError as exc:  # pragma: no cover
         raise ImportError(
-            "srgan-hpc inference requires opensr-utils. Install with `pip install \"opensr-srgan[hpc]\"`."
+            'srgan-hpc inference requires opensr-utils. Install with `pip install "opensr-srgan[hpc]"`.'
         ) from exc
 
     model, device = load_srgan_model(product)
@@ -113,7 +118,12 @@ def run_inference(
         raise FileNotFoundError(f"Expected SR output at {final_sr_path}")
 
     compressed_path = output_dir / product_output_name(product_name)
-    LOGGER.info("compressing SR GeoTIFF product=%s input=%s output=%s", product_name, final_sr_path, compressed_path)
+    LOGGER.info(
+        "compressing SR GeoTIFF product=%s input=%s output=%s",
+        product_name,
+        final_sr_path,
+        compressed_path,
+    )
     compress_geotiff(final_sr_path, compressed_path, band_names=product.bands)
     final_sr_path.unlink(missing_ok=True)
     return compressed_path

@@ -5,7 +5,9 @@ from pathlib import Path
 from deployment.srgan_hpc.collect import collect_outputs
 
 
-def test_collect_outputs_preserves_patch_identity_for_duplicate_product_names(tmp_path: Path) -> None:
+def test_collect_outputs_preserves_patch_identity_for_duplicate_product_names(
+    tmp_path: Path,
+) -> None:
     run_dir = tmp_path / "run"
     for patch_id, marker in (("patch_000001", b"first"), ("patch_000002", b"second")):
         output_dir = run_dir / "patches" / patch_id / "outputs"
