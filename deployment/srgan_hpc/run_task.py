@@ -113,6 +113,14 @@ def run_task(manifest_path: Path, task_index: int | None = None) -> Path | None:
 
     final_output: Path
     if config["mode"] == "fused":
+        missing_products = [
+            name for name in ("rgbnir", "swir") if name not in outputs
+        ]
+        if missing_products:
+            raise RuntimeError(
+                "Fused output requires both rgbnir and swir products; missing: "
+                + ", ".join(missing_products)
+            )
         final_output = output_dir / fused_output_name()
         stack_geotiffs(
             reference_path=Path(outputs["rgbnir"]),
