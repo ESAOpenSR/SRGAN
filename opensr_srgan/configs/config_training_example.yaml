@@ -17,7 +17,7 @@ Data:
   prefetch_factor: 2          # Samples prefetched per worker (2 is stable default)
 
   # Dataset configuration
-  dataset_type: 'SISR_WW'       # Choose dataset type: ['cv', 'SPOT6', 'S2_6b', 'SISR_WW']
+  dataset_type: 'ExampleDataset'       # Choose dataset type: ['ExampleDataset']
   normalization: 'normalise_10k' # Normalization strategy for data processing
 
 
