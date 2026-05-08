@@ -87,3 +87,47 @@ def test_generator_content_loss_l2_variant(loss_config):
     result, metrics = loss_fn.return_loss(sr, hr)
     assert result is not None
     assert result.item() > 0
+
+
+def test_prepare_perceptual_input_uses_fixed_idx():
+    cfg = OmegaConf.create(
+        {
+            "Training": {
+                "Losses": {
+                    "perceptual_weight": 0.0,
+                    "fixed_idx": [3, 1, 0],
+                }
+            },
+            "Data": {"normalization": "identity"},
+        }
+    )
+    loss_fn = GeneratorContentLoss(cfg)
+    sr = torch.arange(1 * 5 * 2 * 2, dtype=torch.float32).reshape(1, 5, 2, 2)
+    hr = sr + 100
+
+    sr_3, hr_3 = loss_fn._prepare_perceptual_input(sr, hr)
+
+    assert torch.equal(sr_3[:, 0], sr[:, 3])
+    assert torch.equal(sr_3[:, 1], sr[:, 1])
+    assert torch.equal(sr_3[:, 2], sr[:, 0])
+    assert torch.equal(hr_3[:, 0], hr[:, 3])
+
+
+def test_prepare_perceptual_input_rejects_out_of_range_fixed_idx():
+    cfg = OmegaConf.create(
+        {
+            "Training": {
+                "Losses": {
+                    "perceptual_weight": 0.0,
+                    "fixed_idx": [0, 1, 5],
+                }
+            },
+            "Data": {"normalization": "identity"},
+        }
+    )
+    loss_fn = GeneratorContentLoss(cfg)
+    sr = torch.zeros(1, 5, 2, 2)
+    hr = torch.zeros(1, 5, 2, 2)
+
+    with pytest.raises(ValueError, match="fixed_idx"):
+        loss_fn._prepare_perceptual_input(sr, hr)
