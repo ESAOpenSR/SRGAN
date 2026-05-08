@@ -16,6 +16,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from opensr_srgan.utils.logging_helpers import plot_tensors
 from opensr_srgan.utils.model_descriptions import print_model_summary
 from opensr_srgan.utils.radiometrics import histogram as histogram_match
+from opensr_srgan.utils.checkpoint_loading import load_checkpoint
 from opensr_srgan.data.utils import Normalizer
 from opensr_srgan.model.generators import build_generator
 from opensr_srgan.model.model_blocks import ExponentialMovingAverage
@@ -1180,7 +1181,7 @@ class SRGAN_model(pl.LightningModule):
             RuntimeError: If deserialization or state loading fails.
         """
         target_device = self.device if map_location is None else map_location
-        ckpt = torch.load(ckpt_path, map_location=target_device)
+        ckpt = load_checkpoint(ckpt_path, map_location=target_device)
         state_dict = (
             ckpt["state_dict"]
             if isinstance(ckpt, dict) and "state_dict" in ckpt
