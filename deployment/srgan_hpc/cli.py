@@ -118,7 +118,7 @@ def _handle_submit_patch(args: argparse.Namespace) -> int:
 
 
 def _handle_submit_grid(args: argparse.Namespace) -> int:
-    from deployment.srgan_hpc.config import load_runtime_config
+    from deployment.srgan_hpc.config import load_runtime_config, patch_resolution
     from deployment.srgan_hpc.logging_utils import configure_logging
     from deployment.srgan_hpc.patching import build_patches
     from deployment.srgan_hpc.submit import submit_grid_run
