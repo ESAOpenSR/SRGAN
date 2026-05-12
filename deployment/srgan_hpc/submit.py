@@ -96,6 +96,7 @@ def _stage_patch_inputs(
             edge_size=product_edge_size(config, product),
             resolution=product.resolution,
             output_path=input_tif,
+            metadata_path=patch_root / "metadata" / f"{product_name}_staging.json",
         )
 
 

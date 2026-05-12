@@ -21,6 +21,7 @@ def test_default_config_enables_fused_products() -> None:
     assert patch_resolution(config) == 10
     assert product_edge_size(config, config.rgbnir) == 4096
     assert product_edge_size(config, config.swir) == 2048
+    assert config.staging.item_strategy == "mosaic_valid"
 
 
 def test_single_product_modes_select_expected_products() -> None:

@@ -45,6 +45,15 @@ def build_parser() -> argparse.ArgumentParser:
     collect_parser.add_argument("--run-dir", required=True)
     collect_parser.add_argument("--dest")
 
+    deliver_parser = subparsers.add_parser("deliver-bbox")
+    deliver_parser.add_argument("--run-root", required=True)
+    deliver_parser.add_argument("--west", type=float, required=True)
+    deliver_parser.add_argument("--south", type=float, required=True)
+    deliver_parser.add_argument("--east", type=float, required=True)
+    deliver_parser.add_argument("--north", type=float, required=True)
+    deliver_parser.add_argument("--dest")
+    deliver_parser.add_argument("--output-name", default="fused_sr.tif")
+
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--run-dir", required=True)
 
@@ -219,6 +228,19 @@ def _handle_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_deliver_bbox(args: argparse.Namespace) -> int:
+    from deployment.srgan_hpc.delivery import deliver_bbox_outputs
+
+    destination, delivered = deliver_bbox_outputs(
+        run_root=Path(args.run_root).resolve(),
+        bbox=(args.west, args.south, args.east, args.north),
+        destination=Path(args.dest).resolve() if args.dest else None,
+        output_name=args.output_name,
+    )
+    print(json.dumps({"destination": str(destination), "outputs": delivered}, indent=2))
+    return 0
+
+
 def _handle_status(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir).resolve()
     payload = {
@@ -248,6 +270,8 @@ def main() -> int:
         return _handle_run_task(args)
     if args.command == "collect":
         return _handle_collect(args)
+    if args.command == "deliver-bbox":
+        return _handle_deliver_bbox(args)
     if args.command == "status":
         return _handle_status(args)
     parser.error("Unhandled command")

@@ -9,6 +9,7 @@ import yaml
 
 DEFAULT_RATE_LIMIT_RETRY_DELAYS_SECONDS = [15, 30, 60, 120, 120, 120]
 RuntimeMode = Literal["rgbnir", "swir", "fused"]
+StagingItemStrategy = Literal["fixed_index", "mosaic_valid"]
 
 
 @dataclass(slots=True)
@@ -44,6 +45,9 @@ class AoiConfig:
 class StagingConfig:
     collection: str = "sentinel-2-l2a"
     image_index: int = 0
+    item_strategy: StagingItemStrategy = "mosaic_valid"
+    min_center_nonzero_fraction: float = 0.8
+    min_full_nonzero_fraction: float = 0.8
     edge_size: int = 4096
     nodata: int = 0
     output_dtype: str = "uint16"
@@ -261,6 +265,12 @@ def validate_runtime_config(config: RuntimeConfig) -> None:
         raise ValueError("staging.overlap_meters must be non-negative")
     if any(delay <= 0 for delay in config.staging.rate_limit_retry_delays_seconds):
         raise ValueError("staging.rate_limit_retry_delays_seconds must contain positive integers")
+    if config.staging.item_strategy not in {"fixed_index", "mosaic_valid"}:
+        raise ValueError("staging.item_strategy must be one of: fixed_index, mosaic_valid")
+    if not 0.0 <= config.staging.min_center_nonzero_fraction <= 1.0:
+        raise ValueError("staging.min_center_nonzero_fraction must be between 0 and 1")
+    if not 0.0 <= config.staging.min_full_nonzero_fraction <= 1.0:
+        raise ValueError("staging.min_full_nonzero_fraction must be between 0 and 1")
     if len(config.inference.window_size) != 2 or min(config.inference.window_size) <= 0:
         raise ValueError("inference.window_size must contain two positive integers")
     if config.inference.batch_size <= 0:

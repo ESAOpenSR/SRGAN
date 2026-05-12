@@ -45,6 +45,11 @@ srgan-hpc submit aoi \
   --start-date 2025-07-01 \
   --end-date 2025-07-03 \
   --dry-run
+
+srgan-hpc deliver-bbox \
+  --run-root /data/srgan_bbox_runs \
+  --west 77.592 --south 12.94 \
+  --east 77.6145 --north 13.3929
 ```
 
 ## Runtime Modes
@@ -54,3 +59,7 @@ srgan-hpc submit aoi \
 - `mode: fused` runs both and writes `fused_sr.tif` with band order `B04, B03, B02, B08, B05, B06, B07, B8A, B11, B12`.
 
 AOI submission accepts either a `.shp` file or a directory containing exactly one `.shp`; sidecar files like `.shx`, `.dbf`, and `.prj` must sit alongside it.
+
+`staging.item_strategy: mosaic_valid` is the default for STAC staging. When a Cubo cutout intersects multiple Sentinel-2 tiles, the launcher ranks candidate items by valid-data coverage near the cutout center, then fills remaining nodata pixels from the other candidates before inference. Use `item_strategy: fixed_index` only when you explicitly want legacy `staging.image_index` behavior.
+
+`deliver-bbox` merges patch outputs per run and writes clipped GeoTIFFs for sharing in GIS tools.
