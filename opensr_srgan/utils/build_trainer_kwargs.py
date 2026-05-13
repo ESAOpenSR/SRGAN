@@ -102,12 +102,8 @@ def build_lightning_kwargs(
         if ndev > 1:
             # GAN manual optimization updates only one optimizer branch at a time,
             # so DDP must track unused params on each step.
-            find_unused = bool(
-                getattr(config.Training, "find_unused_parameters", True)
-            )
-            strategy = (
-                "ddp_find_unused_parameters_true" if find_unused else "ddp"
-            )
+            find_unused = bool(getattr(config.Training, "find_unused_parameters", True))
+            strategy = "ddp_find_unused_parameters_true" if find_unused else "ddp"
         else:
             strategy = None
 
@@ -124,7 +120,6 @@ def build_lightning_kwargs(
         log_every_n_steps=50,
         logger=[logger],
         callbacks=[checkpoint_callback, early_stop_callback],
-        gradient_clip_val=config.Optimizers.gradient_clip_val,
     )
 
     # ``strategy`` defaults to ``None`` on CPU runs.  Lightning does not accept

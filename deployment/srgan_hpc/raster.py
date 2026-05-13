@@ -71,7 +71,9 @@ def _write_band_names(dataset, band_names: list[str]) -> None:
     dataset.update_tags(band_names=",".join(band_names))
 
 
-def compress_geotiff(src_path: Path, dest_path: Path, band_names: list[str] | None = None) -> Path:
+def compress_geotiff(
+    src_path: Path, dest_path: Path, band_names: list[str] | None = None
+) -> Path:
     from rasterio.shutil import copy as rio_copy
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,9 +109,14 @@ def stack_geotiffs(
     from rasterio.enums import Resampling
     from rasterio.warp import reproject
 
-    with rasterio.open(reference_path) as ref, rasterio.open(secondary_path) as secondary:
+    with (
+        rasterio.open(reference_path) as ref,
+        rasterio.open(secondary_path) as secondary,
+    ):
         profile = ref.profile.copy()
-        secondary_data = np.empty((secondary.count, ref.height, ref.width), dtype=ref.dtypes[0])
+        secondary_data = np.empty(
+            (secondary.count, ref.height, ref.width), dtype=ref.dtypes[0]
+        )
         for band_index in range(secondary.count):
             reproject(
                 source=rasterio.band(secondary, band_index + 1),

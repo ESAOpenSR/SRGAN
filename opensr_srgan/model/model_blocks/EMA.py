@@ -160,7 +160,9 @@ class ExponentialMovingAverage:
             RuntimeError: If EMA weights are already applied and not yet restored.
         """
         if self.collected_params or self.collected_buffers:
-            raise RuntimeError("EMA weights already applied; call restore() before reapplying.")
+            raise RuntimeError(
+                "EMA weights already applied; call restore() before reapplying."
+            )
 
         for name, param in model.named_parameters():
             if not param.requires_grad or name not in self.shadow_params:
@@ -250,8 +252,12 @@ class ExponentialMovingAverage:
             "decay": self.decay,
             "num_updates": self.num_updates,
             "device": str(self.device) if self.device is not None else None,
-            "shadow_params": {k: v.detach().cpu() for k, v in self.shadow_params.items()},
-            "shadow_buffers": {k: v.detach().cpu() for k, v in self.shadow_buffers.items()},
+            "shadow_params": {
+                k: v.detach().cpu() for k, v in self.shadow_params.items()
+            },
+            "shadow_buffers": {
+                k: v.detach().cpu() for k, v in self.shadow_buffers.items()
+            },
         }
 
     def load_state_dict(self, state_dict: Dict[str, object]) -> None:
@@ -275,11 +281,19 @@ class ExponentialMovingAverage:
         self.device = torch.device(device_str) if device_str is not None else None
 
         self.shadow_params = {
-            name: tensor.clone().to(self.device) if self.device is not None else tensor.clone()
+            name: (
+                tensor.clone().to(self.device)
+                if self.device is not None
+                else tensor.clone()
+            )
             for name, tensor in state_dict.get("shadow_params", {}).items()
         }
         self.shadow_buffers = {
-            name: tensor.clone().to(self.device) if self.device is not None else tensor.clone()
+            name: (
+                tensor.clone().to(self.device)
+                if self.device is not None
+                else tensor.clone()
+            )
             for name, tensor in state_dict.get("shadow_buffers", {}).items()
         }
 

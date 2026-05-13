@@ -42,7 +42,7 @@ plugins:
       handlers:
         python:
           options:
-            docstring_style: google
+            docstring_style: auto
             show_source: true
 
 markdown_extensions:
@@ -66,8 +66,14 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.tasklist
   - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
 
 edit_uri: edit/main/docs/
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 
 extra:
@@ -76,18 +82,22 @@ extra:
       link: https://github.com/ESAOpenSR/SRGAN
   generator: false
 
-nav:  
-  - Home:
-      - Overview: index.md
+nav:
+  - Overview:
+      - SRGAN Docs: index.md
       - Getting Started: getting-started.md
+      - Results: results.md
+
+  - Usage:
       - Inference Guide: inference.md
-      - Architecture: architecture.md
       - Configuration: configuration.md
       - Data Preparation: data.md
+
+  - Training:
       - Training Workflow: training.md
       - Trainer Details: trainer-details.md
       - Training Guideline: training-guideline.md
-      - Results: results.md
+      - Architecture: architecture.md
 
   - API reference:
       - Overview: api-reference/index.md

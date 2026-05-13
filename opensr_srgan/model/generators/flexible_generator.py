@@ -5,6 +5,7 @@ Provides a modular SR backbone with pluggable residual blocks:
 and `lka` (large-kernel). Uses a head → body → tail design with PixelShuffle
 upsampling for {×2, ×4, ×8}.
 """
+
 from __future__ import annotations
 
 from typing import Callable, Dict

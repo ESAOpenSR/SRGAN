@@ -8,7 +8,9 @@ from deployment.srgan_hpc.patching import Patch
 from deployment.srgan_hpc.submit import submit_patch_run
 
 
-def test_submit_patch_dry_run_writes_product_inputs_and_manifest(tmp_path: Path) -> None:
+def test_submit_patch_dry_run_writes_product_inputs_and_manifest(
+    tmp_path: Path,
+) -> None:
     config = RuntimeConfig(output_root=tmp_path / "runs", mode="fused")
     patch = Patch(
         patch_id="patch_000001",

@@ -103,7 +103,8 @@ class GeneratorContentLoss(nn.Module):
         fixed_idx = _cfg_get(cfg, ["Training", "Losses", "fixed_idx"], None)
         if fixed_idx is not None:
             fixed_idx = torch.as_tensor(fixed_idx, dtype=torch.long)
-            assert fixed_idx.numel() == 3, "fixed_idx must have length 3"
+            if fixed_idx.numel() != 3:
+                raise ValueError("fixed_idx must have length 3")
         self.register_buffer(
             "fixed_idx", fixed_idx if fixed_idx is not None else None, persistent=False
         )
@@ -241,7 +242,7 @@ class GeneratorContentLoss(nn.Module):
 
     def _prepare_perceptual_input(
         self, sr: torch.Tensor, hr: torch.Tensor
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Select three channels for perceptual computation.
 
         If the input has exactly 3 channels, returns them unchanged. Otherwise,
@@ -252,9 +253,9 @@ class GeneratorContentLoss(nn.Module):
             x (torch.Tensor): Input tensor, shape ``(B, C, H, W)``.
 
         Returns:
-            torch.Tensor: Tensor with three channels, shape ``(B, 3, H, W)``.
+            tuple[torch.Tensor, torch.Tensor]: SR and HR tensors with three channels.
         """
-        B, C, H, W = sr.shape
+        _, C, _, _ = sr.shape
         if C == 1:
             # repeat single channel 3 times
             sr = sr.repeat(1, 3, 1, 1)
@@ -269,8 +270,15 @@ class GeneratorContentLoss(nn.Module):
             # already 3 channels, return as is
             return sr, hr
         else:
-            # when over 3 channels, randomly select 3 unique indices
-            idx = torch.randperm(C, device=sr.device)[:3]
+            if self.fixed_idx is not None:
+                idx = self.fixed_idx.to(sr.device)
+                if int(idx.min()) < 0 or int(idx.max()) >= C:
+                    raise ValueError(
+                        f"fixed_idx values must be valid channel indices for C={C}."
+                    )
+            else:
+                # when over 3 channels, randomly select 3 unique indices
+                idx = torch.randperm(C, device=sr.device)[:3]
             sr = sr[:, idx, :, :]
             hr = hr[:, idx, :, :]
             return sr, hr

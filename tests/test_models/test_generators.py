@@ -137,7 +137,10 @@ def test_stochastic_generator_warns_about_block_type(capsys):
 
     build_generator(config)
     captured = capsys.readouterr()
-    assert "[Generator:stochastic_gan] Ignoring unsupported configuration options: block_type." in captured.out
+    assert (
+        "[Generator:stochastic_gan] Ignoring unsupported configuration options: block_type."
+        in captured.out
+    )
 
 
 def test_esrgan_generator_warns_about_srresnet_specific_options(capsys):
@@ -162,3 +165,29 @@ def test_esrgan_generator_warns_about_srresnet_specific_options(capsys):
         "[Generator:esrgan] Ignoring unsupported configuration options: block_type, large_kernel_size, small_kernel_size."
         in captured.out
     )
+
+
+def test_stochastic_generator_forward_noise_paths():
+    generator = StochasticGenerator(
+        in_channels=2,
+        n_channels=4,
+        n_blocks=1,
+        small_kernel=3,
+        large_kernel=3,
+        scale=2,
+        noise_dim=5,
+    )
+    lr = torch.randn(1, 2, 4, 4)
+
+    sampled = generator.sample_noise(batch_size=1, device=lr.device, dtype=lr.dtype)
+    sr_with_noise, returned_noise = generator(lr, noise=sampled, return_noise=True)
+    sr_sampled = generator(lr)
+
+    assert returned_noise is sampled
+    assert sr_with_noise.shape == (1, 2, 8, 8)
+    assert sr_sampled.shape == (1, 2, 8, 8)
+
+
+def test_stochastic_generator_rejects_unsupported_scale():
+    with pytest.raises(ValueError, match="scale must be one of"):
+        StochasticGenerator(scale=3)

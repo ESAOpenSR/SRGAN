@@ -4,6 +4,8 @@ import math
 import torch
 from torch import nn
 
+from opensr_srgan.utils.checkpoint_loading import load_checkpoint
+
 from ..model_blocks import (
     ConvolutionalBlock,
     ResidualBlock,
@@ -51,7 +53,7 @@ class SRResNet(nn.Module):
 
         scaling_factor = int(scaling_factor)
         if scaling_factor not in {2, 4, 8}:
-            raise AssertionError("The scaling factor must be 2, 4, or 8!")
+            raise ValueError("The scaling factor must be 2, 4, or 8!")
 
         self.conv_block1 = ConvolutionalBlock(
             in_channels=in_channels,
@@ -153,7 +155,7 @@ class Generator(nn.Module):
 
     def initialize_with_srresnet(self, srresnet_checkpoint: str) -> None:
         """Initialize the generator weights from a pretrained SRResNet checkpoint."""
-        srresnet = torch.load(srresnet_checkpoint)["model"]
+        srresnet = load_checkpoint(srresnet_checkpoint)["model"]
         self.net.load_state_dict(srresnet.state_dict())
         print("\nLoaded weights from pre-trained SRResNet.\n")
 

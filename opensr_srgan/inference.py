@@ -18,6 +18,7 @@ Typical usage
 ...     gpus=[0]
 ... )
 """
+
 import os
 from pathlib import Path
 
@@ -61,9 +62,7 @@ def load_model(config_path=None, ckpt_path=None, device=None):
     model = SRGAN_model(config=config_path).eval().to(device)
 
     if ckpt_path:
-        model.load_weights_from_checkpoint(
-            ckpt_path, strict=False, map_location=device
-        )
+        model.load_weights_from_checkpoint(ckpt_path, strict=False, map_location=device)
 
     return model, device
 

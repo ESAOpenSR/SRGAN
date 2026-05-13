@@ -19,7 +19,7 @@ def test_truncated_vgg19_valid_layers():
 
 def test_truncated_vgg19_invalid_layers():
     # impossible layer combination should raise
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         TruncatedVGG19(i=10, j=10)
 
 

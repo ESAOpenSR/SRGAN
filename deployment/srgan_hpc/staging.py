@@ -11,7 +11,6 @@ from deployment.srgan_hpc.config import StagingConfig
 from deployment.srgan_hpc.manifests import write_json
 from deployment.srgan_hpc.raster import ensure_proj_env, parse_epsg, scale_to_uint16
 
-
 LOGGER = logging.getLogger("srgan-hpc")
 
 
@@ -148,7 +147,7 @@ def create_cube_with_retry(
         import rioxarray  # noqa: F401
     except ImportError as exc:  # pragma: no cover
         raise ImportError(
-            "srgan-hpc staging requires optional dependencies. Install with `pip install \"opensr-srgan[hpc]\"`."
+            'srgan-hpc staging requires optional dependencies. Install with `pip install "opensr-srgan[hpc]"`.'
         ) from exc
 
     for attempt, delay in enumerate(config.rate_limit_retry_delays_seconds, start=1):
@@ -346,5 +345,7 @@ def stage_cutout(
     )
     if metadata_path is not None:
         write_json(metadata_path, diagnostics)
-    LOGGER.info("wrote staged cutout lat=%s lon=%s output=%s", latitude, longitude, output_path)
+    LOGGER.info(
+        "wrote staged cutout lat=%s lon=%s output=%s", latitude, longitude, output_path
+    )
     return output_path.resolve()

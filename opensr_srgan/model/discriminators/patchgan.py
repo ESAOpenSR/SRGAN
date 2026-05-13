@@ -8,6 +8,7 @@ than entire images, allowing it to focus on fine-scale realism and local
 texture consistency — an approach widely used in image-to-image translation
 and super-resolution GANs.
 """
+
 from __future__ import annotations
 
 import functools
@@ -88,6 +89,7 @@ class NLayerDiscriminator(nn.Module):
     - Each layer uses a 4×4 convolution kernel with stride 2 (except final layers).
     - The final output map has spatial dimensions proportional to the input size.
     """
+
     def __init__(
         self, input_nc: int, ndf: int = 64, n_layers: int = 3, norm_layer=nn.BatchNorm2d
     ):
@@ -196,6 +198,7 @@ class PatchGANDiscriminator(nn.Module):
     >>> y.shape
     torch.Size([4, 1, 14, 14])
     """
+
     def __init__(
         self,
         input_nc: int,

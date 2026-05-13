@@ -6,7 +6,6 @@ import types
 import pytest
 from omegaconf import OmegaConf
 
-
 if "pytorch_lightning" not in sys.modules:
     # Provide a lightweight stub so the helper can be imported without the heavy
     # Lightning dependency.  Only the constructor and ``fit`` signatures are
@@ -39,7 +38,7 @@ if "pytorch_lightning" not in sys.modules:
 from opensr_srgan.utils.build_trainer_kwargs import build_lightning_kwargs
 
 
-def _make_config(**training_overrides):
+def _make_config(gradient_clip_val=0.0, **training_overrides):
     """Return a minimal OmegaConf training config for the helper."""
 
     base_training = {
@@ -58,7 +57,7 @@ def _make_config(**training_overrides):
             # clipping, so provide the minimal structure required by the real
             # configuration files.
             "Optimizers": {
-                "gradient_clip_val": 0.0,
+                "gradient_clip_val": gradient_clip_val,
             },
         }
     )
@@ -172,3 +171,12 @@ def test_non_sequence_gpu_config_falls_back_to_single_device():
 
     assert trainer_kwargs["devices"] == 1
     assert "strategy" not in trainer_kwargs
+
+
+def test_gradient_clipping_is_not_forwarded_to_trainer():
+    """Manual optimization handles clipping in the training step, not Trainer."""
+
+    config = _make_config(gradient_clip_val=1.0)
+    trainer_kwargs, _ = _call_builder(config)
+
+    assert "gradient_clip_val" not in trainer_kwargs

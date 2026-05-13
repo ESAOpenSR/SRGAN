@@ -45,6 +45,12 @@ def train(config):
         raise TypeError(
             "Config must be a filepath (str or Path), dict, or OmegaConf object."
         )
+
+    seed = getattr(config.Training, "seed", None)
+    if seed is not None:
+        seed_everything = getattr(pl, "seed_everything", None)
+        if seed_everything is not None:
+            seed_everything(int(seed), workers=True)
     #############################################################################################################
 
     " LOAD MODEL "
@@ -147,20 +153,21 @@ def train(config):
     #############################################################################################################
     from opensr_srgan.utils.build_trainer_kwargs import build_lightning_kwargs
 
-    trainer_kwargs, fit_kwargs = (
-        build_lightning_kwargs(
-            config=config,
-            logger=wandb_logger,
-            checkpoint_callback=checkpoint_callback,
-            early_stop_callback=early_stop_callback,
-            resume_ckpt=resume_ckpt,
-        )
+    trainer_kwargs, fit_kwargs = build_lightning_kwargs(
+        config=config,
+        logger=wandb_logger,
+        checkpoint_callback=checkpoint_callback,
+        early_stop_callback=early_stop_callback,
+        resume_ckpt=resume_ckpt,
     )
 
     # Start training
     trainer = pl.Trainer(**trainer_kwargs)
-    trainer.fit(model, datamodule=pl_datamodule, **fit_kwargs)
-    wandb.finish()
+    try:
+        trainer.fit(model, datamodule=pl_datamodule, **fit_kwargs)
+    finally:
+        if config.Logging.wandb.enabled:
+            wandb.finish()
 
 
 # Run training if called from command line
@@ -177,7 +184,7 @@ if __name__ == "__main__":
     --config, -c : str
         Path to YAML config. Defaults to `opensr_srgan/configs/config_10m.yaml`.
     """
-    
+
     import argparse
     from multiprocessing import freeze_support
 

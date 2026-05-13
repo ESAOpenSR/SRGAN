@@ -1,5 +1,3 @@
-
-
 import matplotlib
 import numpy as np
 import pytest
@@ -24,7 +22,7 @@ def test_to_numpy_img_variants_and_validation():
 
     multi = torch.arange(5 * 2 * 2, dtype=torch.float32).view(5, 2, 2)
     multi_img = logging_helpers._to_numpy_img(multi)
-    assert multi_img.shape == (2, 2, 5)
+    assert multi_img.shape == (2, 2, 3)
 
     with pytest.raises(ValueError):
         logging_helpers._to_numpy_img(torch.zeros(2, 2))
@@ -51,3 +49,21 @@ def test_plot_tensors_grayscale_batch():
     result = logging_helpers.plot_tensors(lr, sr, hr, title="Gray")
 
     assert isinstance(result, Image.Image)
+
+
+def test_plot_tensors_drops_nir_before_stretch(monkeypatch):
+    seen_shapes = []
+
+    def fake_stretch(tensor):
+        seen_shapes.append(tuple(tensor.shape))
+        return tensor
+
+    monkeypatch.setattr(logging_helpers, "minmax_percentile", fake_stretch)
+
+    rgbnir = torch.zeros(1, 4, 4, 4)
+    rgbnir[:, 3] = 10000.0
+
+    result = logging_helpers.plot_tensors(rgbnir, rgbnir, rgbnir, title="RGB-NIR")
+
+    assert isinstance(result, Image.Image)
+    assert seen_shapes == [(1, 3, 4, 4), (1, 3, 4, 4), (1, 3, 4, 4)]

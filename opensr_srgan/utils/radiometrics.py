@@ -7,6 +7,11 @@ import torch
 from .tensor_conversions import tensor_to_numpy
 
 
+def _validate_stage(stage: str) -> None:
+    if stage not in {"norm", "denorm"}:
+        raise ValueError("stage must be one of {'norm', 'denorm'}")
+
+
 # -------------------------------------------------------------------------
 # SENTINEL-2 NORMALIZATION HELPERS
 # -------------------------------------------------------------------------
@@ -31,7 +36,7 @@ def normalise_s2(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
     torch.Tensor
         The normalized or denormalized image tensor.
     """
-    assert stage in ["norm", "denorm"]
+    _validate_stage(stage)
     value = 3.0  # reference scaling factor
 
     if stage == "norm":
@@ -68,7 +73,7 @@ def normalise_10k(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
     torch.Tensor
         Scaled tensor.
     """
-    assert stage in ["norm", "denorm"]
+    _validate_stage(stage)
 
     if stage == "norm":
         im = im / 10000.0
@@ -97,7 +102,7 @@ def zero_one_signed(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
         Range-adjusted tensor.
     """
 
-    assert stage in ["norm", "denorm"]
+    _validate_stage(stage)
 
     if stage == "norm":
         return torch.clamp((im * 2.0) - 1.0, -1.0, 1.0)
@@ -126,7 +131,7 @@ def normalise_10k_signed(im: torch.Tensor, stage: str = "norm") -> torch.Tensor:
         Tensor in the requested range.
     """
 
-    assert stage in ["norm", "denorm"]
+    _validate_stage(stage)
 
     if stage == "norm":
         scaled = normalise_10k(im, stage="norm")
@@ -157,7 +162,7 @@ def sen2_stretch(im: torch.Tensor) -> torch.Tensor:
 
 
 def minmax_percentile(
-    tensor: torch.Tensor, pmin: float = 2, pmax: float = 98
+    tensor: torch.Tensor, pmin: float = 2, pmax: float = 98, eps: float = 1e-12
 ) -> torch.Tensor:
     """
     Perform percentile-based min-max normalization to [0, 1].
@@ -180,14 +185,16 @@ def minmax_percentile(
     """
     min_val = torch.quantile(tensor, pmin / 100.0)
     max_val = torch.quantile(tensor, pmax / 100.0)
-    tensor = (tensor - min_val) / (max_val - min_val)
-    return tensor
+    denom = max_val - min_val
+    if not torch.isfinite(denom) or denom.abs() <= eps:
+        return torch.zeros_like(tensor)
+    return torch.clamp((tensor - min_val) / denom, 0.0, 1.0)
 
 
 # -------------------------------------------------------------------------
 # GENERAL UTILITIES
 # -------------------------------------------------------------------------
-def minmax(img: torch.Tensor) -> torch.Tensor:
+def minmax(img: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
     """
     Standard min-max normalization to [0, 1] over the entire tensor.
 
@@ -203,8 +210,10 @@ def minmax(img: torch.Tensor) -> torch.Tensor:
     """
     min_val = torch.min(img)
     max_val = torch.max(img)
-    normalized_img = (img - min_val) / (max_val - min_val)
-    return normalized_img
+    denom = max_val - min_val
+    if not torch.isfinite(denom) or denom.abs() <= eps:
+        return torch.zeros_like(img)
+    return torch.clamp((img - min_val) / denom, 0.0, 1.0)
 
 
 # ---------------------------------------------------------------
@@ -239,10 +248,8 @@ def histogram(reference: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """
 
     # Ensure both inputs have correct dimensionality: either (C,H,W) or (B,C,H,W)
-    assert target.ndim in (3, 4) and reference.ndim in (
-        3,
-        4,
-    ), "Expected (C,H,W) or (B,C,H,W) for both reference and target"
+    if target.ndim not in (3, 4) or reference.ndim not in (3, 4):
+        raise ValueError("Expected (C,H,W) or (B,C,H,W) for both reference and target")
 
     # Save device/dtype for conversion back later
     device, dtype = target.device, target.dtype
@@ -257,7 +264,8 @@ def histogram(reference: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     B_tgt, C_tgt, H_tgt, W_tgt = tgt.shape
 
     # Channel sanity check
-    assert C_ref == C_tgt, f"Channel mismatch: reference={C_ref}, target={C_tgt}"
+    if C_ref != C_tgt:
+        raise ValueError(f"Channel mismatch: reference={C_ref}, target={C_tgt}")
 
     # --- Resize reference spatially to match target ---
     # Uses bilinear interpolation, no corner alignment, safe for float data
@@ -348,14 +356,21 @@ def moment(reference: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     for ref_ch, tgt_ch in zip(reference_np, target_np):
 
         # --- Compute per-channel mean and std ---
-        ref_mean = np.mean(ref_ch)
-        tgt_mean = np.mean(tgt_ch)
-        ref_std = np.std(ref_ch)
-        tgt_std = np.std(tgt_ch)
+        ref_mean = np.nanmean(ref_ch)
+        tgt_mean = np.nanmean(tgt_ch)
+        ref_std = np.nanstd(ref_ch)
+        tgt_std = np.nanstd(tgt_ch)
 
         # --- Apply moment matching formula ---
         # Normalize target → scale by reference std → shift by reference mean
-        matched_channel = (((tgt_ch - tgt_mean) / tgt_std) * ref_std) + ref_mean
+        if not np.isfinite(ref_mean):
+            ref_mean = 0.0
+        if not np.isfinite(tgt_mean) or not np.isfinite(tgt_std) or tgt_std <= 1e-12:
+            matched_channel = np.full_like(tgt_ch, ref_mean)
+        else:
+            if not np.isfinite(ref_std):
+                ref_std = 0.0
+            matched_channel = (((tgt_ch - tgt_mean) / tgt_std) * ref_std) + ref_mean
         matched_channels.append(matched_channel)
 
     matched_np = np.stack(matched_channels, axis=0)

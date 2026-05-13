@@ -5,6 +5,7 @@ import torch
 from opensr_srgan.data.utils.normalizer import Normalizer
 from tests.helpers import custom_norms
 
+
 def _build_cfg(value):
     return SimpleNamespace(Data=SimpleNamespace(normalization=value))
 

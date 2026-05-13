@@ -93,9 +93,7 @@ def train_module(monkeypatch):
     callbacks_mod.ModelCheckpoint = ModelCheckpoint
     monkeypatch.setitem(sys.modules, "pytorch_lightning.callbacks", callbacks_mod)
 
-    early_stopping_mod = types.ModuleType(
-        "pytorch_lightning.callbacks.early_stopping"
-    )
+    early_stopping_mod = types.ModuleType("pytorch_lightning.callbacks.early_stopping")
 
     class EarlyStopping:
         def __init__(self, *args, **kwargs):
@@ -123,7 +121,9 @@ def train_module(monkeypatch):
 
         @classmethod
         def load_from_checkpoint(cls, *args, **kwargs):  # pragma: no cover
-            raise AssertionError("train() must not use class-level load_from_checkpoint")
+            raise AssertionError(
+                "train() must not use class-level load_from_checkpoint"
+            )
 
         def load_weights_from_checkpoint(
             self, ckpt_path, strict=False, map_location=None
@@ -234,8 +234,7 @@ def test_train_accepts_yaml_path_config(train_module, tmp_path):
     train_mod, state = train_module
 
     cfg_path = tmp_path / "cfg.yaml"
-    cfg_path.write_text(
-        """
+    cfg_path.write_text("""
 Model:
   in_bands: 4
   load_checkpoint: false
@@ -251,8 +250,7 @@ Logging:
     enabled: false
     project: unit-tests
     entity: unit
-"""
-    )
+""")
 
     train_mod.train(str(cfg_path))
 
@@ -284,7 +282,9 @@ def test_train_uses_wandb_logger_and_saves_config_when_global_zero(
 
     assert state["builder_logger"].__class__.__name__ == "WandbLogger"
     config_files = list((tmp_path / "logs" / "unit-tests").glob("*/config.yaml"))
-    assert config_files, "expected config.yaml to be written in logs/unit-tests/<timestamp>/"
+    assert (
+        config_files
+    ), "expected config.yaml to be written in logs/unit-tests/<timestamp>/"
 
 
 def test_train_module_main_guard(monkeypatch):
@@ -301,7 +301,11 @@ def test_train_module_main_guard(monkeypatch):
             state["trainer_kwargs"] = kwargs
 
         def fit(self, model, datamodule=None, **kwargs):
-            state["fit_call"] = {"model": model, "datamodule": datamodule, "kwargs": kwargs}
+            state["fit_call"] = {
+                "model": model,
+                "datamodule": datamodule,
+                "kwargs": kwargs,
+            }
 
     pl_mod.Trainer = DummyTrainer
     pl_mod.__version__ = "2.2.0"
@@ -348,9 +352,7 @@ def test_train_module_main_guard(monkeypatch):
     monkeypatch.setitem(sys.modules, "opensr_srgan.data.dataset_selector", dataset_mod)
 
     trainer_kwargs_mod = types.ModuleType("opensr_srgan.utils.build_trainer_kwargs")
-    trainer_kwargs_mod.build_lightning_kwargs = (
-        lambda **kwargs: ({"max_epochs": 1}, {})
-    )
+    trainer_kwargs_mod.build_lightning_kwargs = lambda **kwargs: ({"max_epochs": 1}, {})
     monkeypatch.setitem(
         sys.modules, "opensr_srgan.utils.build_trainer_kwargs", trainer_kwargs_mod
     )

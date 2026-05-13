@@ -71,7 +71,9 @@ def test_load_from_config_loads_state_and_ema(monkeypatch, tmp_path):
     assert model.is_eval is True
 
 
-def test_load_from_config_without_checkpoint_still_returns_eval_model(monkeypatch, tmp_path):
+def test_load_from_config_without_checkpoint_still_returns_eval_model(
+    monkeypatch, tmp_path
+):
     config_path = tmp_path / "config.yaml"
     config_path.write_text("model: test")
 
@@ -94,7 +96,9 @@ def test_load_inference_model_raises_for_unknown_preset():
         _factory.load_inference_model("unknown-model")
 
 
-def test_load_inference_model_downloads_and_calls_load_from_config(monkeypatch, tmp_path):
+def test_load_inference_model_downloads_and_calls_load_from_config(
+    monkeypatch, tmp_path
+):
     calls = []
 
     def fake_hf_hub_download(repo_id, filename, cache_dir=None):
@@ -107,7 +111,9 @@ def test_load_inference_model_downloads_and_calls_load_from_config(monkeypatch, 
 
     sentinel = object()
 
-    def fake_load_from_config(config_path, checkpoint_uri, *, map_location=None, mode="train"):
+    def fake_load_from_config(
+        config_path, checkpoint_uri, *, map_location=None, mode="train"
+    ):
         assert config_path.endswith(".yaml")
         assert checkpoint_uri.endswith(".ckpt")
         assert map_location == "cpu"
@@ -116,7 +122,9 @@ def test_load_inference_model_downloads_and_calls_load_from_config(monkeypatch, 
 
     monkeypatch.setattr(_factory, "load_from_config", fake_load_from_config)
 
-    model = _factory.load_inference_model("rgb_nir", cache_dir=tmp_path, map_location="cpu")
+    model = _factory.load_inference_model(
+        "rgb_nir", cache_dir=tmp_path, map_location="cpu"
+    )
 
     assert model is sentinel
     assert len(calls) == 2

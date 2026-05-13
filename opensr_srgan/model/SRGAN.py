@@ -16,9 +16,20 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from opensr_srgan.utils.logging_helpers import plot_tensors
 from opensr_srgan.utils.model_descriptions import print_model_summary
 from opensr_srgan.utils.radiometrics import histogram as histogram_match
+from opensr_srgan.utils.checkpoint_loading import load_checkpoint
 from opensr_srgan.data.utils import Normalizer
 from opensr_srgan.model.generators import build_generator
 from opensr_srgan.model.model_blocks import ExponentialMovingAverage
+
+
+def _looks_like_zero_one_reflectance(tensor: torch.Tensor) -> bool:
+    """Return True when a tensor appears to already be scaled to 0..1."""
+    if not torch.is_floating_point(tensor):
+        return False
+    finite = tensor[torch.isfinite(tensor)]
+    if finite.numel() == 0:
+        return False
+    return bool((finite.min() >= 0.0).item() and (finite.max() <= 1.5).item())
 
 
 #############################################################################################################
@@ -135,10 +146,8 @@ class SRGAN_model(pl.LightningModule):
             raise TypeError(
                 "Config must be a filepath (str or Path), dict, or OmegaConf object."
             )
-        assert mode in {
-            "train",
-            "eval",
-        }, "Mode must be 'train' or 'eval'"  # validate mode
+        if mode not in {"train", "eval"}:
+            raise ValueError("Mode must be 'train' or 'eval'")
 
         # ======================================================================
         # SECTION: Set Variables
@@ -408,13 +417,19 @@ class SRGAN_model(pl.LightningModule):
         Raises:
             AssertionError: If the generator is not in evaluation mode (`.eval()`).
         """
-        assert (
-            self.generator.training is False
-        ), "Generator must be in eval mode for prediction."  # ensure eval mode
+        if self.generator.training:
+            raise RuntimeError("Generator must be in eval mode for prediction.")
         lr_imgs = lr_imgs.to(self.device)  # move to device (GPU or CPU)
+        input_already_normalized = (
+            getattr(self.normalizer, "method", None) == "normalise_10k"
+            and _looks_like_zero_one_reflectance(lr_imgs)
+        )
 
         # --- Normalize inputs according to configuration ---
-        normalized_lr = self.normalizer.normalize(lr_imgs)
+        if input_already_normalized:
+            normalized_lr = lr_imgs
+        else:
+            normalized_lr = self.normalizer.normalize(lr_imgs)
 
         # --- Perform super-resolution (optionally using EMA weights) ---
         context = (
@@ -429,7 +444,8 @@ class SRGAN_model(pl.LightningModule):
         sr_imgs = histogram_match(normalized_lr, sr_imgs)  # match distributions
 
         # --- Denormalize output back to original range ---
-        sr_imgs = self.normalizer.denormalize(sr_imgs)
+        if not input_already_normalized:
+            sr_imgs = self.normalizer.denormalize(sr_imgs)
 
         # --- Move to CPU and return ---
         sr_imgs = sr_imgs.cpu().detach()  # detach from graph for inference output
@@ -991,8 +1007,8 @@ class SRGAN_model(pl.LightningModule):
             - During pretraining, the discriminator is frozen and only the
             generator is updated.
         """
-        if (
-            self.pretrain_g_only and (self.global_step < self.g_pretrain_steps or self.g_pretrain_steps == -1)
+        if self.pretrain_g_only and (
+            self.global_step < self.g_pretrain_steps or self.g_pretrain_steps == -1
         ):  # true if pretraining active
             return True
         else:
@@ -1180,7 +1196,7 @@ class SRGAN_model(pl.LightningModule):
             RuntimeError: If deserialization or state loading fails.
         """
         target_device = self.device if map_location is None else map_location
-        ckpt = torch.load(ckpt_path, map_location=target_device)
+        ckpt = load_checkpoint(ckpt_path, map_location=target_device)
         state_dict = (
             ckpt["state_dict"]
             if isinstance(ckpt, dict) and "state_dict" in ckpt

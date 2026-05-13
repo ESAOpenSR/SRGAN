@@ -31,9 +31,8 @@ def training_step_PL2(self, batch, batch_idx):
         - `"discriminator/adversarial_loss"`, `"discriminator/D(y)_prob"`, `"discriminator/D(G(x))_prob"`
         - `"training/adv_loss_weight"` (λ_adv from ramp schedule)
     """
-    assert (
-        self.automatic_optimization is False
-    ), "training_step_PL2 requires manual optimization."
+    if self.automatic_optimization is not False:
+        raise RuntimeError("training_step_PL2 requires manual optimization.")
 
     # -------- CREATE SR DATA --------
     lr_imgs, hr_imgs = batch
@@ -51,10 +50,16 @@ def training_step_PL2(self, batch, batch_idx):
     opt_d, opt_g = self.optimizers()
 
     # optional gradient clipping support (norm-based)
-    try:
-        gradient_clip_val = self.config.Schedulers.gradient_clip_val
-    except AttributeError:
-        gradient_clip_val = 0.0
+    # Lightning does not support Trainer-managed clipping with manual optimization.
+    optim_cfg = getattr(self.config, "Optimizers", None)
+    sched_cfg = getattr(self.config, "Schedulers", None)
+    gradient_clip_val = float(
+        getattr(
+            optim_cfg,
+            "gradient_clip_val",
+            getattr(sched_cfg, "gradient_clip_val", 0.0),
+        )
+    )
 
     def _maybe_clip_gradients(module, optimizer=None):
         if gradient_clip_val > 0.0 and module is not None:
@@ -84,7 +89,13 @@ def training_step_PL2(self, batch, batch_idx):
             zero = torch.tensor(0.0, device=hr_imgs.device, dtype=hr_imgs.dtype)
             self.log("discriminator/D(y)_prob", zero, prog_bar=True, sync_dist=True)
             self.log("discriminator/D(G(x))_prob", zero, prog_bar=True, sync_dist=True)
-            self.log("discriminator/adversarial_loss", zero, sync_dist=True)
+            self.log(
+                "discriminator/adversarial_loss",
+                zero,
+                on_step=True,
+                on_epoch=True,
+                sync_dist=True,
+            )
 
         # --- G step: hardwired L1-only pretraining loss ---
         content_loss = torch.nn.functional.l1_loss(sr_imgs, hr_imgs)
@@ -141,12 +152,20 @@ def training_step_PL2(self, batch, batch_idx):
             sr_discriminated_rel = sr_discriminated - real_mean
             hr_discriminated_rel = hr_discriminated - fake_mean
 
-            loss_real = self.adversarial_loss_criterion(hr_discriminated_rel, real_target)
-            loss_fake = self.adversarial_loss_criterion(sr_discriminated_rel, fake_target)
+            loss_real = self.adversarial_loss_criterion(
+                hr_discriminated_rel, real_target
+            )
+            loss_fake = self.adversarial_loss_criterion(
+                sr_discriminated_rel, fake_target
+            )
         else:
             # Keep loss scales consistent for non-relativistic BCE.
-            loss_real = self.adversarial_loss_criterion(hr_discriminated, real_target) * 0.5
-            loss_fake = self.adversarial_loss_criterion(sr_discriminated, fake_target) * 0.5
+            loss_real = (
+                self.adversarial_loss_criterion(hr_discriminated, real_target) * 0.5
+            )
+            loss_fake = (
+                self.adversarial_loss_criterion(sr_discriminated, fake_target) * 0.5
+            )
 
     # R1 Gradient Penalty
     r1_penalty = torch.zeros((), device=hr_imgs.device, dtype=hr_imgs.dtype)
@@ -163,7 +182,13 @@ def training_step_PL2(self, batch, batch_idx):
     adversarial_loss = (
         loss_real + loss_fake + r1_penalty
     )  # sum up loss with R1 (0 when turned off)
-    self.log("discriminator/adversarial_loss", adversarial_loss, sync_dist=True)
+    self.log(
+        "discriminator/adversarial_loss",
+        adversarial_loss,
+        on_step=True,
+        on_epoch=True,
+        sync_dist=True,
+    )
     self.log(
         "discriminator/r1_penalty", r1_penalty.detach(), sync_dist=True
     )  # log R1 penalty regardless, is 0 when turned off

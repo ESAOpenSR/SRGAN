@@ -10,19 +10,22 @@ from deployment.srgan_hpc.metadata import write_software_metadata
 from deployment.srgan_hpc.naming import fused_output_name
 from deployment.srgan_hpc.raster import raster_validity_stats, stack_geotiffs
 
-
 LOGGER = logging.getLogger("srgan-hpc")
 
 
-def _resolve_patch_manifest(manifest_path: Path, task_index: int | None) -> dict:
+def _resolve_patch_manifest_path(manifest_path: Path, task_index: int | None) -> Path:
     manifest = read_yaml(manifest_path)
     if "tasks" not in manifest:
-        return manifest
+        return manifest_path
     if task_index is None:
         raise ValueError("Array task manifest requires task index")
     task_entries = manifest["tasks"]
+    if task_index < 0 or task_index >= len(task_entries):
+        raise IndexError(
+            f"Task index {task_index} out of range for {len(task_entries)} tasks"
+        )
     task = task_entries[task_index]
-    return read_yaml((manifest_path.parent / Path(task["manifest"])).resolve())
+    return (manifest_path.parent / Path(task["manifest"])).resolve()
 
 
 def _resolve_manifest_local_path(manifest_path: Path, relative_path: str) -> Path:
@@ -57,7 +60,9 @@ def _inference_from_dict(data: dict) -> InferenceConfig:
     )
 
 
-def _skip_empty_product(metadata_dir: Path, product_name: str, input_tif: Path, validity: dict[str, int]) -> None:
+def _skip_empty_product(
+    metadata_dir: Path, product_name: str, input_tif: Path, validity: dict[str, int]
+) -> None:
     write_json(
         metadata_dir / f"{product_name}_skip.json",
         {
@@ -72,15 +77,15 @@ def _skip_empty_product(metadata_dir: Path, product_name: str, input_tif: Path, 
 
 def run_task(manifest_path: Path, task_index: int | None = None) -> Path | None:
     manifest_path = manifest_path.resolve()
-    root_manifest = read_yaml(manifest_path)
-    if "tasks" in root_manifest:
-        if task_index is None:
-            raise ValueError("Array task manifest requires task index")
-        manifest_path = (manifest_path.parent / Path(root_manifest["tasks"][task_index]["manifest"])).resolve()
-    manifest = _resolve_patch_manifest(manifest_path, None)
+    manifest_path = _resolve_patch_manifest_path(manifest_path, task_index)
+    manifest = read_yaml(manifest_path)
     config = manifest["config"]
-    output_dir = _resolve_manifest_local_path(manifest_path, manifest["paths"]["output_dir"])
-    metadata_dir = _resolve_manifest_local_path(manifest_path, manifest["paths"]["metadata_dir"])
+    output_dir = _resolve_manifest_local_path(
+        manifest_path, manifest["paths"]["output_dir"]
+    )
+    metadata_dir = _resolve_manifest_local_path(
+        manifest_path, manifest["paths"]["metadata_dir"]
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata_dir.mkdir(parents=True, exist_ok=True)
     patch_id = str(manifest.get("patch_id", "unknown"))
@@ -88,14 +93,26 @@ def run_task(manifest_path: Path, task_index: int | None = None) -> Path | None:
 
     outputs: dict[str, str] = {}
     band_names: list[str] = []
-    LOGGER.info("starting worker task patch_id=%s manifest=%s mode=%s", patch_id, manifest_path, config["mode"])
+    LOGGER.info(
+        "starting worker task patch_id=%s manifest=%s mode=%s",
+        patch_id,
+        manifest_path,
+        config["mode"],
+    )
 
     for product_name in manifest["products"]:
         product = _product_from_dict(config[product_name])
-        input_tif = _resolve_manifest_local_path(manifest_path, manifest["paths"]["inputs"][product_name])
+        input_tif = _resolve_manifest_local_path(
+            manifest_path, manifest["paths"]["inputs"][product_name]
+        )
         validity = raster_validity_stats(input_tif)
         if validity["valid_pixels"] == 0 or validity["nonzero_pixels"] == 0:
-            LOGGER.info("skipping patch_id=%s product=%s because input is empty stats=%s", patch_id, product_name, validity)
+            LOGGER.info(
+                "skipping patch_id=%s product=%s because input is empty stats=%s",
+                patch_id,
+                product_name,
+                validity,
+            )
             _skip_empty_product(metadata_dir, product_name, input_tif, validity)
             write_software_metadata(metadata_dir / "software_env.json")
             return None
@@ -113,6 +130,12 @@ def run_task(manifest_path: Path, task_index: int | None = None) -> Path | None:
 
     final_output: Path
     if config["mode"] == "fused":
+        missing_products = [name for name in ("rgbnir", "swir") if name not in outputs]
+        if missing_products:
+            raise RuntimeError(
+                "Fused output requires both rgbnir and swir products; missing: "
+                + ", ".join(missing_products)
+            )
         final_output = output_dir / fused_output_name()
         stack_geotiffs(
             reference_path=Path(outputs["rgbnir"]),

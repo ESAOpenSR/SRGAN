@@ -13,6 +13,7 @@ Typical usage
 >>> model.eval()
 >>> sr = model(torch.randn(1, 4, 64, 64))
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -25,6 +26,7 @@ import torch
 from pytorch_lightning import LightningModule
 
 from opensr_srgan.model.SRGAN import SRGAN_model
+from opensr_srgan.utils.checkpoint_loading import load_checkpoint
 
 __all__ = ["load_from_config", "load_inference_model"]
 
@@ -42,6 +44,7 @@ class _Preset:
     checkpoint_filename : str
         Name of the model checkpoint file inside the repository.
     """
+
     repo_id: str
     config_filename: str
     checkpoint_filename: str
@@ -151,7 +154,7 @@ def load_from_config(
 
     if checkpoint_uri is not None:
         with _maybe_download(checkpoint_uri) as resolved_path:
-            checkpoint = torch.load(str(resolved_path), map_location=map_location)
+            checkpoint = load_checkpoint(str(resolved_path), map_location=map_location)
         state_dict = checkpoint.get("state_dict", checkpoint)
         model.load_state_dict(state_dict, strict=False)
 

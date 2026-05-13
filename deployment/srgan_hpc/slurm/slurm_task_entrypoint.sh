@@ -13,7 +13,12 @@ if [[ -n "${SRGAN_HPC_MODULES:-}" ]] && command -v module >/dev/null 2>&1; then
 fi
 
 if [[ -n "${SRGAN_HPC_CONDA_ENV:-}" ]]; then
-  source activate "${SRGAN_HPC_CONDA_ENV}"
+  if command -v conda >/dev/null 2>&1; then
+    eval "$(conda shell.bash hook)"
+    conda activate "${SRGAN_HPC_CONDA_ENV}"
+  else
+    source activate "${SRGAN_HPC_CONDA_ENV}"
+  fi
 fi
 
 exec "${PYTHON_BIN}" -m deployment.srgan_hpc.cli run task --manifest "${MANIFEST_PATH}"

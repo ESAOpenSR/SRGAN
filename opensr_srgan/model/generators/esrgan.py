@@ -100,7 +100,9 @@ class ESRGANGenerator(nn.Module):
         super().__init__()
 
         if scale < 1 or scale & (scale - 1) != 0:
-            raise ValueError("ESRGANGenerator only supports power-of-two scales (1, 2, 4, 8, ...).")
+            raise ValueError(
+                "ESRGANGenerator only supports power-of-two scales (1, 2, 4, 8, ...)."
+            )
 
         if n_blocks < 1:
             raise ValueError("ESRGANGenerator requires at least one RRDB block.")
@@ -113,7 +115,10 @@ class ESRGANGenerator(nn.Module):
         self.n_features = n_features
         self.growth_channels = growth_channels
 
-        body_blocks = [RRDB(n_features, growth_channels, res_scale=res_scale) for _ in range(n_blocks)]
+        body_blocks = [
+            RRDB(n_features, growth_channels, res_scale=res_scale)
+            for _ in range(n_blocks)
+        ]
 
         self.conv_first = nn.Conv2d(in_channels, n_features, 3, padding=1)
         self.body = nn.Sequential(*body_blocks)
@@ -135,7 +140,9 @@ class ESRGANGenerator(nn.Module):
                 # ICNR-upsample convs are already initialized in make_upsampler.
                 if module in self.upsampler.modules():
                     continue
-                nn.init.kaiming_normal_(module.weight, a=0.2, mode="fan_in", nonlinearity="leaky_relu")
+                nn.init.kaiming_normal_(
+                    module.weight, a=0.2, mode="fan_in", nonlinearity="leaky_relu"
+                )
                 module.weight.data.mul_(0.1)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)

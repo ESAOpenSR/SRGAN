@@ -43,11 +43,14 @@ class TruncatedVGG19(nn.Module):
         >>> vgg = TruncatedVGG19(i=5, j=4)
         >>> feats = vgg(img_batch)  # [B, C, H, W] feature map
     """
+
     def __init__(self, i: int = 5, j: int = 4, weights=True) -> None:
         super().__init__()
 
-        if weights: # omit downloading for tests
-            vgg19 = torchvision.models.vgg19(weights=torchvision.models.VGG19_Weights.DEFAULT)
+        if weights:  # omit downloading for tests
+            vgg19 = torchvision.models.vgg19(
+                weights=torchvision.models.VGG19_Weights.DEFAULT
+            )
         else:
             vgg19 = torchvision.models.vgg19(weights=None)
 
@@ -67,11 +70,13 @@ class TruncatedVGG19(nn.Module):
                 break
 
         if not (maxpool_counter == i - 1 and conv_counter == j):
-            raise AssertionError(
+            raise ValueError(
                 f"One or both of i={i} and j={j} are not valid choices for the VGG19!"
             )
 
-        self.truncated_vgg19 = nn.Sequential(*list(vgg19.features.children())[: truncate_at + 1])
+        self.truncated_vgg19 = nn.Sequential(
+            *list(vgg19.features.children())[: truncate_at + 1]
+        )
 
     def forward(self, input):  # type: ignore[override]
         """Compute VGG-19 features up to the configured truncation layer.

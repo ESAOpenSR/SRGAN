@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opensr-srgan"
-version = "0.3.3"
+version = "0.4.3"
 description = "Modular Super-Resolution GAN Framework for Remote Sensing."
 readme = "README.md"
 authors = [
   { name = "Simon Donike, ESAOpenSR Team" }
 ]
 license = { file = "LICENSE" }
-requires-python =  ">=3.10,!=3.11.*,<3.13"
+requires-python = ">=3.10,<3.13"
 dependencies = [
   "torch>=2.1",
   "pytorch-lightning>=2.1,<3.0",
@@ -30,6 +30,8 @@ keywords = ["super-resolution", "gan", "remote-sensing", "pytorch", "lightning"]
 classifiers = [
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "License :: OSI Approved :: Apache Software License",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -57,9 +59,15 @@ deployment = [
   "srgan_hpc/slurm/*.sh",
 ]
 
+[tool.coverage.run]
+omit = [
+  "opensr_srgan/data/**",
+  "opensr_srgan/configs/**",
+]
+
 [project.optional-dependencies]
 tests = ["pytest", "pytest-cov","numpy"]
-docs = ["mkdocs-material"]
+docs = ["mkdocs-material", "mkdocstrings[python]", "pymdown-extensions"]
 hpc = [
   "PyYAML>=6.0",
   "pyproj>=3.4",

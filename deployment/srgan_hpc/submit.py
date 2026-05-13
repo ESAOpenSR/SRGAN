@@ -24,7 +24,7 @@ def _patch_manifest(
     start_date: str,
     end_date: str,
     config: RuntimeConfig,
-    ) -> dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "run_id": run_id,
         "patch_id": patch.patch_id,
@@ -37,7 +37,10 @@ def _patch_manifest(
         "products": enabled_product_names(config),
         "paths": {
             "run_dir": "../..",
-            "inputs": {product: f"inputs/{product}.tif" for product in enabled_product_names(config)},
+            "inputs": {
+                product: f"inputs/{product}.tif"
+                for product in enabled_product_names(config)
+            },
             "output_dir": "outputs",
             "metadata_dir": "metadata",
         },
@@ -159,7 +162,11 @@ def submit_patch_run(
                     "skipped": [{"patch_id": patch.patch_id, "reason": exc.reason}],
                 },
             )
-            return run_id, run_dir, {"mode": "skipped", "reason": exc.reason, **exc.details}
+            return (
+                run_id,
+                run_dir,
+                {"mode": "skipped", "reason": exc.reason, **exc.details},
+            )
     else:
         _stage_patch_inputs(
             patch=patch,
@@ -183,7 +190,12 @@ def submit_patch_run(
             "run_id": run_id,
             "mode": "patch",
             "patch_count": 1,
-            "tasks": [{"patch_id": patch.patch_id, "manifest": f"patches/{patch.patch_id}/manifest.yaml"}],
+            "tasks": [
+                {
+                    "patch_id": patch.patch_id,
+                    "manifest": f"patches/{patch.patch_id}/manifest.yaml",
+                }
+            ],
         },
     )
     manifest_path = patch_root / "manifest.yaml"
@@ -256,7 +268,9 @@ def _submit_patch_collection(
                     start_date=start_date,
                     end_date=end_date,
                 )
-                skipped.append({"patch_id": patch.patch_id, "reason": exc.reason, **exc.details})
+                skipped.append(
+                    {"patch_id": patch.patch_id, "reason": exc.reason, **exc.details}
+                )
                 continue
         else:
             _stage_patch_inputs(
@@ -287,7 +301,10 @@ def _submit_patch_collection(
         "end_date": end_date,
         "skipped_count": len(skipped),
         "tasks": [
-            {"patch_id": str(task["patch_id"]), "manifest": f"patches/{task['patch_id']}/manifest.yaml"}
+            {
+                "patch_id": str(task["patch_id"]),
+                "manifest": f"patches/{task['patch_id']}/manifest.yaml",
+            }
             for task in tasks
         ],
         "skipped": skipped,
@@ -299,7 +316,15 @@ def _submit_patch_collection(
     write_yaml(run_dir / "run_manifest.yaml", run_manifest)
 
     if not tasks:
-        return run_id, run_dir, {"mode": "skipped", "reason": "no_submittable_patches", "skipped": len(skipped)}
+        return (
+            run_id,
+            run_dir,
+            {
+                "mode": "skipped",
+                "reason": "no_submittable_patches",
+                "skipped": len(skipped),
+            },
+        )
 
     spec = SlurmJobSpec(
         job_name=f"srgan_{run_id}",

@@ -8,7 +8,9 @@ import torch
 from opensr_srgan.data.lrhr_folder.lrhr_folder_dataset import LRHRFolderDataset
 
 
-def _write_pair(root: Path, phase: str, name: str, lr_shape=(8, 8, 3), hr_shape=(16, 16, 3)):
+def _write_pair(
+    root: Path, phase: str, name: str, lr_shape=(8, 8, 3), hr_shape=(16, 16, 3)
+):
     (root / phase / "LR").mkdir(parents=True, exist_ok=True)
     (root / phase / "HR").mkdir(parents=True, exist_ok=True)
     np.save(root / phase / "LR" / name, np.zeros(lr_shape, dtype=np.float32))
@@ -49,7 +51,9 @@ def test_lrhr_folder_dataset_invalid_phase_raises(tmp_path):
 def test_lrhr_folder_dataset_missing_pair_raises(tmp_path):
     (tmp_path / "train" / "LR").mkdir(parents=True, exist_ok=True)
     (tmp_path / "train" / "HR").mkdir(parents=True, exist_ok=True)
-    np.save(tmp_path / "train" / "LR" / "only_lr.npy", np.zeros((8, 8, 1), dtype=np.float32))
+    np.save(
+        tmp_path / "train" / "LR" / "only_lr.npy", np.zeros((8, 8, 1), dtype=np.float32)
+    )
 
     with pytest.raises(FileNotFoundError):
         LRHRFolderDataset(config=_make_config(tmp_path), phase="train")
@@ -67,7 +71,9 @@ def test_lrhr_folder_dataset_applies_normalization(tmp_path):
         np.full((8, 8, 1), 10000.0, dtype=np.float32),
     )
 
-    ds = LRHRFolderDataset(config=_make_config(tmp_path, "normalise_10k"), phase="train")
+    ds = LRHRFolderDataset(
+        config=_make_config(tmp_path, "normalise_10k"), phase="train"
+    )
     lr, hr = ds[0]
 
     assert torch.allclose(lr, torch.ones_like(lr))

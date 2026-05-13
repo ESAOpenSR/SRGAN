@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,13 +66,22 @@ def parse_job_id(stdout: str) -> str:
     return parts[-1]
 
 
-def submit_job(spec: SlurmJobSpec, submission_dir: Path, dry_run: bool = False) -> dict[str, str]:
+def _format_command(cmd: list[str]) -> str:
+    return shlex.join(cmd)
+
+
+def submit_job(
+    spec: SlurmJobSpec, submission_dir: Path, dry_run: bool = False
+) -> dict[str, str]:
     cmd = build_sbatch_command(spec)
     submission_dir.mkdir(parents=True, exist_ok=True)
-    (submission_dir / "sbatch_command.txt").write_text(" ".join(cmd) + "\n", encoding="utf-8")
+    command_text = _format_command(cmd)
+    (submission_dir / "sbatch_command.txt").write_text(
+        command_text + "\n", encoding="utf-8"
+    )
 
     if dry_run:
-        payload = {"mode": "dry-run", "command": " ".join(cmd)}
+        payload = {"mode": "dry-run", "command": command_text}
         write_json(submission_dir / "slurm_job_ids.json", payload)
         return payload
 
@@ -79,7 +89,7 @@ def submit_job(spec: SlurmJobSpec, submission_dir: Path, dry_run: bool = False) 
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as exc:
         payload = {
-            "command": " ".join(cmd),
+            "command": command_text,
             "returncode": str(exc.returncode),
             "stdout": (exc.stdout or "").strip(),
             "stderr": (exc.stderr or "").strip(),
@@ -94,6 +104,10 @@ def submit_job(spec: SlurmJobSpec, submission_dir: Path, dry_run: bool = False) 
         ) from exc
 
     job_id = parse_job_id(result.stdout)
-    payload = {"job_id": job_id, "stdout": result.stdout.strip(), "stderr": result.stderr.strip()}
+    payload = {
+        "job_id": job_id,
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+    }
     write_json(submission_dir / "slurm_job_ids.json", payload)
     return payload

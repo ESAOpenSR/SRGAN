@@ -151,9 +151,7 @@ def test_load_weights_from_checkpoint_supports_state_dict_formats(monkeypatch):
     monkeypatch.setattr(SRGAN.torch, "load", fake_torch_load)
     model.load_state_dict = fake_load_state_dict
 
-    model.load_weights_from_checkpoint(
-        "with_state_dict.ckpt", map_location="cpu"
-    )
+    model.load_weights_from_checkpoint("with_state_dict.ckpt", map_location="cpu")
     model.load_weights_from_checkpoint(
         "raw_state_dict.ckpt", strict=True, map_location="meta"
     )
