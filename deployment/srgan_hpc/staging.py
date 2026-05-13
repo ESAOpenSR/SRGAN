@@ -131,6 +131,64 @@ def is_rate_limit_error(exc: Exception) -> bool:
     return is_retryable_staging_error(exc)
 
 
+def _point_geometry(longitude: float, latitude: float) -> dict[str, object]:
+    return {"type": "Point", "coordinates": [longitude, latitude]}
+
+
+def _search_kwargs_from_config(config: StagingConfig) -> dict[str, Any]:
+    search_kwargs: dict[str, Any] = {}
+    if config.search_query:
+        search_kwargs["query"] = config.search_query
+    if config.search_max_items is not None:
+        search_kwargs["max_items"] = config.search_max_items
+    if config.search_limit is not None:
+        search_kwargs["limit"] = config.search_limit
+    return search_kwargs
+
+
+def _auto_select_item_ids(
+    *,
+    latitude: float,
+    longitude: float,
+    start_date: str,
+    end_date: str,
+    config: StagingConfig,
+) -> list[str]:
+    try:
+        import pystac_client
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            'srgan-hpc auto item selection requires pystac-client. Install with `pip install "opensr-srgan[hpc]"`.'
+        ) from exc
+
+    catalog = pystac_client.Client.open(
+        "https://planetarycomputer.microsoft.com/api/stac/v1"
+    )
+    search = catalog.search(
+        collections=[config.collection],
+        datetime=f"{start_date}/{end_date}",
+        intersects=_point_geometry(longitude, latitude),
+        query=config.search_query or None,
+        max_items=config.auto_select_item_limit,
+        limit=config.auto_select_item_limit,
+    )
+    items = list(search.items())
+    if not items:
+        raise SkipTileError(
+            "no_stac_items",
+            details={"latitude": int(latitude * 1_000_000), "longitude": int(longitude * 1_000_000)},
+        )
+
+    selected = items[0]
+    LOGGER.info(
+        "auto-selected STAC item id=%s tile=%s cloud_cover=%s",
+        selected.id,
+        selected.properties.get("s2:mgrs_tile"),
+        selected.properties.get("eo:cloud_cover"),
+    )
+    return [selected.id]
+
+
 def create_cube_with_retry(
     *,
     latitude: float,
@@ -150,6 +208,18 @@ def create_cube_with_retry(
             'srgan-hpc staging requires optional dependencies. Install with `pip install "opensr-srgan[hpc]"`.'
         ) from exc
 
+    search_kwargs = _search_kwargs_from_config(config)
+    if config.auto_select_item:
+        search_kwargs["ids"] = _auto_select_item_ids(
+            latitude=latitude,
+            longitude=longitude,
+            start_date=start_date,
+            end_date=end_date,
+            config=config,
+        )
+        search_kwargs.setdefault("max_items", 1)
+        search_kwargs.setdefault("limit", 1)
+
     for attempt, delay in enumerate(config.rate_limit_retry_delays_seconds, start=1):
         try:
             return cubo.create(
@@ -161,6 +231,7 @@ def create_cube_with_retry(
                 end_date=end_date,
                 edge_size=edge_size,
                 resolution=resolution,
+                **search_kwargs,
             )
         except Exception as exc:  # pragma: no cover
             if not (config.retry_on_rate_limit and is_retryable_staging_error(exc)):
@@ -185,6 +256,7 @@ def create_cube_with_retry(
         end_date=end_date,
         edge_size=edge_size,
         resolution=resolution,
+        **search_kwargs,
     )
 
 

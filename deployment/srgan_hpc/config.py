@@ -47,6 +47,11 @@ class StagingConfig:
     item_strategy: StagingItemStrategy = "mosaic_valid"
     min_center_nonzero_fraction: float = 0.8
     min_full_nonzero_fraction: float = 0.8
+    auto_select_item: bool = False
+    auto_select_item_limit: int = 10
+    search_query: dict[str, Any] = field(default_factory=dict)
+    search_max_items: int | None = None
+    search_limit: int | None = None
     edge_size: int = 4096
     nodata: int = 0
     output_dtype: str = "uint16"
@@ -289,6 +294,12 @@ def validate_runtime_config(config: RuntimeConfig) -> None:
         )
     if not 0.0 <= config.staging.min_full_nonzero_fraction <= 1.0:
         raise ValueError("staging.min_full_nonzero_fraction must be between 0 and 1")
+    if config.staging.auto_select_item_limit <= 0:
+        raise ValueError("staging.auto_select_item_limit must be positive")
+    if config.staging.search_max_items is not None and config.staging.search_max_items <= 0:
+        raise ValueError("staging.search_max_items must be positive when set")
+    if config.staging.search_limit is not None and config.staging.search_limit <= 0:
+        raise ValueError("staging.search_limit must be positive when set")
     if len(config.inference.window_size) != 2 or min(config.inference.window_size) <= 0:
         raise ValueError("inference.window_size must contain two positive integers")
     if config.inference.batch_size <= 0:
