@@ -35,17 +35,17 @@ Model:
 # ---------------------------------------------------------------------------- #
 Training:
   # --- Hardware Setup
-  device: "cuda"                # Runtime device backend: ['cuda', 'cpu']
+  device: "cuda"               # Runtime device backend: ['cuda', 'cpu']
   gpus: [0]                    # Number of GPUs to use, individually in list form, e.g. [0] or [0,2]
   # --- General Training Setup
-  max_epochs: 9999            # Maximum number of training epochs
+  max_epochs: 10               # Maximum number of training epochs
   val_check_interval: 0.25     # Validate at x percent of epoch (float) or every N steps (int)
-  limit_val_batches: 250      # Limit number of validation batches
+  limit_val_batches: 250       # Limit number of validation batches
   
   # --- Pretraining and adversarial setup ---
   pretrain_g_only: True        # Train generator only for initial phase
-  g_pretrain_steps: 1000      # Number of generator-only warmup steps (-1 keeps pretraining active)
-  adv_loss_ramp_steps: 500    # Gradual adversarial weight ramp steps
+  g_pretrain_steps: 1000       # Number of generator-only warmup steps (-1 keeps pretraining active)
+  adv_loss_ramp_steps: 500     # Gradual adversarial weight ramp steps
   label_smoothing: True        # Discriminator target smoothing (1.0 → 0.9)
 
   EMA:
@@ -84,7 +84,7 @@ Generator:
   large_kernel_size: 9         # Kernel for head and tail conv layers (SRResNet/stochastic)
   small_kernel_size: 3         # Kernel for intermediate blocks (SRResNet/stochastic)
   n_channels: 32               # Feature width (RRDB/ESRGAN uses this as trunk width)
-  n_blocks: 4                 # Residual/attention blocks (ESRGAN: number of RRDB blocks)
+  n_blocks: 4                  # Residual/attention blocks (ESRGAN: number of RRDB blocks)
   scaling_factor: 4            # Upscaling factor (e.g., 2×, 4×, 8×)
   growth_channels: 32          # ESRGAN-specific RRDB growth channels (ignored otherwise)
   res_scale: 0.2               # Residual scaling used by stochastic/ESRGAN variants
@@ -102,31 +102,31 @@ Discriminator:
 Optimizers:
   optim_g_lr: 1e-4             # Learning rate for Generator
   optim_d_lr: 1e-6             # Learning rate for Discriminator
-  gradient_clip_val: 1.0        # Gradient clipping value (0 disables clipping)
-  betas: [0.0, 0.99]          # optional
-  eps: 1.0e-7                 # optional
-  weight_decay_g: 0.0         # optional
-  weight_decay_d: 0.0         # optional
+  gradient_clip_val: 1.0       # Gradient clipping value (0 disables clipping)
+  betas: [0.0, 0.99]           # optional
+  eps: 1.0e-7                  # optional
+  weight_decay_g: 0.0          # optional
+  weight_decay_d: 0.0          # optional
 
 # ============================================================================ #
 # 📉 SCHEDULERS AND EARLY STOPPING
 # ---------------------------------------------------------------------------- #
 Schedulers:
-  g_warmup_steps: 10        # Generator warmup LR curve duration in steps (0 disables warmup)
-  g_warmup_type: 'cosine'      # Generator warmup curve: ['cosine', 'linear']
-  metric_g: 'val_metrics/l1'     # Metric monitored for Generator LR scheduler
+  g_warmup_steps: 10          # Generator warmup LR curve duration in steps (0 disables warmup)
+  g_warmup_type: 'cosine'     # Generator warmup curve: ['cosine', 'linear']
+  metric_g: 'val_metrics/l1'  # Metric monitored for Generator LR scheduler
   metric_d: 'discriminator/adversarial_loss'     # Metric monitored for Discriminator LR scheduler
   patience_g: 10              # Patience (epochs) for Generator LR scheduler
   patience_d: 10              # Patience (epochs) for Discriminator LR scheduler
-  factor_g: 0.5                # LR reduction factor for Generator
-  factor_d: 0.5                # LR reduction factor for Discriminator
+  factor_g: 0.5               # LR reduction factor for Generator
+  factor_d: 0.5               # LR reduction factor for Discriminator
 
 # ============================================================================ #
 # 🧾 LOGGING SETTINGS
 # ---------------------------------------------------------------------------- #
 Logging:
-  num_val_images: 5            # Number of validation images logged per epoch
+  num_val_images: 5           # Number of validation images logged per epoch
   wandb:
-    enabled: False              # Toggle Weights & Biases logging on/off
-    entity: "opensr"           # W&B entity or team name
-    project: "SRGAN_10m"        # W&B project name
+    enabled: False            # Toggle Weights & Biases logging on/off
+    entity: "opensr"          # W&B entity or team name
+    project: "SRGAN_10m"      # W&B project name
