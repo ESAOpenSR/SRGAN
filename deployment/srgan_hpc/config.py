@@ -8,6 +8,7 @@ import yaml
 
 DEFAULT_RATE_LIMIT_RETRY_DELAYS_SECONDS = [15, 30, 60, 120, 120, 120]
 RuntimeMode = Literal["rgbnir", "swir", "fused"]
+StagingItemStrategy = Literal["fixed_index", "mosaic_valid"]
 
 
 @dataclass(slots=True)
@@ -43,6 +44,14 @@ class AoiConfig:
 class StagingConfig:
     collection: str = "sentinel-2-l2a"
     image_index: int = 0
+    item_strategy: StagingItemStrategy = "mosaic_valid"
+    min_center_nonzero_fraction: float = 0.8
+    min_full_nonzero_fraction: float = 0.8
+    auto_select_item: bool = False
+    auto_select_item_limit: int = 10
+    search_query: dict[str, Any] = field(default_factory=dict)
+    search_max_items: int | None = None
+    search_limit: int | None = None
     edge_size: int = 4096
     nodata: int = 0
     output_dtype: str = "uint16"
@@ -275,6 +284,22 @@ def validate_runtime_config(config: RuntimeConfig) -> None:
         raise ValueError(
             "staging.rate_limit_retry_delays_seconds must contain positive integers"
         )
+    if config.staging.item_strategy not in {"fixed_index", "mosaic_valid"}:
+        raise ValueError(
+            "staging.item_strategy must be one of: fixed_index, mosaic_valid"
+        )
+    if not 0.0 <= config.staging.min_center_nonzero_fraction <= 1.0:
+        raise ValueError(
+            "staging.min_center_nonzero_fraction must be between 0 and 1"
+        )
+    if not 0.0 <= config.staging.min_full_nonzero_fraction <= 1.0:
+        raise ValueError("staging.min_full_nonzero_fraction must be between 0 and 1")
+    if config.staging.auto_select_item_limit <= 0:
+        raise ValueError("staging.auto_select_item_limit must be positive")
+    if config.staging.search_max_items is not None and config.staging.search_max_items <= 0:
+        raise ValueError("staging.search_max_items must be positive when set")
+    if config.staging.search_limit is not None and config.staging.search_limit <= 0:
+        raise ValueError("staging.search_limit must be positive when set")
     if len(config.inference.window_size) != 2 or min(config.inference.window_size) <= 0:
         raise ValueError("inference.window_size must contain two positive integers")
     if config.inference.batch_size <= 0:

@@ -24,6 +24,9 @@ aoi:
 staging:
   collection: "sentinel-2-l2a"
   image_index: 0
+  item_strategy: "mosaic_valid"
+  min_center_nonzero_fraction: 0.8
+  min_full_nonzero_fraction: 0.8
   edge_size: 4096
   nodata: 0
   output_dtype: "uint16"
