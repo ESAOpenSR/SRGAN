@@ -90,6 +90,7 @@ nav:
 
   - Usage:
       - Inference Guide: inference.md
+      - HPC Inference: hpc-inference.md
       - Configuration: configuration.md
       - Data Preparation: data.md
 
