@@ -167,6 +167,74 @@ def test_esrgan_generator_warns_about_srresnet_specific_options(capsys):
     )
 
 
+@pytest.mark.parametrize("block_type", ["res", "rcab", "rrdb", "lka"])
+@pytest.mark.parametrize(
+    "scale, expected_shape",
+    [
+        (2, (2, 3, 10, 12)),
+        (4, (2, 3, 20, 24)),
+        (8, (2, 3, 40, 48)),
+    ],
+)
+def test_flexible_generator_forward_scales_output_for_all_blocks(
+    block_type, scale, expected_shape
+):
+    generator = FlexibleGenerator(
+        in_channels=3,
+        n_channels=16,
+        n_blocks=1,
+        small_kernel=3,
+        large_kernel=3,
+        scale=scale,
+        block_type=block_type,
+    )
+    lr = torch.randn(2, 3, 5, 6)
+
+    sr = generator(lr)
+
+    assert sr.shape == expected_shape
+
+
+def test_flexible_generator_rejects_invalid_configuration():
+    with pytest.raises(ValueError, match="scale must be one of"):
+        FlexibleGenerator(scale=1)
+
+    with pytest.raises(ValueError, match="block_type must be one of"):
+        FlexibleGenerator(block_type="unknown")
+
+
+@pytest.mark.parametrize(
+    "scale, expected_shape",
+    [
+        (1, (2, 2, 5, 6)),
+        (2, (2, 2, 10, 12)),
+        (4, (2, 2, 20, 24)),
+    ],
+)
+def test_esrgan_generator_forward_scales_output(scale, expected_shape):
+    generator = ESRGANGenerator(
+        in_channels=2,
+        out_channels=2,
+        n_features=8,
+        n_blocks=1,
+        growth_channels=4,
+        scale=scale,
+    )
+    lr = torch.randn(2, 2, 5, 6)
+
+    sr = generator(lr)
+
+    assert sr.shape == expected_shape
+
+
+def test_esrgan_generator_rejects_invalid_configuration():
+    with pytest.raises(ValueError, match="power-of-two scales"):
+        ESRGANGenerator(scale=3)
+
+    with pytest.raises(ValueError, match="at least one RRDB block"):
+        ESRGANGenerator(n_blocks=0)
+
+
 def test_stochastic_generator_forward_noise_paths():
     generator = StochasticGenerator(
         in_channels=2,
