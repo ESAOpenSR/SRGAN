@@ -6,6 +6,7 @@ opensr_srgan/configs/config_MRI.yaml
 
 # large Files
 *.zip
+gitlog.txt
 
 # Checkpoints
 *.pth
