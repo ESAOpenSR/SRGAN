@@ -5,9 +5,11 @@ This document outlines how ESA OpenSR organises its super-resolution GAN, the ma
 ## Background
 
 OpenSR-SRGAN follows the single-image super-resolution (SISR) formulation in which the generator learns a mapping from a low-resolution observation \(x\) to a plausible high-resolution reconstruction \(x'\). The generator head widens the receptive field, a configurable trunk of \(N\) residual-style blocks extracts features, and an upsampling tail increases spatial resolution. The residual fusion keeps skip connections active so the network focuses on high-frequency corrections rather than relearning the full signal:
+
 $$
 x' = \mathrm{Upsample}\!\left( \mathrm{Conv}_{\text{tail}}\!\left(\mathrm{Body}(x_{\text{head}}) + x_{\text{head}}\right)\! \right).
 $$
+
 Because every generator variant (residual, RCAB, RRDB, large-kernel attention, ESRGAN, or stochastic conditional) shares this template, you can swap block implementations without altering the training pipeline or configuration schema.
 
 

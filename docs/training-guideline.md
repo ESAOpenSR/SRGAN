@@ -9,21 +9,27 @@ It is recommended to use the training warmups and schedulers as explained above.
 ### Objectives and loss composition
 
 The generator and discriminator are optimised with a weighted sum of reconstruction, perceptual, and adversarial criteria so you can balance spectral fidelity against perceptual sharpness:
+
 $$
 \mathcal{L}_{\text{total}} = \lambda_{\text{L1}} \mathcal{L}_{\text{L1}} + \lambda_{\text{perc}} \mathcal{L}_{\text{perc}} + \lambda_{\text{adv}} \mathcal{L}_{\text{adv}} + \lambda_{\text{SAM}} \mathcal{L}_{\text{SAM}} + \lambda_{\text{TV}} \mathcal{L}_{\text{TV}}.
 $$
+
 Each coefficient maps directly to the `Training.Losses` block in the configuration file, mirroring the weighted-sum description from the paper. Typical setups emphasise pixel/L1 and perceptual terms early on, then ramp in adversarial weight to sharpen textures once the discriminator has warmed up.
 
 ### Exponential Moving Average (EMA)
 
 For smoother validation curves and more stable inference, the trainer can maintain an exponential moving average of the generator parameters. After each optimisation step, the EMA weights \(\theta_{\text{EMA}}\) are updated toward the current generator state \(\theta\):
+
 $$
 \theta_{\text{EMA}}^{(t)} = \beta \, \theta_{\text{EMA}}^{(t-1)} + (1 - \beta)\, \theta^{(t)},
 $$
+
 where the decay \(\beta \in [0,1)\) controls how much history is retained. During validation and inference, the EMA snapshot replaces the live weights so that predictions are less sensitive to short-term oscillations. The final super-resolved output therefore comes from the smoothed generator,
+
 $$
 \hat{y}_{\text{SR}} = G(x; \theta_{\text{EMA}}),
 $$
+
 which empirically reduces adversarial artefacts and improves perceptual consistency.
 
 

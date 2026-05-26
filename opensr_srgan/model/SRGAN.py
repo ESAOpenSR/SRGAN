@@ -1204,17 +1204,3 @@ class SRGAN_model(pl.LightningModule):
         )
         self.load_state_dict(state_dict, strict=strict)
         print(f"Loaded weights from checkpoint {ckpt_path}")
-
-
-# Quick Testing
-if __name__ == "__main__":
-    from omegaconf import OmegaConf
-
-    config = OmegaConf.load("opensr_srgan/configs/config_xray.yaml")
-    model = SRGAN_model(config=config)
-
-    # test data
-    import torch
-
-    lr = torch.randn(2, 1, 128, 128)
-    sr = model(lr)

@@ -2,6 +2,16 @@
 
 This guide walks through installing dependencies, configuring datasets, and launching your first ESA OpenSR experiment. The stack supports Python 3.10-3.12, PyTorch Lightning, and Weights & Biases for experiment tracking.
 
+## Try it in Colab first
+
+For the fastest start, open the interactive notebook in Google Colab and run through the introduction without setting up a local environment.
+
+<p align="center">
+  <a href="https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab">
+  </a>
+</p>
+
 > 💡 **Only need inference?** Install the published package instead: `python -m pip install opensr-srgan`. It exposes `load_from_config` and `load_inference_model` so you can instantiate models without cloning the repository. Continue with the rest of this guide when you want to train, fine-tune, or otherwise modify the codebase.
 
 ## 1. Install the environment

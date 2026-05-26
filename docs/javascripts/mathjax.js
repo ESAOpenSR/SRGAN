@@ -10,3 +10,16 @@ window.MathJax = {
     processHtmlClass: "arithmatex",
   },
 };
+function typesetMath() {
+  if (typeof MathJax === "undefined" || !MathJax.typesetPromise) {
+    return;
+  }
+  MathJax.startup?.output?.clearCache?.();
+  MathJax.typesetClear?.();
+  MathJax.texReset?.();
+  MathJax.typesetPromise();
+}
+
+if (typeof document$ !== "undefined") {
+  document$.subscribe(typesetMath);
+}
