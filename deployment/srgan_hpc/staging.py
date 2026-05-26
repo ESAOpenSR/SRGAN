@@ -135,6 +135,19 @@ def _point_geometry(longitude: float, latitude: float) -> dict[str, object]:
     return {"type": "Point", "coordinates": [longitude, latitude]}
 
 
+def _log_label(patch_id: str | None, product_name: str | None) -> str:
+    return f"{patch_id or 'patch'} {product_name or 'product'}"
+
+
+def _format_cloud_cover(value: object) -> str:
+    if value is None:
+        return "n/a"
+    try:
+        return f"{float(value):.3f}%"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def _search_kwargs_from_config(config: StagingConfig) -> dict[str, Any]:
     search_kwargs: dict[str, Any] = {}
     if config.search_query:
@@ -153,7 +166,9 @@ def _auto_select_item_ids(
     start_date: str,
     end_date: str,
     config: StagingConfig,
-) -> list[str]:
+    patch_id: str | None = None,
+    product_name: str | None = None,
+) -> tuple[list[str], list[dict[str, Any]]]:
     try:
         import pystac_client
     except ImportError as exc:  # pragma: no cover
@@ -180,13 +195,20 @@ def _auto_select_item_ids(
         )
 
     selected = items[0]
+    selected_report = {
+        "id": selected.id,
+        "tile": selected.properties.get("s2:mgrs_tile"),
+        "cloud_cover": selected.properties.get("eo:cloud_cover"),
+        "datetime": selected.properties.get("datetime"),
+    }
     LOGGER.info(
-        "auto-selected STAC item id=%s tile=%s cloud_cover=%s",
+        "[stac]  %s tile=%s cloud=%s item=%s",
+        _log_label(patch_id, product_name),
+        selected_report["tile"],
+        _format_cloud_cover(selected_report["cloud_cover"]),
         selected.id,
-        selected.properties.get("s2:mgrs_tile"),
-        selected.properties.get("eo:cloud_cover"),
     )
-    return [selected.id]
+    return [selected.id], [selected_report]
 
 
 def create_cube_with_retry(
@@ -199,6 +221,8 @@ def create_cube_with_retry(
     bands: list[str],
     edge_size: int,
     resolution: int,
+    patch_id: str | None = None,
+    product_name: str | None = None,
 ):
     try:
         import cubo
@@ -209,20 +233,24 @@ def create_cube_with_retry(
         ) from exc
 
     search_kwargs = _search_kwargs_from_config(config)
+    selected_item_reports: list[dict[str, Any]] = []
     if config.auto_select_item:
-        search_kwargs["ids"] = _auto_select_item_ids(
+        selected_item_ids, selected_item_reports = _auto_select_item_ids(
             latitude=latitude,
             longitude=longitude,
             start_date=start_date,
             end_date=end_date,
             config=config,
+            patch_id=patch_id,
+            product_name=product_name,
         )
+        search_kwargs["ids"] = selected_item_ids
         search_kwargs.setdefault("max_items", 1)
         search_kwargs.setdefault("limit", 1)
 
     for attempt, delay in enumerate(config.rate_limit_retry_delays_seconds, start=1):
         try:
-            return cubo.create(
+            cube = cubo.create(
                 lat=latitude,
                 lon=longitude,
                 collection=config.collection,
@@ -233,6 +261,7 @@ def create_cube_with_retry(
                 resolution=resolution,
                 **search_kwargs,
             )
+            return cube, selected_item_reports
         except Exception as exc:  # pragma: no cover
             if not (config.retry_on_rate_limit and is_retryable_staging_error(exc)):
                 raise
@@ -247,7 +276,7 @@ def create_cube_with_retry(
             )
             time.sleep(delay)
 
-    return cubo.create(
+    cube = cubo.create(
         lat=latitude,
         lon=longitude,
         collection=config.collection,
@@ -258,6 +287,7 @@ def create_cube_with_retry(
         resolution=resolution,
         **search_kwargs,
     )
+    return cube, selected_item_reports
 
 
 def _cube_item_label(cube, index: int) -> str:
@@ -360,17 +390,21 @@ def stage_cutout(
     resolution: int,
     output_path: Path,
     metadata_path: Path | None = None,
+    patch_id: str | None = None,
+    product_name: str | None = None,
 ) -> Path:
     ensure_proj_env()
     LOGGER.info(
-        "staging cubo cutout lat=%s lon=%s start_date=%s end_date=%s output=%s",
+        "[stage] %s lat=%.6f lon=%.6f date=%s/%s edge=%s res=%sm",
+        _log_label(patch_id, product_name),
         latitude,
         longitude,
         start_date,
         end_date,
-        output_path,
+        edge_size,
+        resolution,
     )
-    cube = create_cube_with_retry(
+    cube, auto_selected_items = create_cube_with_retry(
         latitude=latitude,
         longitude=longitude,
         start_date=start_date,
@@ -379,23 +413,22 @@ def stage_cutout(
         bands=bands,
         edge_size=edge_size,
         resolution=resolution,
+        patch_id=patch_id,
+        product_name=product_name,
     )
     cube, diagnostics = _select_or_mosaic_time_items(cube, config)
+    if auto_selected_items:
+        diagnostics["auto_selected_items"] = auto_selected_items
     cube = cube.transpose("band", "y", "x")
     stats = ensure_cube_has_valid_data(cube)
     diagnostics["validity_stats"] = stats
     LOGGER.info(
-        "validated staged cutout lat=%s lon=%s stats=%s staging=%s",
-        latitude,
-        longitude,
-        stats,
-        {
-            "item_strategy": diagnostics.get("item_strategy"),
-            "candidate_count": diagnostics.get("candidate_count"),
-            "selected_indices": diagnostics.get("selected_indices"),
-            "final_center_nonzero_fraction": diagnostics.get("final_center_nonzero_fraction"),
-            "final_full_nonzero_fraction": diagnostics.get("final_full_nonzero_fraction"),
-        },
+        "[valid] %s full=%.3f center=%.3f nonzero=%s/%s",
+        _log_label(patch_id, product_name),
+        float(diagnostics.get("final_full_nonzero_fraction") or 0.0),
+        float(diagnostics.get("final_center_nonzero_fraction") or 0.0),
+        stats["nonzero_pixels"],
+        stats["total_pixels"],
     )
 
     epsg_text = str(cube.attrs.get("epsg", "") or cube.coords.get("epsg", ""))
@@ -417,7 +450,11 @@ def stage_cutout(
     )
     if metadata_path is not None:
         write_json(metadata_path, diagnostics)
+    try:
+        output_label = str(output_path.relative_to(output_path.parent.parent))
+    except ValueError:
+        output_label = str(output_path)
     LOGGER.info(
-        "wrote staged cutout lat=%s lon=%s output=%s", latitude, longitude, output_path
+        "[write] %s %s", _log_label(patch_id, product_name), output_label
     )
     return output_path.resolve()
