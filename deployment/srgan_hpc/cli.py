@@ -64,11 +64,34 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _add_submit_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", required=True)
+    parser.add_argument(
+        "--output-root",
+        help="Override config.output_root for this run without creating a new runtime YAML.",
+    )
+    parser.add_argument(
+        "--project-name",
+        help="Override config.project_name for this run without creating a new runtime YAML.",
+    )
     parser.add_argument("--start-date", required=True)
     parser.add_argument("--end-date", required=True)
     parser.add_argument("--script-path")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+
+
+def _submit_config_overrides(args: argparse.Namespace) -> dict[str, str]:
+    overrides: dict[str, str] = {}
+    if args.output_root:
+        overrides["output_root"] = args.output_root
+    if args.project_name:
+        overrides["project_name"] = args.project_name
+    return overrides
+
+
+def _load_submit_config(args: argparse.Namespace):
+    from deployment.srgan_hpc.config import load_runtime_config
+
+    return load_runtime_config(args.config, overrides=_submit_config_overrides(args))
 
 
 def _resolve_script_path(script_path: str | None) -> Path:
@@ -98,13 +121,12 @@ def _handle_validate(args: argparse.Namespace) -> int:
 
 
 def _handle_submit_patch(args: argparse.Namespace) -> int:
-    from deployment.srgan_hpc.config import load_runtime_config
     from deployment.srgan_hpc.logging_utils import configure_logging
     from deployment.srgan_hpc.patching import Patch
     from deployment.srgan_hpc.submit import submit_patch_run
 
     logger = configure_logging(verbose=args.verbose)
-    config = load_runtime_config(args.config)
+    config = _load_submit_config(args)
     patch = Patch(
         patch_id="patch_000001",
         latitude=args.lat,
@@ -134,13 +156,13 @@ def _handle_submit_patch(args: argparse.Namespace) -> int:
 
 
 def _handle_submit_grid(args: argparse.Namespace) -> int:
-    from deployment.srgan_hpc.config import load_runtime_config, patch_resolution
+    from deployment.srgan_hpc.config import patch_resolution
     from deployment.srgan_hpc.logging_utils import configure_logging
     from deployment.srgan_hpc.patching import build_patches
     from deployment.srgan_hpc.submit import submit_grid_run
 
     logger = configure_logging(verbose=args.verbose)
-    config = load_runtime_config(args.config)
+    config = _load_submit_config(args)
     patches = build_patches(
         args.lat1,
         args.lon1,
@@ -178,12 +200,12 @@ def _handle_submit_grid(args: argparse.Namespace) -> int:
 
 def _handle_submit_aoi(args: argparse.Namespace) -> int:
     from deployment.srgan_hpc.aoi import select_aoi_patches
-    from deployment.srgan_hpc.config import load_runtime_config, patch_resolution
+    from deployment.srgan_hpc.config import patch_resolution
     from deployment.srgan_hpc.logging_utils import configure_logging
     from deployment.srgan_hpc.submit import submit_aoi_run
 
     logger = configure_logging(verbose=args.verbose)
-    config = load_runtime_config(args.config)
+    config = _load_submit_config(args)
     aoi_path = args.aoi_path or config.aoi.path
     if aoi_path is None:
         raise ValueError("AOI path must be provided via --aoi-path or config.aoi.path")
