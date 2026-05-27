@@ -10,6 +10,7 @@ from deployment.srgan_hpc.config import (
     product_edge_size,
     runtime_config_to_dict,
 )
+from deployment.srgan_hpc import bundled_slurm_collect_entrypoint
 from deployment.srgan_hpc.manifests import new_run_id, write_json, write_yaml
 from deployment.srgan_hpc.naming import patch_dir, resolve_run_dir
 from deployment.srgan_hpc.patching import Patch
@@ -216,6 +217,30 @@ def submit_patch_run(
     return run_id, run_dir, submission
 
 
+def _submit_collect_job(
+    *,
+    run_id: str,
+    run_dir: Path,
+    logs_dir: Path,
+    config: RuntimeConfig,
+    dependency_job_id: str | None,
+    dry_run: bool,
+) -> Mapping[str, object]:
+    dependency = f"afterok:{dependency_job_id}" if dependency_job_id else None
+    spec = SlurmJobSpec(
+        job_name=f"srgan_collect_{run_id}",
+        script_path=bundled_slurm_collect_entrypoint().resolve(),
+        manifest_path=run_dir / "run_manifest.yaml",
+        output_path=logs_dir / "slurm_collect_%j.out",
+        error_path=logs_dir / "slurm_collect_%j.err",
+        slurm=config.slurm,
+        environment=config.environment,
+        dependency=dependency,
+        request_gpus=False,
+    )
+    return submit_job(spec, run_dir / "submission" / "collect", dry_run=dry_run)
+
+
 def _submit_patch_collection(
     *,
     mode: str,
@@ -338,7 +363,16 @@ def _submit_patch_collection(
         environment=config.environment,
         array=f"0-{len(tasks) - 1}" if tasks else None,
     )
-    submission = submit_job(spec, run_dir / "submission", dry_run=dry_run)
+    submission = dict(submit_job(spec, run_dir / "submission", dry_run=dry_run))
+    collect_submission = _submit_collect_job(
+        run_id=run_id,
+        run_dir=run_dir,
+        logs_dir=logs_dir,
+        config=config,
+        dependency_job_id=str(submission["job_id"]) if submission.get("job_id") else None,
+        dry_run=dry_run,
+    )
+    submission["collect"] = dict(collect_submission)
     return run_id, run_dir, submission
 
 

@@ -15,4 +15,8 @@ def bundled_slurm_entrypoint() -> Path:
     return Path(__file__).resolve().parent / "slurm" / "slurm_task_entrypoint.sh"
 
 
+def bundled_slurm_collect_entrypoint() -> Path:
+    return Path(__file__).resolve().parent / "slurm" / "slurm_collect_entrypoint.sh"
+
+
 __version__ = get_version()

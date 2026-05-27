@@ -19,6 +19,8 @@ class SlurmJobSpec:
     slurm: SlurmConfig
     environment: EnvironmentConfig
     array: str | None = None
+    dependency: str | None = None
+    request_gpus: bool = True
 
 
 def build_sbatch_command(spec: SlurmJobSpec) -> list[str]:
@@ -40,9 +42,9 @@ def build_sbatch_command(spec: SlurmJobSpec) -> list[str]:
     ]
     if spec.slurm.partition:
         cmd.append(f"--partition={spec.slurm.partition}")
-    if spec.slurm.gres:
+    if spec.request_gpus and spec.slurm.gres:
         cmd.append(f"--gres={spec.slurm.gres}")
-    elif spec.slurm.gpus:
+    elif spec.request_gpus and spec.slurm.gpus:
         if spec.slurm.gpu_type:
             cmd.append(f"--gpus={spec.slurm.gpu_type}:{spec.slurm.gpus}")
         else:
@@ -53,6 +55,8 @@ def build_sbatch_command(spec: SlurmJobSpec) -> list[str]:
         cmd.append(f"--qos={spec.slurm.qos}")
     if spec.array:
         cmd.append(f"--array={spec.array}")
+    if spec.dependency:
+        cmd.append(f"--dependency={spec.dependency}")
     cmd.extend(spec.slurm.extra_args)
     cmd.append(str(spec.script_path))
     cmd.append(str(spec.manifest_path))

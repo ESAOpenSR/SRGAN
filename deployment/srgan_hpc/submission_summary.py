@@ -192,6 +192,15 @@ def format_submission_summary(summary: Mapping[str, Any]) -> str:
             f"Slurm: job {slurm.get('job_id', 'unknown')}, "
             f"array {slurm.get('array') or 'none'}"
         )
+    collect = slurm.get("collect")
+    if isinstance(collect, Mapping):
+        if collect.get("mode") == "dry-run":
+            lines.append("Collect: dry-run follow-up job prepared")
+        else:
+            lines.append(
+                f"Collect: job {collect.get('job_id', 'unknown')} "
+                "after array success"
+            )
 
     staging = summary.get("staging", {})
     if staging:
