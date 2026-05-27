@@ -139,13 +139,22 @@ def _log_label(patch_id: str | None, product_name: str | None) -> str:
     return f"{patch_id or 'patch'} {product_name or 'product'}"
 
 
-def _format_cloud_cover(value: object) -> str:
-    if value is None:
+def _format_cloud_cover_range(reports: list[dict[str, Any]]) -> str:
+    values: list[float] = []
+    for report in reports:
+        value = report.get("cloud_cover")
+        if value is None:
+            continue
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            continue
+
+    if not values:
         return "n/a"
-    try:
-        return f"{float(value):.3f}%"
-    except (TypeError, ValueError):
-        return str(value)
+    if len(values) == 1:
+        return f"{values[0]:.3f}%"
+    return f"{min(values):.3f}-{max(values):.3f}%"
 
 
 def _search_kwargs_from_config(config: StagingConfig) -> dict[str, Any]:
@@ -194,21 +203,31 @@ def _auto_select_item_ids(
             details={"latitude": int(latitude * 1_000_000), "longitude": int(longitude * 1_000_000)},
         )
 
-    selected = items[0]
-    selected_report = {
-        "id": selected.id,
-        "tile": selected.properties.get("s2:mgrs_tile"),
-        "cloud_cover": selected.properties.get("eo:cloud_cover"),
-        "datetime": selected.properties.get("datetime"),
-    }
-    LOGGER.info(
-        "[stac]  %s tile=%s cloud=%s item=%s",
-        _log_label(patch_id, product_name),
-        selected_report["tile"],
-        _format_cloud_cover(selected_report["cloud_cover"]),
-        selected.id,
+    selected_reports = [
+        {
+            "id": item.id,
+            "tile": item.properties.get("s2:mgrs_tile"),
+            "cloud_cover": item.properties.get("eo:cloud_cover"),
+            "datetime": item.properties.get("datetime"),
+        }
+        for item in items
+    ]
+    tiles = sorted(
+        {
+            str(report["tile"])
+            for report in selected_reports
+            if report.get("tile") is not None
+        }
     )
-    return [selected.id], [selected_report]
+    LOGGER.info(
+        "[stac]  %s candidates=%s tiles=%s cloud_range=%s first_item=%s",
+        _log_label(patch_id, product_name),
+        len(selected_reports),
+        ",".join(tiles) if tiles else "n/a",
+        _format_cloud_cover_range(selected_reports),
+        selected_reports[0]["id"],
+    )
+    return [item.id for item in items], selected_reports
 
 
 def create_cube_with_retry(
@@ -245,8 +264,8 @@ def create_cube_with_retry(
             product_name=product_name,
         )
         search_kwargs["ids"] = selected_item_ids
-        search_kwargs.setdefault("max_items", 1)
-        search_kwargs.setdefault("limit", 1)
+        search_kwargs.setdefault("max_items", len(selected_item_ids))
+        search_kwargs.setdefault("limit", len(selected_item_ids))
 
     for attempt, delay in enumerate(config.rate_limit_retry_delays_seconds, start=1):
         try:
