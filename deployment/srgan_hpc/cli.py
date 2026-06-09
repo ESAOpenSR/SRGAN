@@ -64,11 +64,60 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _add_submit_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", required=True)
+    parser.add_argument(
+        "--output-root",
+        help="Override config.output_root for this run without creating a new runtime YAML.",
+    )
+    parser.add_argument(
+        "--project-name",
+        help="Override config.project_name for this run without creating a new runtime YAML.",
+    )
     parser.add_argument("--start-date", required=True)
     parser.add_argument("--end-date", required=True)
     parser.add_argument("--script-path")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+
+
+def _submit_config_overrides(args: argparse.Namespace) -> dict[str, str]:
+    overrides: dict[str, str] = {}
+    if args.output_root:
+        overrides["output_root"] = args.output_root
+    if args.project_name:
+        overrides["project_name"] = args.project_name
+    return overrides
+
+
+def _load_submit_config(args: argparse.Namespace):
+    from deployment.srgan_hpc.config import load_runtime_config
+
+    return load_runtime_config(args.config, overrides=_submit_config_overrides(args))
+
+
+def _write_and_print_summary(
+    *,
+    run_dir: Path,
+    config,
+    submission,
+    request: dict[str, object],
+    start_date: str,
+    end_date: str,
+) -> dict[str, str]:
+    from deployment.srgan_hpc.submission_summary import (
+        format_submission_summary,
+        write_submission_summary,
+    )
+
+    summary, summary_json, summary_txt = write_submission_summary(
+        run_dir=run_dir,
+        config=config,
+        submission=submission,
+        request=request,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    print(format_submission_summary(summary))
+    return {"json": str(summary_json), "text": str(summary_txt)}
 
 
 def _resolve_script_path(script_path: str | None) -> Path:
@@ -98,13 +147,12 @@ def _handle_validate(args: argparse.Namespace) -> int:
 
 
 def _handle_submit_patch(args: argparse.Namespace) -> int:
-    from deployment.srgan_hpc.config import load_runtime_config
     from deployment.srgan_hpc.logging_utils import configure_logging
     from deployment.srgan_hpc.patching import Patch
     from deployment.srgan_hpc.submit import submit_patch_run
 
     logger = configure_logging(verbose=args.verbose)
-    config = load_runtime_config(args.config)
+    config = _load_submit_config(args)
     patch = Patch(
         patch_id="patch_000001",
         latitude=args.lat,
@@ -124,9 +172,27 @@ def _handle_submit_patch(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
     )
     logger.info("submitted patch run_id=%s run_dir=%s", run_id, run_dir)
+    summary_paths = _write_and_print_summary(
+        run_dir=run_dir,
+        config=config,
+        submission=submission,
+        request={
+            "type": "patch",
+            "lat": args.lat,
+            "lon": args.lon,
+            "planned_patch_count": 1,
+        },
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
     print(
         json.dumps(
-            {"run_id": run_id, "run_dir": str(run_dir), "submission": submission},
+            {
+                "run_id": run_id,
+                "run_dir": str(run_dir),
+                "submission": submission,
+                "summary": summary_paths,
+            },
             indent=2,
         )
     )
@@ -134,13 +200,13 @@ def _handle_submit_patch(args: argparse.Namespace) -> int:
 
 
 def _handle_submit_grid(args: argparse.Namespace) -> int:
-    from deployment.srgan_hpc.config import load_runtime_config, patch_resolution
+    from deployment.srgan_hpc.config import patch_resolution
     from deployment.srgan_hpc.logging_utils import configure_logging
     from deployment.srgan_hpc.patching import build_patches
     from deployment.srgan_hpc.submit import submit_grid_run
 
     logger = configure_logging(verbose=args.verbose)
-    config = load_runtime_config(args.config)
+    config = _load_submit_config(args)
     patches = build_patches(
         args.lat1,
         args.lon1,
@@ -162,6 +228,21 @@ def _handle_submit_grid(args: argparse.Namespace) -> int:
     logger.info(
         "submitted grid run_id=%s run_dir=%s patches=%d", run_id, run_dir, len(patches)
     )
+    summary_paths = _write_and_print_summary(
+        run_dir=run_dir,
+        config=config,
+        submission=submission,
+        request={
+            "type": "grid",
+            "lat1": args.lat1,
+            "lon1": args.lon1,
+            "lat2": args.lat2,
+            "lon2": args.lon2,
+            "planned_patch_count": len(patches),
+        },
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
     print(
         json.dumps(
             {
@@ -169,6 +250,7 @@ def _handle_submit_grid(args: argparse.Namespace) -> int:
                 "run_dir": str(run_dir),
                 "patches": len(patches),
                 "submission": submission,
+                "summary": summary_paths,
             },
             indent=2,
         )
@@ -178,12 +260,12 @@ def _handle_submit_grid(args: argparse.Namespace) -> int:
 
 def _handle_submit_aoi(args: argparse.Namespace) -> int:
     from deployment.srgan_hpc.aoi import select_aoi_patches
-    from deployment.srgan_hpc.config import load_runtime_config, patch_resolution
+    from deployment.srgan_hpc.config import patch_resolution
     from deployment.srgan_hpc.logging_utils import configure_logging
     from deployment.srgan_hpc.submit import submit_aoi_run
 
     logger = configure_logging(verbose=args.verbose)
-    config = load_runtime_config(args.config)
+    config = _load_submit_config(args)
     aoi_path = args.aoi_path or config.aoi.path
     if aoi_path is None:
         raise ValueError("AOI path must be provided via --aoi-path or config.aoi.path")
@@ -222,6 +304,19 @@ def _handle_submit_aoi(args: argparse.Namespace) -> int:
     }
     if selection.aoi_layer is not None:
         payload["aoi_layer"] = selection.aoi_layer
+    payload["summary"] = _write_and_print_summary(
+        run_dir=run_dir,
+        config=config,
+        submission=submission,
+        request={
+            "type": "aoi",
+            "aoi_path": str(selection.aoi_path),
+            "aoi_layer": selection.aoi_layer,
+            "planned_patch_count": len(selection.patches),
+        },
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
     print(json.dumps(payload, indent=2))
     return 0
 
