@@ -17,6 +17,7 @@ gitlog.txt
 *.vscode
 .vscode
 __pycache__/
+playground
 
 # Test / coverage artifacts
 .coverage
