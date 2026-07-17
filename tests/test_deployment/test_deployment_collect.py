@@ -14,9 +14,11 @@ def test_collect_outputs_preserves_patch_identity_for_duplicate_product_names(
         output_dir.mkdir(parents=True)
         (output_dir / "fused_sr.tif").write_bytes(marker)
 
-    destination, copied = collect_outputs(run_dir)
+    destination, moved = collect_outputs(run_dir)
 
     assert destination == run_dir / "collected"
-    assert copied == 2
+    assert moved == 2
     assert (destination / "patch_000001" / "fused_sr.tif").read_bytes() == b"first"
     assert (destination / "patch_000002" / "fused_sr.tif").read_bytes() == b"second"
+    assert not (run_dir / "patches" / "patch_000001" / "outputs" / "fused_sr.tif").exists()
+    assert not (run_dir / "patches" / "patch_000002" / "outputs" / "fused_sr.tif").exists()
