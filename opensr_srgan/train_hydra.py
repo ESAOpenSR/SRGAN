@@ -6,10 +6,35 @@ object to the existing :func:`opensr_srgan.train.train` function.
 
 from __future__ import annotations
 
+import argparse
+import sys
+
 import hydra
 import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf, open_dict
+
+
+def _patch_python314_argparse_help_validation() -> None:
+    """Allow Hydra lazy completion help objects on Python 3.14+."""
+
+    if sys.version_info < (3, 14):
+        return
+
+    original_check_help = argparse.ArgumentParser._check_help
+    if getattr(original_check_help, "_srgan_hydra_compat", False):
+        return
+
+    def _check_help(self, action):
+        if action.help is not None and not isinstance(action.help, str):
+            return
+        return original_check_help(self, action)
+
+    _check_help._srgan_hydra_compat = True
+    argparse.ArgumentParser._check_help = _check_help
+
+
+_patch_python314_argparse_help_validation()
 
 
 def _has_value(value) -> bool:

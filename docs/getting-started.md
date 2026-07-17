@@ -1,6 +1,6 @@
 # Getting started
 
-This guide walks through installing dependencies, configuring datasets, and launching your first ESA OpenSR experiment. The stack supports Python 3.10-3.12, PyTorch Lightning, and Weights & Biases for experiment tracking.
+This guide walks through installing dependencies, configuring datasets, and launching your first ESA OpenSR experiment. The stack supports Python 3.10-3.14, PyTorch Lightning, and Weights & Biases for experiment tracking.
 
 ## Try it in Colab first
 
