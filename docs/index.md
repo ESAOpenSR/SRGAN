@@ -18,25 +18,20 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 
 ## Why this repository?
 
-* **One configuration, many models.** Swap between RCAN-style residual channel attention, RRDB, SRResNet, SwinIR-inspired
-  backbones, and matching discriminators ranging from classic SRGAN to PatchGAN by editing a single config block.
-* **Loss combinations that just work.** Mix pixel, perceptual, style, and adversarial objectives with sensible defaults for
-  weights, schedules, and warm-up durations.
-* **Battle-tested training loop.** PyTorch Lightning handles mixed precision, gradient accumulation, multi-GPU training, and
-  restartable checkpoints while the repo layers in GAN-specific tweaks such as adversarial weight ramping and learning-rate
-  restarts.
+* **One configuration, many models.** Swap between SRResNet, RCAB, RRDB, large-kernel attention, ESRGAN, and stochastic generators, plus standard SRGAN, PatchGAN, and ESRGAN discriminators, by editing config values.
+* **Loss combinations that just work.** Mix pixel, spectral-angle, perceptual, total-variation, and adversarial objectives with sensible defaults for weights, schedules, and warm-up durations.
+* **Battle-tested training loop.** PyTorch Lightning handles device placement, multi-GPU DDP, and restartable checkpoints while the repo layers in GAN-specific manual optimisation, adversarial weight ramping, gradient clipping, and learning-rate scheduling.
 * **Lightning 2+ training path.** Training uses manual optimization (`automatic_optimization=False`) and a single GAN training-step implementation.
-* **Remote-sensing aware defaults.** Normalisation, histogram matching, spectral-band handling, and Sentinel-2 SAFE ingestion are
-  ready-made for 10 m and 20 m bands and easily extendable to other sensors.
+* **Remote-sensing aware defaults.** Normalisation, histogram matching, spectral-band handling, and Sentinel-2-oriented presets are ready-made for RGB-NIR and SWIR-style workflows and are extensible to other sensors.
 
 ## What you get out of the box
 
 | Capability | Highlights |
 | --- | --- |
-| **Generators & discriminators** | RCAB, RRDB, residual-in-residual, large-kernel attention, PatchGAN, UNet-based discriminators, and more. |
-| **Losses** | Weighted combinations of L1/L2, perceptual (VGG/LPIPS), style, and relativistic adversarial losses. |
-| **Training utilities** | Generator warm-up phases, on-plateau learning-rate schedules, adversarial-weight ramping, EMA tracking, and mixed-precision support. |
-| **Experiment management** | Configurable logging (Weights & Biases, TensorBoard), checkpointing, and experiment reproducibility hooks. |
+| **Generators & discriminators** | SRResNet, RCAB, RRDB, large-kernel attention, ESRGAN, stochastic generators, standard SRGAN, PatchGAN, and ESRGAN discriminators. |
+| **Losses** | Weighted combinations of L1, spectral-angle, perceptual (VGG/LPIPS), total-variation, BCE/Wasserstein, and optional relativistic adversarial losses. |
+| **Training utilities** | Generator warm-up phases, on-plateau learning-rate schedules, adversarial-weight ramping, gradient clipping, and EMA tracking. |
+| **Experiment management** | Weights & Biases or CSV logging, checkpointing, saved resolved configs, and Hydra experiment presets. |
 | **Datasets** | Bundled example dataset for quick smoke tests plus a selector designed for custom collections. |
 | **Deployment** | PyPI package (`opensr-srgan`) with helpers to load Lightning modules from configs or download pre-trained presets from the Hugging Face Hub. |
 
@@ -57,16 +52,14 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 | `opensr_srgan/data/` | Dataset wrappers and helper utilities for custom and preconfigured SR datasets. |
 | `opensr_srgan/configs/` | Ready-to-run YAML presets covering common scale factors, band selections, and architecture pairings. |
 | `opensr_srgan/utils/` | Logging helpers, spectral normalisation utilities, and model summary functions used across the stack. |
-| `opensr_srgan/train.py` | Command-line entry point that wires configuration, data module, loggers, and the Lightning trainer together. |
+| `opensr_srgan/train.py` / `opensr_srgan/train_hydra.py` | Legacy YAML and Hydra entry points that wire configuration, data module, loggers, and the Lightning trainer together. |
 
 ## Typical workflow
 
-1. **Pick a configuration.** Start from a preset in `opensr_srgan/configs/` and adapt dataset paths, scale, generator, discriminator, and loss
-   options to match your experiment.
+1. **Pick a configuration.** Start from `opensr_srgan/configs/config_training_example.yaml` for a smoke test, or use a Hydra preset such as `experiment=example`, `experiment=10m`, or `experiment=20m` and adapt dataset paths, scale, generator, discriminator, and loss options to match your experiment.
 2. **Prepare datasets.** Download the bundled example dataset or register your own source with the dataset selector (see
    [Data](data.md)).
-3. **Launch training.** Run `python -m opensr_srgan.train --config <path>` or import `train` from the package to instantiate the
-   Lightning module, configure optimisers and callbacks, and start adversarial training (see [Training](training.md)).
+3. **Launch training.** Run `python -m opensr_srgan.train --config <path>`, `python -m opensr_srgan.train_hydra experiment=example`, or import `train` from the package to instantiate the Lightning module, configure optimisers and callbacks, and start adversarial training (see [Training](training.md)).
 4. **Monitor progress.** Use the included Weights & Biases logging to track perceptual losses, adversarial
    metrics, and validation imagery.
 5. **Deploy or evaluate.** The Lightning module exposes `predict_step` for batched inference, automatically normalising inputs and

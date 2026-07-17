@@ -23,7 +23,7 @@ Because every generator variant (residual, RCAB, RRDB, large-kernel attention, E
   `Generator.model_type`/`block_type` and `Discriminator.model_type`. Unsupported combinations fail fast with clear error
   messages.
 * **Loss construction.** `GeneratorContentLoss` (from `opensr_srgan.model.loss`) provides L1, spectral angle mapper (SAM), perceptual, and
-  total-variation terms. Adversarial supervision uses `torch.nn.BCEWithLogitsLoss` with optional label smoothing.
+  total-variation terms. Adversarial supervision uses BCE-with-logits or Wasserstein objectives, with optional label smoothing, relativistic-average BCE, and R1 penalty depending on the config.
 * **Optimiser scheduling.** `configure_optimizers()` returns paired Adam optimisers (generator + discriminator) with
   `ReduceLROnPlateau` schedulers that monitor a configurable validation metric.
 * **Training orchestration.** `setup_lightning()` binds `training_step_PL2()` and enables manual optimisation
@@ -56,7 +56,7 @@ The generator zoo lives under `opensr_srgan/model/generators/` and can be select
 * **Stochastic GAN generator (`cgan_generator.py`).** Extends the flexible generator with conditioning inputs and latent noise,
   enabling experiments where auxiliary metadata influences the super-resolution output.
 * **ESRGAN generator (`esrgan.py`).** Implements the RRDBNet trunk introduced with ESRGAN, exposing `n_blocks`, `growth_channels`,
-  and `res_scale` so you can dial in deeper receptive fields and sharper textures. The implementation supports original features like Relativistic Average GAN (RaGAN), and the codebase allows a two-step training phase (content-oriented pretraining of the generator followed by adversarial training with the discriminator), as originally proposed by the ESRGAN authors.
+  and `res_scale` so you can dial in deeper receptive fields and sharper textures. The shared training loop supports optional relativistic-average BCE and a two-step training phase (content-oriented pretraining of the generator followed by adversarial training with the discriminator).
 * **Advanced variants (`SRGAN_advanced.py`).** Provides additional block implementations and compatibility aliases exposed in
   `__init__.py` for backwards compatibility.
 
@@ -89,9 +89,9 @@ The same module exposes `return_metrics()` so validation can log PSNR/SSIM-style
 ## Data flow and normalisation
 
 The Lightning module expects batches of `(lr_imgs, hr_imgs)` tensors supplied by the `LightningDataModule` returned from
-`opensr_srgan/data/dataset_selector.py`. `predict_step()` and the validation hooks rely on two utilities from `opensr_srgan.utils.spectral_helpers`:
+`opensr_srgan/data/dataset_selector.py`. `predict_step()` uses the configured `opensr_srgan.data.utils.Normalizer` plus histogram matching from `opensr_srgan.utils.radiometrics`:
 
-* `normalise_10k`: Converts Sentinel-2 style reflectance values between `[0, 10000]` and `[0, 1]`.
+* `Normalizer`: Applies the configured `Data.normalization` strategy, such as `normalise_10k`, `zero_one`, or a custom callable.
 * `histogram`: Matches the SR histogram to the LR reference to minimise domain gaps during inference.
 
 These helpers allow the generator to operate in a normalised space while still reporting outputs in physical units when needed.

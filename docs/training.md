@@ -17,7 +17,7 @@ In order to train, you need a dataset. `Data.dataset_type` decides which dataset
 You can launch training from the CLI or by importing the helper inside Python.
 
 ```bash
-python opensr_srgan.train --config path/to/config.yaml
+python -m opensr_srgan.train --config path/to/config.yaml
 ```
 
 ```python
@@ -26,11 +26,21 @@ from opensr_srgan import train
 train("path/to/config.yaml")
 ```
 
-Both entry points accept the same configuration file. The CLI exposes a single optional argument:
+For experiment management, the Hydra entry point composes grouped configs from `opensr_srgan/configs/hydra` and forwards the resolved config to the same `train()` function:
 
-* `--config / -c`: Path to a YAML file describing the experiment. Defaults to `opensr_srgan/configs/config_20m.yaml`.
+```bash
+python -m opensr_srgan.train_hydra experiment=example
+python -m opensr_srgan.train_hydra experiment=10m Training.max_epochs=5 Logging.wandb.enabled=false
+srgan-train experiment=20m Training.gpus=[0,1]
+```
 
-GPU assignment is handled directly in the configuration. Set `Training.gpus` to a list of device indices (for example `[0, 1, 2, 3]`) to enable multi-GPU training; a single value such as `[0]` keeps the run on one card. When more than one device is listed the trainer automatically activates PyTorch Lightning's Distributed Data Parallel (DDP) backend for significantly faster epochs.
+Use `experiment=...` when you want a complete preset (`example`, `10m`, or `20m`). Use direct overrides such as `Training.max_epochs=5` or `Generator.n_blocks=8` for quick one-off changes. See [Hydra Experiments](hydra.md) for the config layout, override patterns, and output-directory behavior.
+
+Both legacy entry points accept the same configuration file. The legacy CLI exposes a single optional argument:
+
+* `--config / -c`: Path to a YAML file describing the experiment. Defaults to `opensr_srgan/configs/config_10m.yaml`. For a local smoke test with the bundled dataset, pass `opensr_srgan/configs/config_training_example.yaml`.
+
+GPU assignment is handled directly in the configuration. Set `Training.gpus` to a list of device indices (for example `[0, 1, 2, 3]`) to enable multi-GPU training; a single value such as `[0]` keeps the run on one card. When more than one GPU is listed the trainer activates PyTorch Lightning DDP using `ddp_find_unused_parameters_true` by default, which fits the manual GAN update pattern.
 
 ## Initialisation steps - Overview
 The code performs the following, regardless of whether the script is launched from the CLI or via import.
@@ -39,7 +49,7 @@ The code performs the following, regardless of whether the script is launched fr
 3. **Load configuration.** `OmegaConf.load()` parses the YAML file into an object used throughout the run.
 4. **Construct the model.**
    * If `Model.load_checkpoint` is set, the script calls `model.load_weights_from_checkpoint()` to import learned weights only while
-     respecting the new configuration values. If `Model.continue_training` is passed with a path to a pretrained checkpoint, all scheduler states, epochs and step numbers, EMA weights, etc are loaded in order to seamlessly continue training from a previous run.
+     respecting the new configuration values. If `Model.continue_training` is passed with a path to a Lightning checkpoint, optimizer/scheduler state, epoch counters, global step, and EMA state are restored by Lightning before continuing the run.
    * `Model.load_checkpoint` and `Model.continue_training` are mutually exclusive. Use only one, depending on whether you want weight initialization or full training-state resume.
     * Otherwise, it initialises a fresh `SRGAN_model`, which immediately builds the generator/discriminator and prints a
       parameter summary.
@@ -49,16 +59,14 @@ The code performs the following, regardless of whether the script is launched fr
 ## Logging setup
 
 * **Weights & Biases.** `WandbLogger` records scalar metrics, adversarial diagnostics, and validation image panels.
-* **TensorBoard.** `TensorBoardLogger` writes the same scalar metrics locally under `logs/<project>/<timestamp>`.
-* **Manual SummaryWriter.** A temporary TensorBoard writer (`logs/tmp`) remains available for quick custom logging if needed.
+* **CSV logs.** When `Logging.wandb.enabled: false`, `CSVLogger` writes lightweight local logs under `logs/` or under `Logging.output_dir` for Hydra runs.
 
-To disable W&B logging, either remove the logger from the list or unset your API key before launching the script.
+To disable W&B logging, set `Logging.wandb.enabled: false` in YAML or override it from Hydra with `Logging.wandb.enabled=false`.
 
 ## Metrics
 
-The Lightning module pushes the same scalar streams to both TensorBoard and W&B so you can monitor convergence from either
-interface. Generator-only pretraining, adversarial training, and the EMA helper each contribute their own indicators, so the
-dashboard quickly reveals which subsystem is active at any given step.
+The Lightning module logs scalar metrics through the active Lightning logger, either W&B or CSV. Generator-only pretraining, adversarial training, and the EMA helper each contribute their own indicators, so the
+logs make it clear which subsystem is active at any given step.
 
 | Metric | Description | Expected behaviour |
 | --- | --- | --- |
@@ -99,23 +107,19 @@ The following callbacks are registered with the Lightning trainer:
 
 | Callback | Purpose |
 | --- | --- |
-| `ModelCheckpoint` | Saves the top two checkpoints according to `Schedulers.metric` and always keeps the last epoch. |
-| `LearningRateMonitor` | Logs learning rates for both optimisers every epoch. |
+| `ModelCheckpoint` | Saves the top two checkpoints according to `Schedulers.metric_g` and always keeps the last epoch. |
 | `EarlyStopping` | Monitors the same metric as the schedulers with a patience of 250 epochs and finite-check enabled. |
 
-Checkpoint directories are nested under the TensorBoard log folder using the W&B project name and a timestamp, making it easy to
-correlate files across tooling.
+Checkpoint directories default to `logs/<project>/<timestamp>`. Hydra runs set `Logging.output_dir`, so checkpoints and the resolved `config.yaml` land in Hydra's run directory.
 
 ## Trainer configuration
 
 The script builds a `Trainer` with the following notable arguments:
 
-* `accelerator='cuda'` with `devices=config.Training.gpus`. When more than one device index is provided the script selects the
-  `ddp` strategy automatically, so scaling across multiple GPUs is as simple as enumerating them in the config.
-* `check_val_every_n_epoch=1` to evaluate after every epoch.
+* `accelerator='gpu'` with `devices=config.Training.gpus` for CUDA/GPU runs, or `accelerator='cpu'` with `devices=1` for CPU runs. When more than one GPU is requested, the script selects `ddp_find_unused_parameters_true` by default because manual GAN optimisation can leave one branch unused on a given step.
 * `limit_val_batches=250` as a safeguard against excessive validation time on large datasets.
-* `logger=[wandb_logger]` to register external logging backends (add `tb_logger` if you prefer TensorBoard-driven monitoring).
-* `callbacks=[checkpoint_callback, early_stop_callback, lr_monitor]` to activate the components described above.
+* `logger=[wandb_logger]` to register the active W&B or CSV logger.
+* `callbacks=[checkpoint_callback, early_stop_callback]` to activate checkpointing and finite-check early stopping. Learning rates are logged by the Lightning module at the end of each training batch.
 
 Finally, `trainer.fit(model, datamodule=pl_datamodule)` launches the optimisation loop and `wandb.finish()` ensures clean shutdown
 of the W&B session.

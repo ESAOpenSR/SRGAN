@@ -21,7 +21,7 @@ from opensr_srgan.data.example_data.download_example_dataset import get_example_
 get_example_dataset()
 ```
 
-The helper pulls `example_dataset.zip` from the [`simon-donike/SR-GAN`](https://huggingface.co/simon-donike/SR-GAN) repository, extracts it, and removes the temporary archive once the copy completes.
+The helper pulls `example_dataset.zip` from the [`simon-donike/SR-GAN`](https://huggingface.co/simon-donike/SR-GAN) repository through the Hugging Face cache and extracts it into the requested output directory.
 
 ### Directory layout
 
@@ -34,6 +34,18 @@ Data:
 
 The training loop automatically instantiates `opensr_srgan.data.example_data.example_dataset.ExampleDataset` for both the
 training and validation dataloaders.
+
+## Built-in dataset selectors
+
+`Data.dataset_type` is resolved by `opensr_srgan.data.dataset_selector.select_dataset`. The currently supported selectors are:
+
+| `Data.dataset_type` | Required fields | Notes |
+| --- | --- | --- |
+| `ExampleDataset` | none beyond the downloaded `example_dataset/` folder | Quick smoke-test dataset generated from HR `.npz` chips. |
+| `SEN2NAIP` / `sen2naip` | `Data.sen2naip_taco_file`; optional `Data.sen2naip_val_fraction` | Requires `tacoreader` and a Taco manifest. Used by the 10 m preset once the manifest path is configured. |
+| `LRHRFolderDataset` | `Data.root_dir` or `Data.dataset_root` | Expects paired LR/HR folders; see the dataset class tests for the accepted layout. |
+
+Older labels such as `S2_6b`, `SPOT6`, or `cv` are not registered selector keys in the current code. If you start from an older config that uses one of those names, update `Data.dataset_type` or add a matching branch to the selector.
 
 ## Adding new datasets
 
