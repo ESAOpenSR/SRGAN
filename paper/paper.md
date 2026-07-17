@@ -74,12 +74,15 @@ A typical workflow in OpenSR-SRGAN involves selecting an architecture, defining 
 
 
 # Limitations
-Super-resolution methods enhance apparent detail but cannot replace imagery collected at native high resolution. OpenSR-SRGAN focuses on flexibility and reproducibility rather than state-of-the-art performance, and results still depend on proper preprocessing and accurate LR–HR alignment. GAN training in multispectral settings remains sensitive to dataset size and diversity, and may produce instability or spectral artifacts, particularly when reference data are limited or heterogeneous.
+Super-resolution methods enhance apparent detail but cannot replace imagery collected at native high resolution. OpenSR-SRGAN focuses on flexibility and reproducibility rather than state-of-the-art performance, and results still depend on proper preprocessing and accurate LR–HR alignment. GAN training and SR in general remain sensitive to dataset size and diversity, and may produce instability or spectral artifacts, particularly when reference data are geographically skewed, biased by land cover, or limited in size and scope.
 
 
 # Licensing and Availability
-the source code is made available through the [ESAOpenSR/OpenSR-SRGAN](https://github.com/ESAOpenSR/SRGAN) Github repository. Full documentation, API references, quickstart guides and tips and tricks can be found at  [srgan.opensr.eu](https://srgan.opensr.eu). A reproducible notebook is permanently hosted on [Google Colab](https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing).
+The source code is made available through the [ESAOpenSR/OpenSR-SRGAN](https://github.com/ESAOpenSR/SRGAN) Github repository. Full documentation, API references, quickstart guides and tips and tricks can be found at  [srgan.opensr.eu](https://srgan.opensr.eu). A reproducible notebook is permanently hosted on [Google Colab](https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing).
 In the spirit of open science and collaboration, we encourage feature requests and updates, bug fixes and reports, as well as general questions and concerns via direct interaction with the repository. `OpenSR-SRGAN` is licensed under the Apache-2.0 license.
+
+# AI Usage Disclosure
+TODO: Explain AI usage here
 
 # Acknowledgement
 This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, within the framework of the ['Explainable AI: Application to Trustworthy Super-Resolution (OpenSR)'](https://eo4society.esa.int/projects/opensr/) Project.
