@@ -69,7 +69,14 @@ omit = [
 ]
 
 [project.optional-dependencies]
-tests = ["pytest", "pytest-cov","numpy"]
+tests = [
+  "pytest",
+  "pytest-cov",
+  "numpy",
+  "pyproj>=3.4",
+  "pyshp>=2.3.1",
+  "shapely>=2.0.2",
+]
 docs = ["mkdocs-material", "mkdocstrings[python]", "pymdown-extensions"]
 hpc = [
   "PyYAML>=6.0",
