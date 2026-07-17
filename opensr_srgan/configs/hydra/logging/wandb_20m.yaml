@@ -1,0 +1,8 @@
+# @package _global_
+
+Logging:
+  num_val_images: 5
+  wandb:
+    enabled: true
+    entity: opensr
+    project: SRGAN_20m

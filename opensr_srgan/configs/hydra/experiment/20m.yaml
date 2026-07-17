@@ -1,0 +1,16 @@
+# @package _global_
+
+# Reproduces opensr_srgan/configs/config_20m.yaml.
+defaults:
+  - override /data: sen2naip
+  - override /model: 20m_rcab
+  - override /training: 20m
+  - override /logging: wandb_20m
+
+Data:
+  train_batch_size: 24
+  val_batch_size: 8
+  num_workers: 8
+  prefetch_factor: 4
+  dataset_type: S2_6b
+  normalization: normalise_10k

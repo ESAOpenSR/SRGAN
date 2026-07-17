@@ -1,0 +1,24 @@
+# @package _global_
+
+Model:
+  in_bands: 6
+  continue_training: false
+  load_checkpoint: false
+
+Generator:
+  model_type: SRResNet
+  block_type: rcab
+  large_kernel_size: 9
+  small_kernel_size: 3
+  n_channels: 96
+  n_blocks: 32
+  scaling_factor: 8
+  growth_channels: 32
+  res_scale: 0.2
+
+Discriminator:
+  model_type: standard
+  n_blocks: 8
+  use_spectral_norm: false
+  base_channels: 64
+  linear_size: 1024

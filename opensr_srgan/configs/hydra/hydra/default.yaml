@@ -1,0 +1,14 @@
+# @package hydra
+
+# Keep Hydra runs reproducible without changing the process working directory.
+defaults:
+  - override hydra_logging: default
+  - override job_logging: default
+
+run:
+  dir: logs/${Logging.wandb.project}/${now:%Y-%m-%d_%H-%M-%S}
+sweep:
+  dir: logs/${Logging.wandb.project}/multiruns/${now:%Y-%m-%d_%H-%M-%S}
+  subdir: ${hydra.job.num}
+job:
+  chdir: false

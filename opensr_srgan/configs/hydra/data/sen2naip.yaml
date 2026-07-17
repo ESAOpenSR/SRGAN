@@ -1,0 +1,9 @@
+# @package _global_
+
+Data:
+  train_batch_size: 6
+  val_batch_size: 4
+  num_workers: 6
+  prefetch_factor: 2
+  dataset_type: SEN2NAIP
+  normalization: normalise_10k

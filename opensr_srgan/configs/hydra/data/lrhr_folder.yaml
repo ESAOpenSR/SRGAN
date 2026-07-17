@@ -1,0 +1,10 @@
+# @package _global_
+
+Data:
+  train_batch_size: 2
+  val_batch_size: 2
+  num_workers: 1
+  prefetch_factor: 2
+  dataset_type: LRHRFolderDataset
+  root_dir: null
+  normalization: normalise_10k

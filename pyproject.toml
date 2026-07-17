@@ -19,6 +19,7 @@ dependencies = [
   "numpy",
   "kornia",
   "wandb",
+  "hydra-core>=1.3,<2",
   "omegaconf",
   "matplotlib",
   "rasterio",
@@ -80,3 +81,4 @@ hpc = [
 
 [project.scripts]
 srgan-hpc = "deployment.srgan_hpc.cli:main"
+srgan-train = "opensr_srgan.train_hydra:main"
