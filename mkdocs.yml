@@ -1,7 +1,7 @@
 site_name: "SRGAN Docs"
 site_description: "OpenSR-SRGAN: Flexible Super-Resolution GANs for satellite imagery"
 site_url: https://srgan.opensr.eu/
-copyright: "2024-2025, Simon Donike et al."
+copyright: "2024-2026, Simon Donike et al."
 repo_url: https://github.com/ESAOpenSR/SRGAN
 repo_name: ESAOpenSR/SRGAN
 edit_uri: edit/main/docs/
@@ -42,7 +42,11 @@ plugins:
       handlers:
         python:
           options:
-            docstring_style: auto
+            docstring_style: google
+            docstring_options:
+              warnings: false
+              warn_missing_types: false
+              warn_unknown_params: false
             show_source: true
 
 markdown_extensions:
@@ -92,6 +96,7 @@ nav:
       - Inference Guide: inference.md
       - HPC Inference: hpc-inference.md
       - Configuration: configuration.md
+      - Hydra Experiments: hydra.md
       - Data Preparation: data.md
 
   - Training:

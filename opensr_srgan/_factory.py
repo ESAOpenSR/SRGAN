@@ -8,7 +8,7 @@ This module provides convenience functions to:
 
 Typical usage
 -------------
->>> from opensr_srgan.model.loading import load_inference_model
+>>> from opensr_srgan import load_inference_model
 >>> model = load_inference_model("RGB-NIR")
 >>> model.eval()
 >>> sr = model(torch.randn(1, 4, 64, 64))

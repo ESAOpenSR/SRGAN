@@ -1,0 +1,8 @@
+# @package _global_
+
+# Reproduces opensr_srgan/configs/config_training_example.yaml.
+defaults:
+  - override /data: example
+  - override /model: example_srresnet
+  - override /training: example
+  - override /logging: csv

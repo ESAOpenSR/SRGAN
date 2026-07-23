@@ -6,13 +6,14 @@ This walkthrough covers the fastest path from zero to an end-to-end super-resolu
 
 ```bash
 pip install opensr-srgan
+pip install opensr-utils  # optional, for full-tile inference
 ```
 
 * `opensr-srgan` exposes helpers that reconstruct Lightning checkpoints from YAML configs or download ready-to-run presets.
-* The optional `huggingface` extra adds `huggingface-hub`, which `load_inference_model` uses internally when fetching preset weights from the Hub.
-* `opensr-utils` provides the tiling/mosaicking pipeline that can super-resolve whole Sentinel-2 SAFE folders, GeoTIFFs, or other large rasters. 
+* `huggingface-hub` is installed with `opensr-srgan` and is used by `load_inference_model` when fetching preset weights from the Hub.
+* Install `opensr-utils` separately when you want the large-raster tiling/mosaicking pipeline for Sentinel-2 SAFE folders, GeoTIFFs, or other large rasters.
 
-## 2.1 Instantiate a Preset 
+## 2.1 Instantiate a preset
 
 ```python
 from opensr_srgan import load_inference_model
@@ -20,24 +21,31 @@ from opensr_srgan import load_inference_model
 model = load_inference_model("RGB-NIR", map_location="cuda")
 ```
 
-`load_inference_model` retrieves the configuration and checkpoint that correspond to the selected preset (here the four-band RGB-NIR model), restores the Lightning module, and switches it to evaluation mode so that it is ready for inference.【F:opensr_srgan/_factory.py†L107-L150】 If you run on CPU, change `map_location="cuda"` to `map_location="cpu"`.
+`load_inference_model` retrieves the configuration and checkpoint that correspond to the selected preset (here the four-band RGB-NIR model), restores the Lightning module, and switches it to evaluation mode so that it is ready for inference. If you run on CPU, change `map_location="cuda"` to `map_location="cpu"`.
 
-## 2.2 Instanciate your own Model
+## 2.2 Instantiate your own model
+
 ```python
 from opensr_srgan import load_from_config
 model = load_from_config(config_path="YOUR_CONFIG_PATH",
                          checkpoint_uri="YOUR_CKPT_PATH")
 ```
+
 Using the path to your trained model as well as the config file that was used to train your model, you can load your model for inference.
 
 
-## 3.1 Run SR on your Images
-After the model has been created, please use the pytorch-lightning native `predict_step` function. Sticking to the pytorch-lightning workflow includes the selected normalization procedures that the model was trained on, and also seamlessly enables multi-GPU processing and other tweaks. Be aware that this only SRs raw tensors, so the patching and stitching needs to be done manually.
+## 3.1 Run SR on tensors
+
+After the model has been created, use `predict_step` for tensor inference. This applies the normalization procedure configured for the model and returns a CPU tensor. It only processes raw tensors, so patching and stitching must be handled separately for large rasters.
+
 ```python
 sr = model.predict_step(lr)
 ```
+
 ## 3.2 Super-resolve a full tile with OpenSR-Utils
-You can build on top of out utility package in order to do all of the stitching, georeferencing and patching automatically (Note: this currently only works for RGB-NIR Sentinel-2 images)
+
+You can build on top of the `opensr-utils` package to handle stitching, georeferencing, and patching automatically. This currently targets RGB-NIR Sentinel-2 inference.
+
 ```python
 import opensr_utils
 

@@ -2,7 +2,7 @@
 
 | **PyPI** | **Versions** | **Docs & License** | **Tests** | **Reference** |
 |:---------:|:-------------:|:------------------:|:----------:|:--------------:|
-| [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.10%20v3.12-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PytorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) |  [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)  <br> [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20088994.svg)](https://doi.org/10.5281/zenodo.20088994)
+| [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.12--v3.14-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PyTorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) |  [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)  <br> [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20088994.svg)](https://doi.org/10.5281/zenodo.20088994)
 
 
 
@@ -26,19 +26,25 @@ Full docs live at **[srgan.opensr.eu](https://srgan.opensr.eu/)**. They cover us
 * **Remote-sensing aware losses:** combine spectral, perceptual, and adversarial objectives with tunable weights.
 * **Stable training loop:** generator pretraining, adversarial ramp-ups, EMA, and multi-GPU Lightning support out of the box.
 * **PyPI distribution:** `pip install opensr-srgan` for ready-to-use presets or custom configs.
-* **Extensive Logging:** Logging all important information automatically to `WandB` for optimal insights.
+* **Experiment tracking:** Log metrics and validation imagery to Weights & Biases, or use local CSV logs for lightweight runs.
 
 ---
 
 ## 🏗️ Configuration Examples
 
-All key knobs are exposed via YAML in the `opensr_srgan/configs` folder:
+All key knobs are exposed via YAML in the `opensr_srgan/configs` folder. You can keep using the legacy single-file workflow, or use the Hydra entry point for composable experiment presets and command-line overrides:
 
-* **Model**: `in_channels`, `n_channels`, `n_blocks`, `scale`, ESRGAN knobs (`growth_channels`, `res_scale`, `out_channels`), `block_type ∈ {SRResNet, res, rcab, rrdb, lka}`
+```bash
+python -m opensr_srgan.train --config opensr_srgan/configs/config_training_example.yaml
+python -m opensr_srgan.train_hydra experiment=10m Training.max_epochs=5 Logging.wandb.enabled=false
+srgan-train experiment=20m Training.gpus=[0,1]
+```
+
+* **Model**: `Model.in_bands`, `Generator.n_channels`, `Generator.n_blocks`, `Generator.scaling_factor`, ESRGAN knobs (`growth_channels`, `res_scale`, `out_channels`, `use_icnr`), and `Generator.block_type ∈ {standard, res, rcab, rrdb, lka}`
 * **Losses**: `l1_weight`, `sam_weight`, `perceptual_weight`, `tv_weight`, `adv_loss_beta`
-* **Training**: `pretrain_g_only`, `g_pretrain_steps` (`-1` keeps generator-only pretraining active indefinitely), `adv_loss_ramp_steps`, `label_smoothing`, generator LR warmup (`Schedulers.g_warmup_steps`, `Schedulers.g_warmup_type`), discriminator cadence controls
+* **Training**: `pretrain_g_only`, `g_pretrain_steps` (`-1` keeps generator-only pretraining active indefinitely), `adv_loss_ramp_steps`, `label_smoothing`, generator LR warmup (`Schedulers.g_warmup_steps`, `Schedulers.g_warmup_type`), EMA, and manual gradient clipping
 * **Adversarial mode**: `Training.Losses.adv_loss_type` (`bce`/`wasserstein`) and optional `Training.Losses.relativistic_average_d` for BCE-based relativistic-average GAN updates
-* **Data**: band order, normalization stats, crop sizes, augmentations
+* **Data**: `Data.dataset_type`, dataloader sizes/workers, dataset paths/manifests, and normalization policy
 
 ---
 
@@ -60,7 +66,7 @@ The schedule and ramp make training **easier, safer, and more reproducible**.
 | Component | Options | Config keys |
 |-----------|---------|-------------|
 | **Generators** | `SRResNet`, `res`, `rcab`, `rrdb`, `lka`, `esrgan`, `stochastic_gan` | `Generator.model_type`, depth via `Generator.n_blocks`, width via `Generator.n_channels`, kernels/scale plus ESRGAN-specific `growth_channels`, `res_scale`, `out_channels`. |
-| **Discriminators** | `standard` `SRGAN`, `CNN`, `patchgan`, `esrgan` | `Discriminator.model_type`, granularity with `Discriminator.n_blocks`, spectral norm toggle via `Discriminator.use_spectral_norm`, ESRGAN-specific `base_channels`, `linear_size`. |
+| **Discriminators** | `standard` SRGAN, `patchgan`, `esrgan` | `Discriminator.model_type`, granularity with `Discriminator.n_blocks`, spectral norm toggle via `Discriminator.use_spectral_norm`, ESRGAN-specific `base_channels`, `linear_size`. |
 | **Content losses** | L1, Spectral Angle Mapper, VGG19/LPIPS perceptual metrics, Total Variation | Weighted by `Training.Losses.*` (e.g. `l1_weight`, `sam_weight`, `perceptual_weight`, `perceptual_metric`, `tv_weight`). |
 | **Adversarial loss** | BCE‑with‑logits or Wasserstein critic | Controlled by `Training.Losses.adv_loss_type`, warmup via `Training.pretrain_g_only`, ramped by `adv_loss_ramp_steps`, capped at `adv_loss_beta`, optional label smoothing. For BCE, enable `Training.Losses.relativistic_average_d` for RaGAN-style relative logits. |
 
@@ -77,8 +83,8 @@ Follow the [installation instructions](https://srgan.opensr.eu/getting-started/)
 
 * To test the package immediately, launch the Google Colab right now and follow along the introduction! [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing) 
 * **Datasets:** Grab the bundled example dataset or learn how to register your own sources in the [data guide](https://srgan.opensr.eu/data/).
-* **Training:** Launch training with `python -m opensr_srgan.train --config opensr_srgan/configs/config_10m.yaml` or import `train` from the package as described in the [training walkthrough](https://srgan.opensr.eu/training/).
-* **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/getting-started/inference/).
+* **Training:** Launch a smoke test with `python -m opensr_srgan.train --config opensr_srgan/configs/config_training_example.yaml`, or use Hydra with `python -m opensr_srgan.train_hydra experiment=example`. Use the `10m` and `20m` presets once the matching datasets are configured.
+* **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/inference/).
 
 ---
 

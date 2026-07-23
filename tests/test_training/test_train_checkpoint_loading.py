@@ -287,6 +287,23 @@ def test_train_uses_wandb_logger_and_saves_config_when_global_zero(
     ), "expected config.yaml to be written in logs/unit-tests/<timestamp>/"
 
 
+def test_train_respects_logging_output_dir(train_module, monkeypatch, tmp_path):
+    train_mod, state = train_module
+
+    gpu_rank_module = sys.modules["opensr_srgan.utils.gpu_rank"]
+    monkeypatch.setattr(gpu_rank_module, "_is_global_zero", lambda: True)
+
+    output_dir = tmp_path / "hydra-run"
+    config = _make_config(load_checkpoint=False, continue_training=False)
+    config.Logging.output_dir = str(output_dir)
+
+    train_mod.train(config)
+
+    assert (output_dir / "config.yaml").is_file()
+    assert state["builder_checkpoint_callback"].kwargs["dirpath"] == str(output_dir)
+    assert state["builder_logger"].kwargs["save_dir"] == str(output_dir)
+
+
 def test_train_module_main_guard(monkeypatch):
     state = {}
 

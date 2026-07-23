@@ -17,6 +17,20 @@ OmegaConf-based experiment files.
         - "!^_"
       members_order: source
 
+## Hydra entry point
+
+::: opensr_srgan.train_hydra
+    handler: python
+    options:
+      show_root_heading: false
+      show_root_full_path: false
+      show_source: true
+      members:
+        - main
+      filters:
+        - "!^_"
+      members_order: source
+
 ## Trainer configuration helpers
 
 ::: opensr_srgan.utils.build_trainer_kwargs

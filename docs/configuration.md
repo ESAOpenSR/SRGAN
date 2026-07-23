@@ -1,6 +1,6 @@
 # Configuration
 
-ESA OpenSR relies on YAML files to control every aspect of the training pipeline. This page documents the available keys and how they influence the underlying code. Use `opensr_srgan/configs/config_20m.yaml` and `opensr_srgan/configs/config_10m.yaml` as starting points.
+ESA OpenSR relies on YAML files to control every aspect of the training pipeline. This page documents the available keys and how they influence the underlying code. Use `opensr_srgan/configs/config_training_example.yaml` for a smoke test, `config_10m.yaml` for SEN2NAIP-style runs, or the Hydra presets described below for composable experiments.
 
 ## File structure
 
@@ -23,9 +23,9 @@ Each section maps directly to parameters consumed inside `opensr_srgan/model/SRG
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `train_batch_size` | 12 | Mini-batch size for the training dataloader. Falls back to `batch_size` if set. |
+| `train_batch_size` | 8 | Mini-batch size for the training dataloader. Falls back to `batch_size` if set. |
 | `val_batch_size` | 8 | Batch size for validation. |
-| `num_workers` | 6 | Number of worker processes for both dataloaders. |
+| `num_workers` | 4 | Number of worker processes for both dataloaders. |
 | `prefetch_factor` | 2 | Additional batches prefetched by each worker. Ignored when `num_workers == 0`. |
 | `dataset_type` | `ExampleDataset` | Dataset selector consumed by `opensr_srgan.data.dataset_selector.select_dataset`. |
 | `normalization` | `'sen2_stretch'` | Normalisation strategy applied to input tensors. Accepts a string alias or a mapping (see below). |
@@ -211,7 +211,7 @@ Both optimisers share the same configuration keys because they use `torch.optim.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `metric` | `val_metrics/l1` | Validation metric monitored for plateau detection. |
+| `metric` | `val_g_loss` / `val_d_loss` fallback | Shared fallback monitor when `metric_g` or `metric_d` is omitted. Shipped configs set explicit monitor keys. |
 | `metric_g` | — | Optional override for the generator scheduler monitor. |
 | `metric_d` | — | Optional override for the discriminator scheduler monitor. |
 | `patience_g` | `100` | Epochs with no improvement before reducing the generator LR. |
@@ -220,7 +220,6 @@ Both optimisers share the same configuration keys because they use `torch.optim.
 | `factor_d` | `0.5` | Multiplicative factor applied to the discriminator LR upon plateau. |
 | `cooldown` | `0` | Number of epochs to wait after an LR drop before resuming plateau checks. |
 | `min_lr` | `1e-7` | Minimum learning rate allowed for both schedulers. |
-| `verbose` | `True` | Enables scheduler logging messages. |
 | `g_warmup_steps` | `2000` | Number of optimiser steps used for generator LR warmup. Set to `0` to disable. |
 | `g_warmup_type` | `cosine` | Warmup curve for the generator LR (`cosine` or `linear`). |
 
@@ -235,7 +234,23 @@ different validation metrics.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `num_val_images` | `5` | Number of validation batches visualised and logged to Weights & Biases each epoch. |
+| `num_val_images` | `5` | Number of validation batches visualised and logged to Weights & Biases when W&B is enabled. |
+| `wandb.enabled` | `False` in example configs | Enables `WandbLogger`; when false, training uses `CSVLogger`. |
+| `wandb.entity` | `opensr` | W&B entity/team name. |
+| `wandb.project` | `SRGAN_10m` | Project name used by W&B and by the default checkpoint directory. |
+| `output_dir` | unset | Optional explicit run directory. Hydra sets this to its runtime output directory; legacy YAML runs fall back to `logs/<project>/<timestamp>`. |
+
+## Hydra experiment configs
+
+The legacy single-file configs remain supported, but new experiments can also be launched through Hydra:
+
+```bash
+python -m opensr_srgan.train_hydra experiment=example
+python -m opensr_srgan.train_hydra experiment=10m Training.max_epochs=5 Logging.wandb.enabled=false
+srgan-train experiment=20m Training.gpus=[0,1]
+```
+
+Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` selects simple defaults, while `experiment/example.yaml`, `experiment/10m.yaml`, and `experiment/20m.yaml` reproduce the shipped flat YAML presets through grouped `data`, `model`, `training`, and `logging` configs. Choose `experiment=...` for a full known setup; use direct overrides for a temporary change without editing files. See [Hydra Experiments](hydra.md) for a complete walkthrough.
 
 ## Tips for managing configurations
 

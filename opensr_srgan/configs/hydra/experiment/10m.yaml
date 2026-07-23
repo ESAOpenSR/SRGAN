@@ -1,0 +1,8 @@
+# @package _global_
+
+# Reproduces opensr_srgan/configs/config_10m.yaml.
+defaults:
+  - override /data: sen2naip
+  - override /model: 10m_esrgan
+  - override /training: 10m
+  - override /logging: wandb_10m

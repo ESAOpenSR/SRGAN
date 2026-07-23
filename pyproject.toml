@@ -11,7 +11,7 @@ authors = [
   { name = "Simon Donike, ESAOpenSR Team" }
 ]
 license = { file = "LICENSE" }
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.12,<3.15"
 dependencies = [
   "torch>=2.1",
   "pytorch-lightning>=2.1,<3.0",
@@ -19,6 +19,7 @@ dependencies = [
   "numpy",
   "kornia",
   "wandb",
+  "hydra-core>=1.3,<2",
   "omegaconf",
   "matplotlib",
   "rasterio",
@@ -29,9 +30,9 @@ dependencies = [
 keywords = ["super-resolution", "gan", "remote-sensing", "pytorch", "lightning"]
 classifiers = [
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "License :: OSI Approved :: Apache Software License",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -66,7 +67,14 @@ omit = [
 ]
 
 [project.optional-dependencies]
-tests = ["pytest", "pytest-cov","numpy"]
+tests = [
+  "pytest",
+  "pytest-cov",
+  "numpy",
+  "pyproj>=3.4",
+  "pyshp>=2.3.1",
+  "shapely>=2.0.2",
+]
 docs = ["mkdocs-material", "mkdocstrings[python]", "pymdown-extensions"]
 hpc = [
   "PyYAML>=6.0",
@@ -80,3 +88,4 @@ hpc = [
 
 [project.scripts]
 srgan-hpc = "deployment.srgan_hpc.cli:main"
+srgan-train = "opensr_srgan.train_hydra:main"

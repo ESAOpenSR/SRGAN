@@ -1,0 +1,49 @@
+# @package _global_
+
+Training:
+  device: cuda
+  gpus: [2, 3]
+  max_epochs: 9999
+  val_check_interval: 1.0
+  limit_val_batches: 250
+  pretrain_g_only: true
+  g_pretrain_steps: 15000
+  adv_loss_ramp_steps: 2500
+  label_smoothing: true
+  EMA:
+    enabled: false
+    decay: 0.999
+    update_after_step: 0
+    use_num_updates: true
+  Losses:
+    adv_loss_type: bce
+    relativistic_average_d: false
+    adv_loss_beta: 1e-3
+    adv_loss_schedule: cosine
+    r1_gamma: 0.0
+    l1_weight: 1.0
+    sam_weight: 0.05
+    perceptual_weight: 0.1
+    perceptual_metric: vgg
+    tv_weight: 0.0
+    max_val: 1.0
+    ssim_win: 11
+
+Optimizers:
+  optim_g_lr: 1e-4
+  optim_d_lr: 1e-6
+  gradient_clip_val: 1.0
+  betas: [0.0, 0.99]
+  eps: 1.0e-7
+  weight_decay_g: 0.0
+  weight_decay_d: 0.0
+
+Schedulers:
+  g_warmup_steps: 2500
+  g_warmup_type: cosine
+  metric_g: val_metrics/l1
+  metric_d: validation/DISC_adversarial_loss
+  patience_g: 50
+  patience_d: 50
+  factor_g: 0.5
+  factor_d: 0.5

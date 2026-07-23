@@ -1,0 +1,11 @@
+# @package _global_
+
+# Composable Hydra entry point for SRGAN training.
+defaults:
+  - _self_
+  - data: example
+  - model: example_srresnet
+  - training: cpu_debug
+  - logging: csv
+  - hydra: default
+  - experiment: null

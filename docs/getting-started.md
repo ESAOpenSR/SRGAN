@@ -1,6 +1,6 @@
 # Getting started
 
-This guide walks through installing dependencies, configuring datasets, and launching your first ESA OpenSR experiment. The stack supports Python 3.10-3.12, PyTorch Lightning, and Weights & Biases for experiment tracking.
+This guide walks through installing dependencies, configuring datasets, and launching your first ESA OpenSR experiment. The stack supports Python 3.12-3.14, PyTorch Lightning, and Weights & Biases for experiment tracking.
 
 ## Try it in Colab first
 
@@ -21,13 +21,14 @@ For the fastest start, open the interactive notebook in Google Colab and run thr
    python -m venv .venv
    source .venv/bin/activate
    ```
-2. **Install Python dependencies.**
+2. **Install the project and Python dependencies.**
    ```bash
-   pip install -r requirements.txt
+   python -m pip install -e .
    ```
+   This editable install also exposes the `srgan-train` and `srgan-hpc` commands. Contributors can install the test and documentation tools with `python -m pip install -e ".[tests,docs]"`; cluster users can add the HPC dependencies with `python -m pip install -e ".[hpc]"`.
 3. **Authenticate logging backends (optional but recommended).**
    * Run `wandb login` to capture metrics and images in your W&B workspace.
-   * Start `tensorboard --logdir logs/` if you prefer local dashboards.
+   * Keep `Logging.wandb.enabled: false` for local CSV logs when you do not want to use W&B.
 
 ## 2. Gather training data
 
@@ -39,7 +40,7 @@ from opensr_srgan.data.example_data.download_example_dataset import get_example_
 get_example_dataset()  # downloads into ./example_dataset/
 ```
 
-The script downloads `example_dataset.zip` from the Hugging Face Hub, extracts it to `example_dataset/`, and removes the archive once extraction finishes. The configuration only needs to specify the dataset type:
+The script downloads `example_dataset.zip` through the Hugging Face Hub cache and extracts it to `example_dataset/`. The configuration only needs to specify the dataset type:
 
 ```yaml
 Data:
@@ -50,10 +51,10 @@ When you are ready to integrate your own collections, follow the guidance in [Da
 
 ## 3. Configure the experiment
 
-Use of the provided YAML presets or copy and edit one:
+Use a provided YAML preset or copy and edit one. For the bundled example dataset, start from the example config:
 
 ```bash
-cp opensr_srgan/configs/config_10m.yaml opensr_srgan/configs/my_experiment.yaml
+cp opensr_srgan/configs/config_training_example.yaml opensr_srgan/configs/my_experiment.yaml
 ```
 
 Update at least the following fields:
@@ -68,10 +69,11 @@ See [Configuration](configuration.md) for a full breakdown of available options.
 
 ## 4. Launch training
 
-Run the training script with your customised config:
+Run the training script with your customised config, or use the Hydra example preset:
 
 ```bash
 python -m opensr_srgan.train --config opensr_srgan/configs/my_experiment.yaml
+python -m opensr_srgan.train_hydra experiment=example
 ```
 
 Prefer to stay inside Python? Import the helper exposed by the package:
@@ -86,7 +88,7 @@ Both entry points will:
 
 1. Instantiate the `SRGAN_model` Lightning module from the YAML file.
 2. Build the appropriate dataset pair and wrap it in a `LightningDataModule`.
-3. Configure Weights & Biases and TensorBoard loggers alongside checkpointing and learning-rate monitoring callbacks.
+3. Configure a Weights & Biases or CSV logger, checkpointing, early stopping, and per-step learning-rate logging.
 4. Start alternating generator/discriminator optimisation according to your warm-start schedule.
 
 Training resumes automatically if `Model.continue_training` points to a Lightning checkpoint. If you interrupt training, always use the `Model.continue_training` flag to pass the generated checkpoint, since that restores all optimizers, schedulers, EMA etc. Do not set `Model.load_checkpoint` and `Model.continue_training` at the same time.
@@ -103,7 +105,7 @@ Training resumes automatically if `Model.continue_training` points to a Lightnin
 
     # Option A – bring your own config + checkpoint (local path or URL)
     custom_model = load_from_config(
-        config_path="opensr_srgan/configs/config_10m.yaml",
+        config_path="path/to/your_config.yaml",
         checkpoint_uri="https://example.com/checkpoints/srgan.ckpt",
         map_location="cuda",  # optional
     )

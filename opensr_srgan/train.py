@@ -16,6 +16,26 @@ from omegaconf import OmegaConf
 import pytorch_lightning as pl
 
 
+def _is_path_set(value) -> bool:
+    """Return True when an optional path-like config value should be used."""
+
+    return value not in (False, None, "")
+
+
+def _resolve_experiment_dir(config) -> str:
+    """Resolve the directory used for checkpoints and the saved config."""
+
+    configured_output_dir = getattr(config.Logging, "output_dir", None)
+    if _is_path_set(configured_output_dir):
+        return os.path.normpath(os.path.expanduser(str(configured_output_dir)))
+
+    return os.path.join(
+        os.path.normpath("logs/"),
+        config.Logging.wandb.project,
+        datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+    )
+
+
 def train(config):
     """
     Train SRGAN from a configuration.
@@ -91,31 +111,36 @@ def train(config):
     """ Configure Trainer """
     #############################################################################################################
 
+    output_dir_is_set = _is_path_set(getattr(config.Logging, "output_dir", None))
+    experiment_dir = _resolve_experiment_dir(config)
+
     # Configure Logger
     if config.Logging.wandb.enabled:
         # set up logging
         from pytorch_lightning.loggers import WandbLogger
 
         wandb_project = config.Logging.wandb.project  # whatever you want
-        wandb_logger = WandbLogger(
-            project=wandb_project, entity=config.Logging.wandb.entity, log_model=False
-        )
+        wandb_kwargs = {
+            "project": wandb_project,
+            "entity": config.Logging.wandb.entity,
+            "log_model": False,
+        }
+        if output_dir_is_set:
+            wandb_kwargs["save_dir"] = experiment_dir
+        wandb_logger = WandbLogger(**wandb_kwargs)
     else:
         print("Not using Weights & Biases logging, reduced CSV logs written locally.")
         from pytorch_lightning.loggers import CSVLogger
 
+        csv_save_dir = experiment_dir if output_dir_is_set else "logs/"
         wandb_logger = CSVLogger(
-            save_dir="logs/",
+            save_dir=csv_save_dir,
         )
 
     # Configure Saving Checkpoints
     from pytorch_lightning.callbacks import ModelCheckpoint
 
-    dir_save_checkpoints = os.path.join(
-        os.path.normpath("logs/"),
-        config.Logging.wandb.project,
-        datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
-    )
+    dir_save_checkpoints = experiment_dir
     from opensr_srgan.utils.gpu_rank import (
         _is_global_zero,
     )  # make dir only on main process
