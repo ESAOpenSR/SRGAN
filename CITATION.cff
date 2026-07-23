@@ -23,7 +23,7 @@ authors:
 repository-code: 'https://github.com/ESAOpenSR/SRGAN'
 url: 'https://srgan.opensr.eu/'
 doi: 10.5281/zenodo.20088994
-version: 0.5.0
+version: 0.5.1
 date-released: 2026-07-23
 
 keywords:

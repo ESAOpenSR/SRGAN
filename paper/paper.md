@@ -32,7 +32,7 @@ date:  15 November 2025
 bibliography: paper.bib
 version:
   report: v0.1.0
-  software: v0.4.3
+  software: v0.5.1
 number-sections: true
 ---
 
@@ -85,9 +85,9 @@ A typical workflow in OpenSR-SRGAN involves selecting an architecture, defining 
 
 # Research Impact Statement
 
-OpenSR-SRGAN is the adversarial-model component of the European Space Agency OpenSR project. It includes a loader for the published SEN2NAIP dataset [@sen2naip], produces models that can be evaluated with `opensr-test` [@osrtest], and integrates `opensr-utils` [@osrutils] for tiled inference on large Sentinel-2 products. Public pretrained configurations and checkpoints support ongoing experiments on four-band RGB--NIR and six-band short-wave-infrared super-resolution.
+Version 0.5.1 is distributed through the Python Package Index and archived on Zenodo. The repository provides user and API documentation, a runnable Colab example, contribution guidelines, and automated tests exercised by continuous integration on Python 3.12, 3.13, and 3.14. Resolved experiment configurations, example data, pretrained weights, and a Slurm-based large-area inference workflow provide concrete reproducibility and community-readiness evidence beyond the software source alone.
 
-Version 0.4.3 is distributed through the Python Package Index and archived on Zenodo. The repository provides user and API documentation, a runnable Colab example, contribution guidelines, and more than 250 automated tests exercised by continuous integration on Python 3.12, 3.13, and 3.14. Resolved experiment configurations, example data, pretrained weights, and a Slurm-based large-area inference workflow provide concrete reproducibility and community-readiness evidence beyond the software source alone.
+OpenSR-SRGAN is the adversarial-model component of the European Space Agency OpenSR project. It includes a loader for the published SEN2NAIP dataset [@sen2naip], produces models that can be evaluated with `opensr-test` [@osrtest], and integrates `opensr-utils` [@osrutils] for tiled inference on large Sentinel-2 products. Public pretrained configurations and checkpoints support ongoing experiments on four-band RGB--NIR and six-band short-wave-infrared super-resolution.
 
 
 # Limitations
@@ -100,7 +100,8 @@ In the spirit of open science and collaboration, we encourage feature requests a
 
 # AI Usage Disclosure
 
-OpenAI Codex was used to assist with parts of the documentation, automated tests and continuous-integration workflows and the configurable normalization class. The authors reviewed all AI-assisted changes and retained responsibility for the final code. The manuscript has been edited for clarity and readability only, using Writeful in Overleaf. Software changes were verified through targeted tests and the continuous-integration suite. Experimental data, results, imagery, and pretrained model weights are fully reproducible.
+OpenAI Codex (versions 5.1-5.5) was used to assist with and generate parts of the documentation, automated tests and continuous-integration workflows, and model training and implementation code. The authors reviewed all AI-assisted changes and retain responsibility for the final code and functionality. Software changes are verified through targeted tests, the continuous-integration suite, and frequent manual usage. Experimental data, results, imagery, and pretrained model weights are fully reproducible.
+The manuscript has been edited for clarity and readability only, using Writeful embedded in Overleaf.
 
 # Acknowledgement
 This work has been supported by the European Space Agency (ESA) $\Phi$-Lab, within the framework of the ['Explainable AI: Application to Trustworthy Super-Resolution (OpenSR)'](https://eo4society.esa.int/projects/opensr/) Project.

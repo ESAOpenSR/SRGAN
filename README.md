@@ -11,7 +11,7 @@
 
 # 🌍 Single Image Super-Resolution Remote Sensing 'SRGAN'
 
-**Remote-Sensing-SRGAN** is a research-grade GAN framework for super-resolution of Sentinel-2 and other remote-sensing imagery. It is specifically **not meant for SOTA performance, but quick implementation and experimentation**. It supports arbitrary band counts, configurable generator/discriminator designs, scalable depth/width, and a modular loss system designed for stable GAN training on EO data. Check out how inference and training works right now in this interactive example! [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing)
+**Remote-Sensing-SRGAN** is a research-grade GAN framework for super-resolution of Sentinel-2 and other remote-sensing imagery. It is specifically **not meant for SOTA performance, but quick implementation and experimentation**. It supports arbitrary band counts, configurable generator/discriminator designs, scalable depth/width, and a modular loss system designed for stable GAN training on EO data. Check out how inference and training works right now in this interactive example! [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ESAOpenSR/SRGAN/blob/main/notebooks/SRGAN_Showcase.ipynb)
 
 
 ---
@@ -81,7 +81,7 @@ Follow the [installation instructions](https://srgan.opensr.eu/getting-started/)
 
 ## 🚀 Quickstart
 
-* To test the package immediately, launch the Google Colab right now and follow along the introduction! [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing) 
+* To test the package immediately, launch the Google Colab right now and follow along the introduction! [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ESAOpenSR/SRGAN/blob/main/notebooks/SRGAN_Showcase.ipynb)
 * **Datasets:** Grab the bundled example dataset or learn how to register your own sources in the [data guide](https://srgan.opensr.eu/data/).
 * **Training:** Launch a smoke test with `python -m opensr_srgan.train --config opensr_srgan/configs/config_training_example.yaml`, or use Hydra with `python -m opensr_srgan.train_hydra experiment=example`. Use the `10m` and `20m` presets once the matching datasets are configured.
 * **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/inference/).
