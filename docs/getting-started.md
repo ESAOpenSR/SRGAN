@@ -21,10 +21,11 @@ For the fastest start, open the interactive notebook in Google Colab and run thr
    python -m venv .venv
    source .venv/bin/activate
    ```
-2. **Install Python dependencies.**
+2. **Install the project and Python dependencies.**
    ```bash
-   pip install -r requirements.txt
+   python -m pip install -e .
    ```
+   This editable install also exposes the `srgan-train` and `srgan-hpc` commands. Contributors can install the test and documentation tools with `python -m pip install -e ".[tests,docs]"`; cluster users can add the HPC dependencies with `python -m pip install -e ".[hpc]"`.
 3. **Authenticate logging backends (optional but recommended).**
    * Run `wandb login` to capture metrics and images in your W&B workspace.
    * Keep `Logging.wandb.enabled: false` for local CSV logs when you do not want to use W&B.
@@ -104,7 +105,7 @@ Training resumes automatically if `Model.continue_training` points to a Lightnin
 
     # Option A – bring your own config + checkpoint (local path or URL)
     custom_model = load_from_config(
-        config_path="opensr_srgan/configs/config_training_example.yaml",
+        config_path="path/to/your_config.yaml",
         checkpoint_uri="https://example.com/checkpoints/srgan.ckpt",
         map_location="cuda",  # optional
     )

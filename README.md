@@ -2,7 +2,7 @@
 
 | **PyPI** | **Versions** | **Docs & License** | **Tests** | **Reference** |
 |:---------:|:-------------:|:------------------:|:----------:|:--------------:|
-| [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.10--v3.14-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PyTorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) |  [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)  <br> [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17590993.svg)](https://doi.org/10.5281/zenodo.17590993)
+| [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.10--v3.14-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PyTorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) |  [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)  <br> [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20088994.svg)](https://doi.org/10.5281/zenodo.20088994)
 
 
 
@@ -84,7 +84,7 @@ Follow the [installation instructions](https://srgan.opensr.eu/getting-started/)
 * To test the package immediately, launch the Google Colab right now and follow along the introduction! [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/16W0FWr6py1J8P4po7JbNDMaepHUM97yL?usp=sharing) 
 * **Datasets:** Grab the bundled example dataset or learn how to register your own sources in the [data guide](https://srgan.opensr.eu/data/).
 * **Training:** Launch a smoke test with `python -m opensr_srgan.train --config opensr_srgan/configs/config_training_example.yaml`, or use Hydra with `python -m opensr_srgan.train_hydra experiment=example`. Use the `10m` and `20m` presets once the matching datasets are configured.
-* **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/getting-started/inference/).
+* **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/inference/).
 
 ---
 

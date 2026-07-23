@@ -74,7 +74,7 @@ logs make it clear which subsystem is active at any given step.
 | `discriminator/adversarial_loss` | Binary cross-entropy loss of the discriminator on real vs. fake batches. | Drops below ~0.7 as the discriminator learns; continues trending down when D keeps up. |
 | `discriminator/D(y)_prob` | Mean discriminator confidence that HR inputs are real. | Rises toward 0.8–1.0 during stable training. |
 | `discriminator/D(G(x))_prob` | Mean discriminator confidence that SR predictions are real. | Starts low (~0.0–0.2) and climbs toward 0.5 as the generator improves. |
-| `train_metrics/l1` | Mean absolute error between SR and HR tensors. In generator-only pretraining this is the hardwired optimization target. | Decreases toward 0 as reconstructions sharpen. |
+| `train_metrics/l1` | Mean absolute error between SR and HR tensors and one component of the configured content objective. | Decreases toward 0 as reconstructions sharpen. |
 | `train_metrics/sam` | Spectral angle mapper (radians) averaged over pixels. | Falls toward 0; values <0.1 indicate strong spectral fidelity. |
 | `train_metrics/perceptual` | Perceptual distance (VGG or LPIPS) on selected RGB bands. | Decreases as textures align; exact range depends on the chosen metric. |
 | `train_metrics/tv` | Total variation penalty capturing SR smoothness. | Remains small; near-zero means little high-frequency noise. |
