@@ -23,8 +23,8 @@ authors:
 repository-code: 'https://github.com/ESAOpenSR/SRGAN'
 url: 'https://srgan.opensr.eu/'
 doi: 10.5281/zenodo.20088994
-version: 0.4.3
-date-released: 2026-05-08
+version: 0.5.0
+date-released: 2026-07-23
 
 keywords:
   - super-resolution
