@@ -37,7 +37,6 @@ class ProductConfig:
 @dataclass(slots=True)
 class AoiConfig:
     path: str | None = None
-    layer: str | None = None
 
 
 @dataclass(slots=True)

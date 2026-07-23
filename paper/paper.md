@@ -51,7 +51,7 @@ Optical satellite imagery supports many geospatial applications, including agric
 
 Deep learning has driven major progress in SISR, with convolutional models improving fidelity and perceptual quality [@dong2015imagesuperresolutionusingdeep; @kim2016deeplyrecursiveconvolutionalnetworkimage]. GANs [@goodfellow2014generativeadversarialnetworks] introduced adversarial learning for synthesizing realistic high-frequency detail and are widely used in remote sensing [@11159252; @su2024intriguingpropertycounterfactualexplanation]. SRGAN [@ledig2017photo] extended these ideas to super-resolution and has been applied to multispectral data [@rs15205062; @9787539; @10375518; @satlassuperres].
 
-Although diffusion and transformer-based models increasingly define the state of the art [@s1; @s2; @s3], GAN-based SR methods remain relevant for efficient and deterministic enhancement workflows [@g1; @allen].
+Although diffusion and transformer-based models increasingly define the state of the art [@s1; @s2; @s3], GAN-based SR methods remain relevant for efficient and deterministic enhancement workflows [@g1; @satlassuperres].
 
 # Statement of Need
 

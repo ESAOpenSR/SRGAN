@@ -24,15 +24,15 @@ from pathlib import Path
 
 import torch
 
-from .model.SRGAN import SRGAN_model
+from ._factory import load_from_config
 
 
 def load_model(config_path=None, ckpt_path=None, device=None):
-    """Instantiate an SRGAN model and optionally load pretrained weights.
+    """Load an inference-only SRGAN model and optionally restore a checkpoint.
 
-    This helper is safe to call from tests or scripts. It builds the model from
-    a provided configuration file, loads weights from a checkpoint if available,
-    and transfers the model to the selected device.
+    This is a device-aware wrapper around :func:`load_from_config`. The factory
+    builds only inference components, restores regular and EMA checkpoint state,
+    and returns the model in evaluation mode.
 
     Parameters
     ----------
@@ -45,24 +45,27 @@ def load_model(config_path=None, ckpt_path=None, device=None):
 
     Returns
     -------
-    model : SRGAN_model
+    model : pytorch_lightning.LightningModule
         The loaded and ready-to-infer SRGAN Lightning module.
     device : str
         The device string used for model placement (e.g., `"cuda"` or `"cpu"`).
 
     Notes
     -----
-    - Automatically switches the model to evaluation mode.
-    - Uses ``SRGAN_model.load_weights_from_checkpoint`` for robust weight loading from
-      both Lightning checkpoints (with ``state_dict``) and raw state dict files.
+    - Uses ``mode="eval"`` so discriminator and training-only loss components are
+      not constructed.
+    - Supports Lightning checkpoints, raw state dictionaries, HTTP(S) checkpoint
+      URLs, and EMA restoration through the shared model factory.
     """
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    model = SRGAN_model(config=config_path).eval().to(device)
-
-    if ckpt_path:
-        model.load_weights_from_checkpoint(ckpt_path, strict=False, map_location=device)
+    model = load_from_config(
+        config_path,
+        ckpt_path,
+        map_location=device,
+        mode="eval",
+    ).to(device)
 
     return model, device
 

@@ -44,7 +44,7 @@ Training:
   
   # --- Pretraining and adversarial setup ---
   pretrain_g_only: False        # Train generator only for initial phase
-  g_pretrain_steps: 100000     # Number of generator-only warmup steps (-1 keeps pretraining active)
+  g_pretrain_steps: 0          # Ignored while pretrain_g_only is false
   adv_loss_ramp_steps: 25000   # Gradual adversarial weight ramp steps
   label_smoothing: True        # Discriminator target smoothing (1.0 → 0.9)
 
@@ -116,7 +116,7 @@ Schedulers:
   g_warmup_steps: 100        # Generator warmup LR curve duration in steps (0 disables warmup)
   g_warmup_type: 'cosine'      # Generator warmup curve: ['cosine', 'linear']
   metric_g: 'val_metrics/l1'      # Metric monitored for Generator LR scheduler
-  metric_d: 'discriminator/adversarial_loss'    # Metric monitored for Discriminator LR scheduler
+  metric_d: 'validation/DISC_adversarial_loss'  # Validation metric monitored for Discriminator LR scheduler
   patience_g: 10              # Patience (epochs) for Generator LR scheduler
   patience_d: 10              # Patience (epochs) for Discriminator LR scheduler
   factor_g: 0.5                # LR reduction factor for Generator

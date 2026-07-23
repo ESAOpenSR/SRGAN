@@ -18,7 +18,6 @@ from deployment.srgan_hpc.patching import (
 @dataclass(frozen=True, slots=True)
 class AoiSelection:
     aoi_path: Path
-    aoi_layer: str | None
     geometry: BaseGeometry
     patches: list[Patch]
 
@@ -122,7 +121,6 @@ def patch_footprint(patch: Patch, resolution_m: float) -> BaseGeometry:
 def select_aoi_patches(
     *,
     aoi_path: str | Path,
-    aoi_layer: str | None,
     edge_size: int,
     resolution_m: float,
     overlap_meters: float,
@@ -144,6 +142,4 @@ def select_aoi_patches(
     ]
     if not selected:
         raise ValueError(f"No SR cutouts intersect the AOI geometry: {resolved_path}")
-    return AoiSelection(
-        aoi_path=resolved_path, aoi_layer=aoi_layer, geometry=geometry, patches=selected
-    )
+    return AoiSelection(aoi_path=resolved_path, geometry=geometry, patches=selected)

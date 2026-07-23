@@ -6,7 +6,7 @@ def training_step_PL2(self, batch, batch_idx):
 
     Performs two explicit optimizer updates per batch:
     - **Pretraining phase**: Discriminator logs dummies; Generator is optimized with
-      hardwired L1 loss only (no adversarial term), and EMA optionally updates.
+      the configured content objective only, and EMA optionally updates.
     - **Adversarial phase**: Performs a Discriminator step (real vs. fake BCE),
       followed by a Generator step (content + λ_adv · BCE against ones).
 
@@ -40,11 +40,11 @@ def training_step_PL2(self, batch, batch_idx):
     use_wasserstein = getattr(self, "adv_loss_type", "gan") == "wasserstein"
     use_relativistic = bool(getattr(self, "relativistic_average_d", False))
 
-    # --- helper to resolve adv-weight function name mismatches ---
+    # Compute and log the adversarial weight exactly once per generator update.
     def _adv_weight():
-        if hasattr(self, "_adv_loss_weight"):
-            return self._adv_loss_weight()
-        return self._compute_adv_loss_weight()
+        value = self._compute_adv_loss_weight()
+        self._log_adv_loss_weight(value)
+        return value
 
     # fetch optimizers (expects two)
     opt_d, opt_g = self.optimizers()
@@ -81,7 +81,7 @@ def training_step_PL2(self, batch, batch_idx):
     )
 
     # ======================================================================
-    # SECTION: Pretraining branch (L1-only on G; D logs dummies)
+    # SECTION: Pretraining branch (configured content objective; D logs dummies)
     # ======================================================================
     if pretrain_phase:
         # --- D dummy logs (no step during pretraining) ---
@@ -97,15 +97,17 @@ def training_step_PL2(self, batch, batch_idx):
                 sync_dist=True,
             )
 
-        # --- G step: hardwired L1-only pretraining loss ---
-        content_loss = torch.nn.functional.l1_loss(sr_imgs, hr_imgs)
-        metrics = {"l1": content_loss.detach()}
+        # Keep the same reconstruction objective before and after adversarial
+        # training starts; only the adversarial contribution is disabled here.
+        content_loss, metrics = self.content_loss_criterion.return_loss(
+            sr_imgs, hr_imgs
+        )
         self._log_generator_content_loss(content_loss)
         for key, value in metrics.items():
             self.log(f"train_metrics/{key}", value, sync_dist=True)
 
-        # ensure adv-weight is still logged like in pretrain
-        self._log_adv_loss_weight(_adv_weight())
+        # Ensure the zero adversarial weight remains visible during pretraining.
+        _adv_weight()
 
         # manual optimize G
         if hasattr(self, "toggle_optimizer"):

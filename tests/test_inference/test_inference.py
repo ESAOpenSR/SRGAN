@@ -8,41 +8,17 @@ import pytest
 
 
 class DummySRGAN:
-    def __init__(self, config=None, config_file_path=None):
-        self.config = config
-        self.config_file_path = config_file_path
-        self.eval_called = False
+    def __init__(self):
         self.to_device = None
-        self.loaded_state = None
-        self.map_location = None
-        self.ckpt_path = None
-
-    def eval(self):
-        self.eval_called = True
-        return self
 
     def to(self, device):
         self.to_device = device
         return self
 
-    def load_state_dict(self, state, strict=False):
-        self.loaded_state = (state, strict)
-
-    def load_weights_from_checkpoint(self, ckpt_path, strict=False, map_location=None):
-        self.ckpt_path = ckpt_path
-        self.map_location = map_location
-        self.loaded_state = ("from_checkpoint", strict)
-
 
 @pytest.fixture(autouse=True)
 def reset_env(monkeypatch):
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-    # Ensure we always reload the inference module with the DummySRGAN shim
-    monkeypatch.setitem(
-        sys.modules,
-        "opensr_srgan.model.SRGAN",
-        SimpleNamespace(SRGAN_model=DummySRGAN),
-    )
 
 
 @pytest.fixture()
@@ -52,28 +28,60 @@ def inference_module():
 
 def test_load_model_defaults_cpu(monkeypatch, inference_module):
     monkeypatch.setattr(inference_module.torch.cuda, "is_available", lambda: False)
+    calls = {}
+    dummy_model = DummySRGAN()
+
+    def fake_load_from_config(config_path, checkpoint_uri, **kwargs):
+        calls.update(
+            config_path=config_path,
+            checkpoint_uri=checkpoint_uri,
+            **kwargs,
+        )
+        return dummy_model
+
+    monkeypatch.setattr(inference_module, "load_from_config", fake_load_from_config)
 
     model, device = inference_module.load_model(config_path="cfg.yaml")
 
     assert device == "cpu"
-    assert model.config == "cfg.yaml"
-    assert model.eval_called is True
+    assert model is dummy_model
     assert model.to_device == "cpu"
+    assert calls == {
+        "config_path": "cfg.yaml",
+        "checkpoint_uri": None,
+        "map_location": "cpu",
+        "mode": "eval",
+    }
 
 
 def test_load_model_with_checkpoint(monkeypatch, inference_module):
     monkeypatch.setattr(inference_module.torch.cuda, "is_available", lambda: False)
+    calls = {}
+    dummy_model = DummySRGAN()
+
+    def fake_load_from_config(config_path, checkpoint_uri, **kwargs):
+        calls.update(
+            config_path=config_path,
+            checkpoint_uri=checkpoint_uri,
+            **kwargs,
+        )
+        return dummy_model
+
+    monkeypatch.setattr(inference_module, "load_from_config", fake_load_from_config)
 
     model, device = inference_module.load_model(
         config_path="cfg.yaml", ckpt_path="weights.ckpt"
     )
 
     assert device == "cpu"
-    assert model.ckpt_path == "weights.ckpt"
-    assert model.map_location == "cpu"
-    assert model.loaded_state == ("from_checkpoint", False)
-    assert model.eval_called is True
+    assert model is dummy_model
     assert model.to_device == "cpu"
+    assert calls == {
+        "config_path": "cfg.yaml",
+        "checkpoint_uri": "weights.ckpt",
+        "map_location": "cpu",
+        "mode": "eval",
+    }
 
 
 def test_run_sen2_inference_invokes_pipeline(monkeypatch, inference_module):
@@ -165,11 +173,9 @@ def test_main_calls_run_sen2_inference(monkeypatch, inference_module):
 
 def test_inference_module_main_guard(monkeypatch):
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-    monkeypatch.setitem(
-        sys.modules,
-        "opensr_srgan.model.SRGAN",
-        SimpleNamespace(SRGAN_model=DummySRGAN),
-    )
+    from opensr_srgan import _factory
+
+    monkeypatch.setattr(_factory, "load_from_config", lambda *_, **__: DummySRGAN())
 
     class DummyProcessor:
         def __init__(self, **kwargs):

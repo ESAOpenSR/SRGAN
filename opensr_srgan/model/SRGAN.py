@@ -1,6 +1,7 @@
 # Package Imports
 import math
 import time
+import warnings
 from contextlib import nullcontext
 from pathlib import Path
 from types import MethodType
@@ -530,8 +531,9 @@ class SRGAN_model(pl.LightningModule):
                 hr_vis = hr_imgs[:, :1, :, :]  # subset HR
                 sr_vis = sr_imgs[:, :1, :, :]  # subset SR
             elif self.config.Model.in_bands == 3:
-                # we can show normally
-                pass
+                lr_vis = base_lr
+                hr_vis = hr_imgs
+                sr_vis = sr_imgs
             elif self.config.Model.in_bands == 4:
                 # assume its RGB-NIR, show RGB
                 lr_vis = base_lr[:, :3, :, :]  # e.g., Sentinel-2 RGB
@@ -545,10 +547,6 @@ class SRGAN_model(pl.LightningModule):
                 lr_vis = base_lr[:, idx, :, :]  # subset LR
                 hr_vis = hr_imgs[:, idx, :, :]  # subset HR
                 sr_vis = sr_imgs[:, idx, :, :]  # subset SR
-            else:
-                # should not happen
-                pass
-
             # --- Clone tensors for plotting to avoid affecting main tensors ---
             plot_lr_img = lr_vis.clone()
             plot_hr_img = hr_vis.clone()
@@ -566,34 +564,34 @@ class SRGAN_model(pl.LightningModule):
                     {"Val SR": wandb.Image(val_img)}
                 )  # upload to dashboard
 
-            """ 3. Log Discriminator metrics """
-            # If in pretraining, discard D metrics
-            if self._pretrain_check():  # check if we'e in pretrain phase
-                self.log(
-                    "discriminator/adversarial_loss",
-                    torch.zeros(1, device=lr_imgs.device),
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-            else:
-                # run discriminator and get loss between pred labels and true labels
-                hr_discriminated = self.discriminator(hr_imgs)
-                sr_discriminated = self.discriminator(sr_imgs)
+        # Discriminator validation must run for every validation batch so its
+        # epoch aggregate is suitable for ReduceLROnPlateau.
+        if self._pretrain_check():
+            adversarial_loss = torch.zeros((), device=lr_imgs.device)
+        else:
+            hr_discriminated = self.discriminator(hr_imgs)
+            sr_discriminated = self.discriminator(sr_imgs)
 
-                # Run loss depending on type
-                if self.adv_loss_type == "wasserstein":
-                    adversarial_loss = sr_discriminated.mean() - hr_discriminated.mean()
-                else:
-                    adversarial_loss = self.adversarial_loss_criterion(
+            if self.adv_loss_type == "wasserstein":
+                adversarial_loss = sr_discriminated.mean() - hr_discriminated.mean()
+            else:
+                adversarial_loss = 0.5 * (
+                    self.adversarial_loss_criterion(
                         sr_discriminated, torch.zeros_like(sr_discriminated)
-                    ) + self.adversarial_loss_criterion(
+                    )
+                    + self.adversarial_loss_criterion(
                         hr_discriminated, torch.ones_like(hr_discriminated)
                     )
-
-                # Log image
-                self.log(
-                    "validation/DISC_adversarial_loss", adversarial_loss, sync_dist=True
                 )
+
+        self.log(
+            "validation/DISC_adversarial_loss",
+            adversarial_loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            sync_dist=True,
+        )
 
     def on_validation_epoch_start(self):
         """Hook executed at the start of each validation epoch.
@@ -620,6 +618,7 @@ class SRGAN_model(pl.LightningModule):
         """
         self._restore_generator_weights()
         super().on_validation_epoch_end()
+        self._step_plateau_schedulers()
 
     def on_test_epoch_start(self):
         """Hook executed at the start of each testing epoch.
@@ -761,24 +760,16 @@ class SRGAN_model(pl.LightningModule):
         scheduler_g = ReduceLROnPlateau(optimizer_g, **sched_kwargs)
         scheduler_d = ReduceLROnPlateau(optimizer_d, **sched_kwargs_d)
 
-        sch_configs = [
-            {
-                "scheduler": scheduler_d,
-                "monitor": monitor_d,
-                "reduce_on_plateau": True,
-                "interval": "epoch",
-                "frequency": 1,
-                "name": "plateau_d",
-            },
-            {
-                "scheduler": scheduler_g,
-                "monitor": monitor_g,
-                "reduce_on_plateau": True,
-                "interval": "epoch",
-                "frequency": 1,
-                "name": "plateau_g",
-            },
-        ]
+        # Lightning ignores scheduler metadata such as ``monitor`` and
+        # ``interval`` in manual optimization. Keep explicit references and
+        # advance them from the appropriate hooks below.
+        self._plateau_scheduler_d = scheduler_d
+        self._plateau_scheduler_g = scheduler_g
+        self._plateau_metric_d = str(monitor_d)
+        self._plateau_metric_g = str(monitor_g)
+        self._warmup_scheduler_g = None
+        self._generator_warmup_steps = 0
+        schedulers = [scheduler_d, scheduler_g]
 
         # ---------- optional warmup for G (step-wise, multiplicative) ----------
         warmup_steps = int(getattr(cfg_sch, "g_warmup_steps", 0))
@@ -803,18 +794,12 @@ class SRGAN_model(pl.LightningModule):
             warmup_g = torch.optim.lr_scheduler.LambdaLR(
                 optimizer_g, lr_lambda=_g_warmup_lambda
             )
-            # Runs every step; multiplies base LR so there is no jump at the end
-            sch_configs.append(
-                {
-                    "scheduler": warmup_g,
-                    "interval": "step",
-                    "frequency": 1,
-                    "name": "warmup_g",
-                }
-            )
+            self._warmup_scheduler_g = warmup_g
+            self._generator_warmup_steps = warmup_steps
+            schedulers.append(warmup_g)
 
         # Return order [D, G] to match your training_step
-        return [optimizer_d, optimizer_g], sch_configs
+        return [optimizer_d, optimizer_g], schedulers
 
     def on_train_batch_start(
         self, batch, batch_idx
@@ -845,7 +830,62 @@ class SRGAN_model(pl.LightningModule):
             batch (Any): The batch of data processed.
             batch_idx (int): Index of the current batch in the epoch.
         """
+        self._step_generator_warmup()
         self._log_lrs()  # log LR's on each batch end
+
+    def _step_generator_warmup(self) -> None:
+        """Advance generator warmup once per update, then stop permanently.
+
+        A completed ``LambdaLR`` must not continue stepping because doing so
+        would reset later plateau reductions to the optimizer's base LR.
+        """
+        scheduler = getattr(self, "_warmup_scheduler_g", None)
+        warmup_steps = int(getattr(self, "_generator_warmup_steps", 0))
+        if scheduler is None or warmup_steps <= 0:
+            return
+        if scheduler.last_epoch >= warmup_steps:
+            return
+        scheduler.step()
+
+    def _step_plateau_schedulers(self) -> None:
+        """Step manual-optimization plateau schedulers from validation metrics."""
+        trainer = getattr(self, "trainer", None)
+        if trainer is None or getattr(trainer, "sanity_checking", False):
+            return
+
+        callback_metrics = getattr(trainer, "callback_metrics", {})
+        scheduler_specs = (
+            (
+                getattr(self, "_plateau_scheduler_d", None),
+                getattr(self, "_plateau_metric_d", None),
+            ),
+            (
+                getattr(self, "_plateau_scheduler_g", None),
+                getattr(self, "_plateau_metric_g", None),
+            ),
+        )
+        warned_metrics = getattr(self, "_missing_plateau_metrics_warned", set())
+        for scheduler, metric_name in scheduler_specs:
+            if scheduler is None or not metric_name:
+                continue
+            metric = callback_metrics.get(metric_name)
+            if metric is None:
+                if metric_name not in warned_metrics:
+                    warnings.warn(
+                        "Skipping LR plateau scheduler because validation metric "
+                        f"'{metric_name}' was not logged.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    warned_metrics.add(metric_name)
+                continue
+            if isinstance(metric, torch.Tensor):
+                metric = metric.detach()
+                if metric.numel() != 1 or not torch.isfinite(metric):
+                    continue
+                metric = metric.item()
+            scheduler.step(float(metric))
+        self._missing_plateau_metrics_warned = warned_metrics
 
     def on_fit_start(self):  # called once at the start of training
         """Hook executed once at the beginning of model fitting.
@@ -1046,18 +1086,21 @@ class SRGAN_model(pl.LightningModule):
             "cosine",
         ).lower()
 
-        # Handle pretraining and edge cases early
-        if self.global_step < self.g_pretrain_steps:
+        # A disabled pretraining phase must not postpone the adversarial ramp.
+        # ``g_pretrain_steps=-1`` is handled by _pretrain_check() as indefinite.
+        if self._pretrain_check():
             return 0.0
+
+        ramp_start = max(0, self.g_pretrain_steps) if self.pretrain_g_only else 0
 
         if (
             self.adv_loss_ramp_steps <= 0
-            or self.global_step >= self.g_pretrain_steps + self.adv_loss_ramp_steps
+            or self.global_step >= ramp_start + self.adv_loss_ramp_steps
         ):
             return beta
 
         # Normalize progress to [0, 1]
-        progress = (self.global_step - self.g_pretrain_steps) / self.adv_loss_ramp_steps
+        progress = (self.global_step - ramp_start) / self.adv_loss_ramp_steps
         progress = max(0.0, min(progress, 1.0))
 
         if schedule == "linear":

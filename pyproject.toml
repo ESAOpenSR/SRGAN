@@ -38,9 +38,9 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/opensr-project/SISR-RS-SRGAN"
+"Homepage" = "https://github.com/ESAOpenSR/SRGAN"
 "Documentation" = "https://srgan.opensr.eu"
-"Bug Tracker" = "https://github.com/opensr-project/SISR-RS-SRGAN/issues"
+"Bug Tracker" = "https://github.com/ESAOpenSR/SRGAN/issues"
 
 [tool.setuptools]
 package-dir = {"" = "."}

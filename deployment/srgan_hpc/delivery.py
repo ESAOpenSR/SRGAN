@@ -19,7 +19,21 @@ def _date_label(run_dir: Path) -> str:
 
 
 def _patch_outputs(run_dir: Path, output_name: str) -> list[Path]:
-    outputs = sorted(run_dir.glob(f"patches/*/outputs/{output_name}"))
+    # Grid/AOI runs automatically collect outputs by moving them from each
+    # patch directory into ``collected/<patch_id>``. Support both layouts and
+    # prefer the original patch output when both are present (for example after
+    # an interrupted or manually copied collection).
+    outputs_by_patch = {
+        path.parent.name: path
+        for path in run_dir.glob(f"collected/*/{output_name}")
+    }
+    outputs_by_patch.update(
+        {
+            path.parent.parent.name: path
+            for path in run_dir.glob(f"patches/*/outputs/{output_name}")
+        }
+    )
+    outputs = [outputs_by_patch[key] for key in sorted(outputs_by_patch)]
     if not outputs:
         raise FileNotFoundError(f"No {output_name} files found under {run_dir}")
     return outputs

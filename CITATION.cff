@@ -22,9 +22,9 @@ authors:
 
 repository-code: 'https://github.com/ESAOpenSR/SRGAN'
 url: 'https://srgan.opensr.eu/'
-doi: 10.5281/zenodo.17590993
-version: 0.3.0
-date-released: 2025-11-12
+doi: 10.5281/zenodo.20088994
+version: 0.4.3
+date-released: 2026-05-08
 
 keywords:
   - super-resolution
@@ -52,12 +52,5 @@ preferred-citation:
       given-names: Luis
   year: 2025
   journal: "arXiv preprint"
-  identifer: "arXiv:2511.10461"
   url: "https://arxiv.org/abs/2511.10461"
   notes: "Preprint version of the OpenSR-SRGAN paper."
-
-related-identifiers:
-  - type: doi
-    identifier: 10.5281/zenodo.17590993
-    relation-type: isSupplementedBy
-    description: "Zenodo software archive for this preprint"

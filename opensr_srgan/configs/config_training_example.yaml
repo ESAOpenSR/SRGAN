@@ -115,7 +115,7 @@ Schedulers:
   g_warmup_steps: 10          # Generator warmup LR curve duration in steps (0 disables warmup)
   g_warmup_type: 'cosine'     # Generator warmup curve: ['cosine', 'linear']
   metric_g: 'val_metrics/l1'  # Metric monitored for Generator LR scheduler
-  metric_d: 'discriminator/adversarial_loss'     # Metric monitored for Discriminator LR scheduler
+  metric_d: 'validation/DISC_adversarial_loss'  # Validation metric monitored for Discriminator LR scheduler
   patience_g: 10              # Patience (epochs) for Generator LR scheduler
   patience_d: 10              # Patience (epochs) for Discriminator LR scheduler
   factor_g: 0.5               # LR reduction factor for Generator

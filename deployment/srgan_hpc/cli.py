@@ -35,7 +35,6 @@ def build_parser() -> argparse.ArgumentParser:
     aoi_parser = submit_subparsers.add_parser("aoi")
     _add_submit_common_args(aoi_parser)
     aoi_parser.add_argument("--aoi-path")
-    aoi_parser.add_argument("--layer")
 
     run_parser = subparsers.add_parser("run")
     run_subparsers = run_parser.add_subparsers(dest="run_command", required=True)
@@ -269,10 +268,8 @@ def _handle_submit_aoi(args: argparse.Namespace) -> int:
     aoi_path = args.aoi_path or config.aoi.path
     if aoi_path is None:
         raise ValueError("AOI path must be provided via --aoi-path or config.aoi.path")
-    aoi_layer = args.layer if args.layer is not None else config.aoi.layer
     selection = select_aoi_patches(
         aoi_path=aoi_path,
-        aoi_layer=aoi_layer,
         edge_size=config.staging.edge_size,
         resolution_m=float(patch_resolution(config)),
         overlap_meters=config.staging.overlap_meters,
@@ -285,7 +282,6 @@ def _handle_submit_aoi(args: argparse.Namespace) -> int:
         end_date=args.end_date,
         script_path=_resolve_script_path(args.script_path),
         aoi_path=selection.aoi_path,
-        aoi_layer=selection.aoi_layer,
         dry_run=args.dry_run,
     )
     logger.info(
@@ -302,8 +298,6 @@ def _handle_submit_aoi(args: argparse.Namespace) -> int:
         "aoi_path": str(selection.aoi_path),
         "submission": submission,
     }
-    if selection.aoi_layer is not None:
-        payload["aoi_layer"] = selection.aoi_layer
     payload["summary"] = _write_and_print_summary(
         run_dir=run_dir,
         config=config,
@@ -311,7 +305,6 @@ def _handle_submit_aoi(args: argparse.Namespace) -> int:
         request={
             "type": "aoi",
             "aoi_path": str(selection.aoi_path),
-            "aoi_layer": selection.aoi_layer,
             "planned_patch_count": len(selection.patches),
         },
         start_date=args.start_date,
