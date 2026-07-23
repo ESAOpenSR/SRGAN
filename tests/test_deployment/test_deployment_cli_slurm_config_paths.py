@@ -87,7 +87,6 @@ def test_cli_grid_aoi_and_collect_commands(
         "deployment.srgan_hpc.aoi.select_aoi_patches",
         lambda **_kwargs: AoiSelection(
             aoi_path=tmp_path / "area.shp",
-            aoi_layer="named-layer",
             geometry=types.SimpleNamespace(),
             patches=[patch],
         ),
@@ -107,8 +106,6 @@ def test_cli_grid_aoi_and_collect_commands(
             "2025-01-02",
             "--aoi-path",
             str(tmp_path / "area.shp"),
-            "--layer",
-            "named-layer",
             "--script-path",
             "/tmp/slurm.sh",
             "--dry-run",
@@ -116,7 +113,7 @@ def test_cli_grid_aoi_and_collect_commands(
     )
     assert cli_module.main() == 0
     aoi_output = capsys.readouterr().out
-    assert '"aoi_layer": "named-layer"' in aoi_output
+    assert '"patches": 1' in aoi_output
 
     run_dir = tmp_path / "collect-run"
     source = run_dir / "patches" / "patch_000001" / "outputs" / "fused_sr.tif"

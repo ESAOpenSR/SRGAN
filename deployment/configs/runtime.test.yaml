@@ -18,7 +18,6 @@ environment:
 # Optional AOI input for `srgan-hpc submit aoi`. Leave null for patch/grid runs.
 aoi:
   path: null
-  layer: null
 
 # Sentinel-2 download and cutout settings. edge_size is intentionally small here.
 staging:

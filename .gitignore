@@ -4,27 +4,26 @@ opensr_srgan/configs/config_xray.yaml
 opensr_srgan/data/MRI/
 opensr_srgan/configs/config_MRI.yaml
 
-# large Files
+# Large files
 *.zip
 gitlog.txt
 
 # Checkpoints
 *.pth
-*.ckpt 
-# VSC & Py stuff
+*.ckpt
+
+# VS Code & Python
 *.pyc
-.vscode*
-*.vscode
-.vscode
+.vscode/
 __pycache__/
 playground
+pretrained
 
 # Test / coverage artifacts
 .coverage
 coverage.xml
 htmlcov/
 .pytest_cache/
-.pytest_cache/*
 *.egg-info
 paper/paper_original.md
 PR_backlog.txt
@@ -33,20 +32,12 @@ PR_backlog.txt
 example_dataset/
 opensr_srgan/data/SEN2NAIP
 opensr_srgan/data/SISR_WW/
-opensr_srgan/data/SISR_WW/*
 opensr_srgan/data/SEN2_SAFE
-opensr_srgan/data/SEN2_SAFE/*
 
 # Logs
 lightning_logs/
-lightning_logs/*
-lightning_logs
 wandb/
 tmp/
-
-# Tests
-.coverage
-coverage.xml
 
 # local folders
 .crossnote

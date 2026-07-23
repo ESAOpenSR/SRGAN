@@ -1,38 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 from pathlib import Path
 
-import pytest
-
-from deployment.srgan_hpc.checkpoint import resolve_checkpoint_path, sha256sum
 from deployment.srgan_hpc.logging_utils import configure_logging
 from deployment.srgan_hpc.metadata import write_software_metadata
-
-
-def test_resolve_checkpoint_path_accepts_none_and_existing_file(
-    tmp_path: Path,
-) -> None:
-    checkpoint = tmp_path / "model.ckpt"
-    checkpoint.write_bytes(b"weights")
-
-    assert resolve_checkpoint_path(None) is None
-    assert resolve_checkpoint_path(str(checkpoint)) == checkpoint.resolve()
-
-
-def test_resolve_checkpoint_path_rejects_missing_file(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="Checkpoint not found"):
-        resolve_checkpoint_path(str(tmp_path / "missing.ckpt"))
-
-
-def test_sha256sum_streams_file_contents(tmp_path: Path) -> None:
-    payload = b"abc" + (b"0123456789" * 200_000)
-    checkpoint = tmp_path / "model.ckpt"
-    checkpoint.write_bytes(payload)
-
-    assert sha256sum(checkpoint) == hashlib.sha256(payload).hexdigest()
 
 
 def test_configure_logging_sets_stream_and_file_handlers(tmp_path: Path) -> None:

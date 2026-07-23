@@ -141,12 +141,10 @@ def test_aoi_source_and_geometry_extra_paths(
 
     selection = select_aoi_patches(
         aoi_path=shp_path,
-        aoi_layer="layer-name",
         edge_size=64,
         resolution_m=10.0,
         overlap_meters=0.0,
     )
-    assert selection.aoi_layer == "layer-name"
     assert selection.patches
 
     from shapely.geometry import box
@@ -158,7 +156,6 @@ def test_aoi_source_and_geometry_extra_paths(
     with pytest.raises(ValueError, match="No SR cutouts intersect"):
         select_aoi_patches(
             aoi_path=shp_path,
-            aoi_layer=None,
             edge_size=64,
             resolution_m=10.0,
             overlap_meters=0.0,

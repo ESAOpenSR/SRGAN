@@ -43,7 +43,7 @@ Schedulers:
   g_warmup_steps: 0
   g_warmup_type: linear
   metric_g: val_metrics/l1
-  metric_d: discriminator/adversarial_loss
+  metric_d: validation/DISC_adversarial_loss
   patience_g: 10
   patience_d: 10
   factor_g: 0.5

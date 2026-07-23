@@ -40,7 +40,7 @@ When starting to train, the learning rate slowly rises from 0 to the indicated v
 #### Generator Pre-training
 After the loss stabilizes, the generator continues to be trained while the discriminator sits idle. This prevents the discriminator from overpowering the generator in early training stages, where the generator output is still easily identifiable as synthetic. The binary flag `training/pretrain_phase` is logged to indicate whether the model is still in pretraining. Whether pretraining is enabled is defined with the `Training.pretrain_g_only` parameter in the config; `Training.g_pretrain_steps` defines how many steps this pretraining takes in total. The parameter `Training.g_warmup_steps` defines how many training steps (batches) the smooth LR increase lasts; setting it to `0` turns it off.
 
-During this generator-only pretraining window, the optimization target is hardwired to plain L1 loss only. Once pretraining ends, the normal configured content-loss mix (L1/SAM/perceptual/TV) is used again.
+During this generator-only pretraining window, the generator uses the configured content-loss mix (L1/SAM/perceptual/TV). Only the adversarial contribution is held at zero, so the reconstruction objective does not change abruptly when adversarial training begins.
 ![gen_warmup](assets/pretrain_phase.png)  
 
 #### Discriminator 

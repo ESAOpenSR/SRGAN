@@ -80,7 +80,7 @@ logs make it clear which subsystem is active at any given step.
 | `train_metrics/tv` | Total variation penalty capturing SR smoothness. | Remains small; near-zero means little high-frequency noise. |
 | `train_metrics/psnr` | Peak signal-to-noise ratio (dB) on normalised tensors. | Climbs above 20 dB early; mature models reach 25–35 dB depending on data. |
 | `train_metrics/ssim` | Structural Similarity Index (0–1). | Increases toward 1.0; >0.8 is typical for converged runs. |
-| `generator/content_loss` | Generator objective used for the current phase: hardwired L1 during generator-only pretraining, then weighted content loss afterwards. | Should steadily decline and remain stable when adversarial training starts. |
+| `generator/content_loss` | Configured weighted content objective used in both generator-only pretraining and adversarial training. | Should steadily decline and remain stable when adversarial training starts. |
 | `generator/total_loss` | Sum of content and adversarial terms used to update the generator. | Tracks `generator/content_loss` early, then stabilises once adversarial weight ramps in. |
 | `val_metrics/l1` | Validation MAE. | Should roughly match `train_metrics/l1`; lower is better. |
 | `val_metrics/sam` | Validation SAM. | Mirrors the training trend; values <0.1 rad indicate good spectra. |

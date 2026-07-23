@@ -223,8 +223,8 @@ Both optimisers share the same configuration keys because they use `torch.optim.
 | `g_warmup_steps` | `2000` | Number of optimiser steps used for generator LR warmup. Set to `0` to disable. |
 | `g_warmup_type` | `cosine` | Warmup curve for the generator LR (`cosine` or `linear`). |
 
-`g_warmup_steps` applies a step-wise warmup through `torch.optim.lr_scheduler.LambdaLR` before resuming the standard
-`ReduceLROnPlateau` schedule. Cosine warmup is smoother for most runs, but a linear ramp (especially for 1–5k steps) remains
+`g_warmup_steps` applies a manually stepped warmup through `torch.optim.lr_scheduler.LambdaLR` before handing control to the standard
+`ReduceLROnPlateau` schedule. The warmup scheduler stops permanently at its configured boundary so it cannot overwrite later plateau reductions. Cosine warmup is smoother for most runs, but a linear ramp (especially for 1–5k steps) remains
 available for experiments that prefer a steady rise. Both generator and discriminator schedulers expose Plateau parameters,
 including a shared `cooldown` period (epochs to wait before resuming plateau checks) and a `min_lr` floor so the learning rate
 never collapses to zero. Separate monitor keys (`metric_g`, `metric_d`) can be provided when generator and discriminator use

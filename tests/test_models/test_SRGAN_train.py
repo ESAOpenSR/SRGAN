@@ -2,9 +2,12 @@ import types
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytorch_lightning as pl
 import pytest
 import torch
 from omegaconf import OmegaConf
+from pytorch_lightning.loggers import CSVLogger
+from torch.utils.data import DataLoader, TensorDataset
 
 from opensr_srgan.model import SRGAN
 from opensr_srgan.model import training_step_PL
@@ -26,9 +29,13 @@ class LoggerMixin:
 
 
 class DummyContentLoss:
+    def __init__(self):
+        self.calls = 0
+
     def return_loss(self, sr, hr):
-        loss = torch.nn.functional.l1_loss(sr, hr)
-        return loss, {"l1": loss.detach()}
+        self.calls += 1
+        l1 = torch.nn.functional.l1_loss(sr, hr)
+        return 2.0 * l1, {"l1": l1.detach()}
 
 
 class DummyConfig:
@@ -145,6 +152,7 @@ def test_training_step_pl2_pretrain_branch_updates_generator_only():
     loss = training_step_PL.training_step_PL2(harness, _sample_batch(), batch_idx=0)
 
     assert torch.is_tensor(loss)
+    assert harness.content_loss_criterion.calls == 1
     assert "discriminator/adversarial_loss" in harness.logged
     assert "train_metrics/l1" in harness.logged
 
@@ -239,17 +247,67 @@ def test_configure_optimizers_builds_param_groups_and_warmup():
 
     assert len(optimizers) == 2
     assert len(schedulers) == 3
-    assert schedulers[0]["monitor"] == "val_d"
-    assert schedulers[1]["monitor"] == "val_g"
-    assert schedulers[2]["name"] == "warmup_g"
+    assert schedulers[0] is model._plateau_scheduler_d
+    assert schedulers[1] is model._plateau_scheduler_g
+    assert schedulers[2] is model._warmup_scheduler_g
+    assert model._plateau_metric_d == "val_d"
+    assert model._plateau_metric_g == "val_g"
     assert optimizers[0].param_groups[0]["lr"] == pytest.approx(5e-4)
     assert optimizers[1].param_groups[0]["lr"] == pytest.approx(2.5e-4)
     assert optimizers[0].param_groups[0]["weight_decay"] == pytest.approx(0.02)
     assert optimizers[1].param_groups[0]["weight_decay"] == pytest.approx(0.01)
 
-    warmup_lambda = schedulers[2]["scheduler"].lr_lambdas[0]
+    warmup_lambda = schedulers[2].lr_lambdas[0]
     assert warmup_lambda(0) >= 0.05
     assert warmup_lambda(10) == pytest.approx(1.0)
+
+
+@pytest.mark.filterwarnings("ignore:GPU available but not used.*")
+@pytest.mark.filterwarnings("ignore:The '.*_dataloader' does not have many workers.*")
+@pytest.mark.filterwarnings("ignore:.*isinstance\\(treespec, LeafSpec\\).*deprecated.*")
+def test_manual_optimization_steps_warmup_and_plateau_schedulers(monkeypatch, tmp_path):
+    config = _small_srgan_config()
+    config.Discriminator.model_type = "patchgan"
+    config.Training.Losses.update(
+        {
+            "l1_weight": 1.0,
+            "sam_weight": 0.0,
+            "perceptual_weight": 0.0,
+            "tv_weight": 0.0,
+            "ssim_win": 3,
+        }
+    )
+    config.Schedulers.g_warmup_steps = 2
+    config.Schedulers.metric_g = "val_metrics/l1"
+    config.Schedulers.metric_d = "validation/DISC_adversarial_loss"
+    config.Logging.num_val_images = 0
+    model = SRGAN_model(config=config, mode="train")
+    monkeypatch.setattr(SRGAN, "print_model_summary", lambda *_args, **_kwargs: None)
+
+    lr = torch.rand(4, 1, 4, 4)
+    hr = torch.rand(4, 1, 8, 8)
+    loader = DataLoader(TensorDataset(lr, hr), batch_size=2)
+    trainer = pl.Trainer(
+        accelerator="cpu",
+        devices=1,
+        max_epochs=1,
+        limit_train_batches=2,
+        limit_val_batches=1,
+        num_sanity_val_steps=0,
+        logger=CSVLogger(save_dir=tmp_path, name="scheduler-test"),
+        enable_checkpointing=False,
+        enable_model_summary=False,
+        enable_progress_bar=False,
+        log_every_n_steps=1,
+        default_root_dir=tmp_path,
+    )
+
+    trainer.fit(model, train_dataloaders=loader, val_dataloaders=loader)
+
+    assert model._warmup_scheduler_g.last_epoch == 2
+    assert model._plateau_scheduler_d.last_epoch == 1
+    assert model._plateau_scheduler_g.last_epoch == 1
+    assert trainer.optimizers[1].param_groups[0]["lr"] == pytest.approx(1e-3)
 
 
 def test_train_batch_hooks_freeze_and_log_learning_rates(monkeypatch):
@@ -422,7 +480,7 @@ def test_validation_step_logs_metrics_and_pretrain_discriminator(monkeypatch):
     SRGAN_model.validation_step(harness, batch, batch_idx=0)
 
     assert "val_metrics/l1" in harness.logged
-    assert "discriminator/adversarial_loss" in harness.logged
+    assert "validation/DISC_adversarial_loss" in harness.logged
 
 
 def test_validation_step_logs_wasserstein_discriminator(monkeypatch):
@@ -431,6 +489,45 @@ def test_validation_step_logs_wasserstein_discriminator(monkeypatch):
     batch = (torch.ones(1, 4, 2, 2), torch.zeros(1, 4, 2, 2))
 
     SRGAN_model.validation_step(harness, batch, batch_idx=0)
+
+    assert "validation/DISC_adversarial_loss" in harness.logged
+
+
+@pytest.mark.parametrize(
+    ("in_bands", "visible_bands"), [(1, 1), (3, 3), (4, 3), (6, 3)]
+)
+def test_validation_visualization_supports_common_band_counts(
+    monkeypatch, in_bands, visible_bands
+):
+    harness = ValidationHarness(in_bands=in_bands, pretrain=False)
+    plotted_shapes = []
+
+    def fake_plot(*tensors, **_kwargs):
+        plotted_shapes.extend(tensor.shape for tensor in tensors)
+        return object()
+
+    monkeypatch.setattr(SRGAN, "plot_tensors", fake_plot)
+    batch = (
+        torch.ones(1, in_bands, 2, 2),
+        torch.zeros(1, in_bands, 2, 2),
+    )
+
+    SRGAN_model.validation_step(harness, batch, batch_idx=0)
+
+    assert len(plotted_shapes) == 3
+    assert all(shape[1] == visible_bands for shape in plotted_shapes)
+
+
+def test_validation_discriminator_metric_is_not_limited_by_image_logging(monkeypatch):
+    harness = ValidationHarness(in_bands=4, pretrain=False)
+
+    def fail_if_plotted(*_args, **_kwargs):
+        raise AssertionError("visualization should be skipped for this batch")
+
+    monkeypatch.setattr(SRGAN, "plot_tensors", fail_if_plotted)
+    batch = (torch.ones(1, 4, 2, 2), torch.zeros(1, 4, 2, 2))
+
+    SRGAN_model.validation_step(harness, batch, batch_idx=2)
 
     assert "validation/DISC_adversarial_loss" in harness.logged
 
@@ -451,6 +548,18 @@ def test_adv_loss_weight_logs_computed_value(monkeypatch):
 
     assert value == pytest.approx(0.25)
     assert logged["training/adv_loss_weight"] == pytest.approx(0.25)
+
+
+def test_adv_loss_ramp_starts_immediately_when_pretraining_is_disabled():
+    config = _small_srgan_config()
+    config.Training.pretrain_g_only = False
+    config.Training.g_pretrain_steps = 1000
+    config.Training.adv_loss_ramp_steps = 100
+    config.Training.Losses.adv_loss_beta = 1.0
+    model = SRGAN_model(config=config, mode="train")
+    model._trainer = types.SimpleNamespace(global_step=50)
+
+    assert model._compute_adv_loss_weight() == pytest.approx(0.5)
 
 
 def test_load_weights_from_checkpoint_accepts_lightning_state_dict(tmp_path, capsys):
