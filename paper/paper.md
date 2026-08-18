@@ -60,7 +60,10 @@ GANs remain difficult to train [@p1; @p2; @p3], and these challenges are amplifi
 
 # State of the Field
 
-General-purpose restoration frameworks such as BasicSR [@basicsr] and MMagic [@mmagic2023] provide configurable implementations of SRGAN, ESRGAN, and other super-resolution models. TorchGeo provides complementary datasets, samplers, and multispectral utilities for geospatial machine learning [@stewart2022torchgeo]. The BasicSR package is broad, but does not provide the complete combination of multispectral GAN configurations, reflectance-aware normalization, spectral losses, stabilization schedules, Sentinel-2 presets, and evaluation and deployment interfaces necessary for remote-sensing specific workflows.
+General-purpose restoration frameworks such as BasicSR[^basicsr-url] and MMagic[^mmagic-url] provide configurable implementations of SRGAN, ESRGAN, and other super-resolution models. TorchGeo provides complementary datasets, samplers, and multispectral utilities for geospatial machine learning [@stewart2022torchgeo]. The BasicSR package is broad, but does not provide the complete combination of multispectral GAN configurations, reflectance-aware normalization, spectral losses, stabilization schedules, Sentinel-2 presets, and evaluation and deployment interfaces necessary for remote-sensing specific workflows.
+
+[^basicsr-url]: <https://github.com/XPixelGroup/BasicSR>
+[^mmagic-url]: <https://github.com/open-mmlab/mmagic>
 
 OpenSR-SRGAN was developed as a separate focused package because its contribution is this shared Earth-observation experimentation protocol rather than a new generator architecture. Implementing the same functionality as isolated additions to a general restoration framework would still leave researchers responsible for assembling and maintaining the sensor-specific training, evaluation, and large-scene inference workflow. OpenSR-SRGAN instead integrates these choices in one compact interface while reusing established libraries and the wider OpenSR ecosystem.
 
