@@ -77,7 +77,7 @@ Training:
 # ============================================================================ #
 # 🧩 ARCHITECTURAL PARAMETERS
 # ---------------------------------------------------------------------------- #
-# See Docs for archtecture details and suggestions
+# See Docs for architecture details and suggestions
 Generator:
   model_type: 'esrgan'       # Generator family: ['SRResNet', 'stochastic_gan', 'esrgan']
   block_type: 'standard'       # SRResNet block variant: ['standard', 'res', 'rcab', 'rrdb', 'lka']
