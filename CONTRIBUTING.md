@@ -88,3 +88,26 @@ available at [http://contributor-covenant.org/version/1/4][version]
 
 [homepage]: http://contributor-covenant.org
 [version]: http://contributor-covenant.org/version/1/4/
+
+
+# Security Policy
+
+## Supported versions
+
+Security fixes are provided for the latest released version.
+Users of older versions should upgrade to receive fixes.
+
+## Reporting a vulnerability
+
+Please report suspected security vulnerabilities privately to
+info@opensr.eu rather than opening a public GitHub issue.
+
+Include the affected version, a description of the potential impact,
+and reproduction steps or a minimal example. Do not include credentials
+or other sensitive data.
+
+The maintainers will review reports and coordinate any necessary fixes
+and public disclosure with the reporter. Response and resolution times
+depend on maintainer availability and the nature of the issue.
+
+For ordinary bugs and support requests, please use GitHub Issues.
