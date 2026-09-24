@@ -90,6 +90,7 @@ nav:
   - Overview:
       - SRGAN Docs: index.md
       - Getting Started: getting-started.md
+      - Tests: tests.md
       - Results: results.md
 
   - Usage:

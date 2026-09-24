@@ -124,6 +124,9 @@ The script builds a `Trainer` with the following notable arguments:
 Finally, `trainer.fit(model, datamodule=pl_datamodule)` launches the optimisation loop and `wandb.finish()` ensures clean shutdown
 of the W&B session.
 
+For an opt-in check of distributed training, see the
+[two-GPU DDP smoke test](tests.md#optional-two-gpu-ddp-smoke-test).
+
 ## Generator EMA lifecycle
 
 If `Training.EMA.enabled` is `True`, the Lightning module keeps a shadow copy of the generator weights using the decay set in
