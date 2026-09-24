@@ -6,7 +6,7 @@
 |:---------:|:-------------:|:------------------:|:----------:|:--------------:|
 | [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.12--v3.14-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PyTorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) | [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)<br>[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20088994.svg)](https://doi.org/10.5281/zenodo.20088994) |
 
-![Super-resolved Sentinel-2 example](assets/6band_banner.png)
+![Sentinel-2 RGB comparison: synthetic 40 m input, 4× SR output on a 10 m grid, and 10 m reference, with matching zoomed crops.](assets/rgb_4x.png)
 
 OpenSR-SRGAN is a comprehensive toolkit for training and evaluating super-resolution GANs on remote-sensing imagery. It packages a flexible generator/discriminator zoo, composable perceptual and reconstruction losses, and the training heuristics
 that make adversarial optimisation tractable—generator warm-up phases, learning-rate scheduling, adversarial-weight ramping, and more. All options are driven by concise YAML configuration files so you can explore new architectures or datasets without

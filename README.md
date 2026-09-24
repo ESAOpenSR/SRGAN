@@ -7,7 +7,7 @@
 
 
 
-![banner](docs/assets/6band_banner.png)
+![Sentinel-2 RGB comparison: synthetic 40 m input, 4× SR output on a 10 m grid, and 10 m reference, with matching zoomed crops.](docs/assets/rgb_4x.png)
 
 # 🌍 Single Image Super-Resolution Remote Sensing 'SRGAN'
 

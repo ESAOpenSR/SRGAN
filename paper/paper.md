@@ -42,7 +42,7 @@ Satellite images often contain useful measurements beyond visible red, green and
 
 OpenSR-SRGAN supports complete end-to-end workflows with minimal setup: selecting architectures, scaling factors, band combinations, and training strategies entirely from configuration files. Although designed for remote-sensing super-resolution, its tensor-based model components can be adapted to other paired imaging data when suitable preprocessing and validation are provided.
 
-![Sentinel-2 SWIR-band composite for 8x SR task showing the SR performance of OpenSR-SRGAN.](figures/6band_banner.png){#fig:banner}
+![Sentinel-2 RGB (B04/B03/B02) comparison for a synthetic 4× super-resolution task: (a) input downsampled to 40 m; (b) OpenSR-SRGAN output on a 10 m grid; (c) the original 10 m Sentinel-2 reference; and (d) mean absolute SR–reference error across the three RGB bands, computed in reflectance units before display stretching. The bottom row shows matching enlargements of the regions outlined in yellow. The overview and enlarged error maps use the same linear colour scale.](figures/rgb_4x_error.png){#fig:banner}
 
 
 # Introduction
