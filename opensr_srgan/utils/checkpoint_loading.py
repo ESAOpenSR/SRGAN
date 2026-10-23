@@ -31,4 +31,4 @@ def load_checkpoint(path: str | Path, map_location: Any = None) -> Any:
             RuntimeWarning,
             stacklevel=2,
         )
-        return torch.load(path, **load_kwargs)
+        return torch.load(path, weights_only=False, **load_kwargs)

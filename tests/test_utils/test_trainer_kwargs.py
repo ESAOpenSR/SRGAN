@@ -1,39 +1,7 @@
 """Tests for :mod:`opensr_srgan.utils.build_trainer_kwargs`."""
 
-import sys
-import types
-
 import pytest
 from omegaconf import OmegaConf
-
-if "pytorch_lightning" not in sys.modules:
-    # Provide a lightweight stub so the helper can be imported without the heavy
-    # Lightning dependency.  Only the constructor and ``fit`` signatures are
-    # required for the tests to exercise the filtering logic.
-    pl_stub = types.ModuleType("pytorch_lightning")
-
-    class _Trainer:  # pragma: no cover - simple stub
-        def __init__(
-            self,
-            *,
-            accelerator=None,
-            strategy=None,
-            devices=None,
-            val_check_interval=None,
-            limit_val_batches=None,
-            max_epochs=None,
-            log_every_n_steps=None,
-            logger=None,
-            callbacks=None,
-        ) -> None:
-            pass
-
-        def fit(self, *args, ckpt_path=None, **kwargs):  # pragma: no cover
-            return None
-
-    pl_stub.Trainer = _Trainer
-    pl_stub.__version__ = "2.1.0"
-    sys.modules["pytorch_lightning"] = pl_stub
 
 from opensr_srgan.utils.build_trainer_kwargs import build_lightning_kwargs
 

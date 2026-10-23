@@ -1,4 +1,8 @@
+from datetime import datetime
+import warnings
+
 import pytest
+import torch
 
 from opensr_srgan.utils import checkpoint_loading
 
@@ -28,7 +32,7 @@ def test_load_checkpoint_warns_and_retries_unsafe_fallback(monkeypatch):
 
     def fake_load(path, **kwargs):
         calls.append(kwargs)
-        if "weights_only" in kwargs:
+        if kwargs.get("weights_only") is True:
             raise RuntimeError("legacy object")
         return {"loaded": path}
 
@@ -40,5 +44,29 @@ def test_load_checkpoint_warns_and_retries_unsafe_fallback(monkeypatch):
     assert result == {"loaded": "legacy.ckpt"}
     assert calls == [
         {"weights_only": True, "map_location": None},
-        {"map_location": None},
+        {"weights_only": False, "map_location": None},
     ]
+
+
+def test_load_checkpoint_loads_tensor_checkpoint_without_warning(tmp_path):
+    path = tmp_path / "weights.ckpt"
+    weights = torch.arange(4)
+    torch.save({"weights": weights}, path)
+
+    with warnings.catch_warnings(record=True) as caught:
+        result = checkpoint_loading.load_checkpoint(path, map_location="cpu")
+
+    assert torch.equal(result["weights"], weights)
+    assert not caught
+
+
+def test_load_checkpoint_loads_legacy_objects_with_warning(tmp_path):
+    path = tmp_path / "legacy.ckpt"
+    created = datetime(2020, 1, 1)
+    torch.save({"created": created, "weights": torch.arange(4)}, path)
+
+    with pytest.warns(RuntimeWarning, match="weights_only=False"):
+        result = checkpoint_loading.load_checkpoint(path, map_location="cpu")
+
+    assert result["created"] == created
+    assert torch.equal(result["weights"], torch.arange(4))

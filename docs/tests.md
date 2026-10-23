@@ -83,6 +83,4 @@ A parameter mismatch, non-finite loss, unexpected optimizer update, or failed wa
 
 Warnings about a low DataLoader worker count or logging without a configured logger are expected for this small test: it deliberately uses `num_workers=0` and disables external logging. Success still requires both rank-specific `PASS` messages **and** exit status zero. Other warnings should be assessed from their contents rather than suppressed indiscriminately.
 
-If a selected combination of pytest files fails during collection with `pytorch_lightning has no attribute LightningModule` or `pytorch_lightning is not a package`, check whether `tests/test_utils/test_trainer_kwargs.py` was collected first. That file installs a lightweight Lightning stub when Lightning has not already been imported. Until its test isolation is improved, run that file in a separate pytest process from model/training tests. The standalone DDP check runs in fresh processes and does not import this stub.
-
 When reporting a failure, include the repository commit (`git rev-parse HEAD`), launch command, exit status, GPU models, PyTorch/Lightning versions, and the full log from both ranks. State whether failure occurred during startup, pretraining, the adversarial transition, or validation.
