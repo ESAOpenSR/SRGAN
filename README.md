@@ -1,4 +1,4 @@
-<img src="https://github.com/ESAOpenSR/opensr-model/blob/main/resources/opensr_logo.png?raw=true" width="250"/>
+<img src="https://raw.githubusercontent.com/ESAOpenSR/opensr-model/refs/heads/main/resources/images/opensr_logo.png" width="250"/>
 
 | **PyPI** | **Versions** | **Docs & License** | **Tests** | **Reference** |
 |:---------:|:-------------:|:------------------:|:----------:|:--------------:|
