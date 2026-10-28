@@ -28,11 +28,11 @@ authors:
 affiliations:
   - index: 1
     name: Image and Signal Processing Group, University of Valencia, Spain
-date:  15 November 2025
+date: 28 October 2026
 bibliography: paper.bib
 version:
-  report: v0.1.0
-  software: v0.5.1
+  report: v1.0.0
+  software: v1.0.0
 number-sections: true
 ---
 

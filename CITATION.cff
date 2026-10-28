@@ -8,7 +8,7 @@ type: software
 authors:
   - given-names: Simon
     family-names: Donike
-    email: accounts@donike.net
+    email: simon.donike@uv.es
     orcid: 'https://orcid.org/0000-0002-4440-3835'
   - given-names: Cesar
     family-names: Aybar
@@ -22,9 +22,9 @@ authors:
 
 repository-code: 'https://github.com/ESAOpenSR/SRGAN'
 url: 'https://srgan.opensr.eu/'
-doi: 10.5281/zenodo.20088994
-version: 0.5.1
-date-released: 2026-07-23
+doi: 10.5281/zenodo.17590993
+version: 1.0.0
+date-released: 2026-10-28
 
 keywords:
   - super-resolution
@@ -50,6 +50,7 @@ preferred-citation:
       given-names: Julio
     - family-names: Gómez-Chova
       given-names: Luis
+  doi: 10.48550/arXiv.2511.10461
   year: 2025
   journal: "arXiv preprint"
   url: "https://arxiv.org/abs/2511.10461"
