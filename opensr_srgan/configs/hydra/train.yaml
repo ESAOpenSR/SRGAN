@@ -8,4 +8,5 @@ defaults:
   - training: cpu_debug
   - logging: csv
   - hydra: default
+  - postprocessing: histogram
   - experiment: null

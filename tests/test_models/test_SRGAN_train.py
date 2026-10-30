@@ -451,6 +451,9 @@ class ValidationContentLoss:
 
 
 class ValidationHarness(LoggerMixin):
+    postprocess = SRGAN_model.postprocess
+    _postprocessing_method = SRGAN_model._postprocessing_method
+
     def __init__(self, *, in_bands=1, pretrain=False, wasserstein=False):
         super().__init__()
         self.content_loss_criterion = ValidationContentLoss()
@@ -500,6 +503,9 @@ def test_validation_visualization_supports_common_band_counts(
     monkeypatch, in_bands, visible_bands
 ):
     harness = ValidationHarness(in_bands=in_bands, pretrain=False)
+    harness.config.Logging.wandb.enabled = True
+    harness.logger = types.SimpleNamespace(experiment=types.SimpleNamespace(log=lambda payload: None))
+    monkeypatch.setattr(SRGAN.wandb, "Image", lambda image: image)
     plotted_shapes = []
 
     def fake_plot(*tensors, **_kwargs):

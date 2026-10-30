@@ -14,9 +14,10 @@ from omegaconf import OmegaConf
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 # local imports
-from opensr_srgan.utils.logging_helpers import plot_tensors
+from opensr_srgan.utils.logging_helpers import plot_tensors, save_validation_artifacts
 from opensr_srgan.utils.model_descriptions import print_model_summary
 from opensr_srgan.utils.radiometrics import histogram as histogram_match
+from opensr_srgan.utils.back_projection import BackProjectionConfig, back_projection
 from opensr_srgan.utils.checkpoint_loading import load_checkpoint
 from opensr_srgan.data.utils import Normalizer
 from opensr_srgan.model.generators import build_generator
@@ -54,7 +55,7 @@ class SRGAN_model(pl.LightningModule):
     - **Lightning 2+ training:** Manual optimization for multi-optimizer GAN updates.
     - **EMA support:** Optional EMA tracking with delayed activation and device placement.
     - **Metrics & logging:** Content/perceptual metrics, LR logging, and optional W&B image logs.
-    - **Inference helpers:** Normalization/denormalization for 0–10000 reflectance and histogram matching.
+    - **Inference helpers:** Normalization/denormalization for 0–10000 reflectance and configurable post-processing.
 
     Args
     ----
@@ -155,6 +156,7 @@ class SRGAN_model(pl.LightningModule):
         # Purpose: Set config and mode variables model-wide.
         # ======================================================================
         self.config = config
+        self._postprocessing_method()  # Validate before constructing networks.
         self.mode = mode
         self.normalizer = Normalizer(self.config)
 
@@ -395,62 +397,72 @@ class SRGAN_model(pl.LightningModule):
         sr_imgs = self.generator(lr_imgs)  # pass LR input through generator network
         return sr_imgs  # return super-resolved output
 
+    def _postprocessing_method(self):
+        settings = getattr(self.config, "Postprocessing", None)
+        method = getattr(settings, "method", "histogram")
+        if method not in {"histogram", "back_projection"}:
+            raise ValueError("Postprocessing.method must be 'histogram' or 'back_projection'")
+        return method
+
+    @torch.no_grad()
+    def postprocess(self, sr_imgs, lr_imgs):
+        """Match SR to LR in their shared supplied value range, without gradients.
+
+        Histogram matching is the compatibility default. Back-projection infers
+        the scale from BCHW shapes and returns unclipped float32/float64 values.
+        This helper does not normalize inputs and never changes raw predictions.
+        """
+        if self._postprocessing_method() == "histogram":
+            return histogram_match(lr_imgs, sr_imgs)
+        settings = getattr(self.config, "Postprocessing", None)
+        options = dict(getattr(settings, "back_projection", {}))
+        if lr_imgs.ndim != 4 or sr_imgs.ndim != 4:
+            raise ValueError("Postprocessing expects BCHW tensors")
+        h, w = lr_imgs.shape[-2:]
+        sh, sw = sr_imgs.shape[-2:]
+        if h < 1 or w < 1 or sh % h or sw % w or sh // h != sw // w:
+            raise ValueError("SR dimensions must be an equal integer multiple of LR")
+        options.setdefault("scale", sh // h)
+        return back_projection(sr_imgs, lr_imgs, BackProjectionConfig(**options))
+
     @torch.no_grad()
     def predict_step(self, lr_imgs):
-        """Run a single super-resolution inference step.
+        """Predict under EMA, match using the selected method, and return CPU tensors.
 
-        Performs forward inference using the generator (optionally under EMA weights)
-        to produce super-resolved (SR) outputs from low-resolution (LR) inputs.
-        The method normalizes input values using the configured strategy (e.g., raw
-        Sentinel-2 reflectance via ``normalise_10k``), applies histogram matching, and
-        denormalizes the outputs back to their original scale.
-
-        Args:
-            lr_imgs (torch.Tensor): Batch of input low-resolution images
-                with shape `(B, C, H, W)`. Pixel value ranges may vary depending
-                on preprocessing (e.g., 0–10000 for Sentinel-2 reflectance).
-
-        Returns:
-            torch.Tensor: Super-resolved output images with matched histograms
-            and restored value range, detached from the computation graph and
-            placed on CPU memory.
-
-        Raises:
-            AssertionError: If the generator is not in evaluation mode (`.eval()`).
+        Histogram matching runs before denormalization, preserving historical
+        behavior. Back-projection runs after denormalization in original LR units.
+        Already normalized normalise_10k inputs retain their supplied value range.
         """
         if self.generator.training:
             raise RuntimeError("Generator must be in eval mode for prediction.")
-        lr_imgs = lr_imgs.to(self.device)  # move to device (GPU or CPU)
+        lr_imgs = lr_imgs.to(self.device)
+        if not lr_imgs.is_floating_point():
+            lr_imgs = lr_imgs.float()
         input_already_normalized = (
             getattr(self.normalizer, "method", None) == "normalise_10k"
             and _looks_like_zero_one_reflectance(lr_imgs)
         )
-
-        # --- Normalize inputs according to configuration ---
-        if input_already_normalized:
-            normalized_lr = lr_imgs
-        else:
-            normalized_lr = self.normalizer.normalize(lr_imgs)
-
-        # --- Perform super-resolution (optionally using EMA weights) ---
+        normalized_lr = (
+            lr_imgs.clone() if input_already_normalized
+            else self.normalizer.normalize(lr_imgs.clone())
+        )
         context = (
             self.ema.average_parameters(self.generator)
-            if self.ema is not None
-            else nullcontext()
+            if self.ema is not None else nullcontext()
         )
         with context:
-            sr_imgs = self.generator(normalized_lr)  # forward pass (SR prediction)
+            sr_imgs = self.generator(normalized_lr)
 
-        # --- Histogram match SR to LR ---
-        sr_imgs = histogram_match(normalized_lr, sr_imgs)  # match distributions
-
-        # --- Denormalize output back to original range ---
+        method = self._postprocessing_method()
+        if method == "histogram":
+            sr_imgs = self.postprocess(sr_imgs, normalized_lr)
+        elif sr_imgs.dtype in (torch.float16, torch.bfloat16):
+            sr_imgs = sr_imgs.float()
         if not input_already_normalized:
             sr_imgs = self.normalizer.denormalize(sr_imgs)
-
-        # --- Move to CPU and return ---
-        sr_imgs = sr_imgs.cpu().detach()  # detach from graph for inference output
-        return sr_imgs
+        if method == "back_projection":
+            sr_imgs = self.postprocess(sr_imgs, lr_imgs)
+        return sr_imgs.cpu().detach()
 
     def training_step(self, batch, batch_idx):
         """Run one Lightning 2+ manual-optimization training step."""
@@ -520,49 +532,76 @@ class SRGAN_model(pl.LightningModule):
         # SECTION: Optional visualization — Log example SR/HR/LR images
         # Purpose: visually track qualitative progress of the model.
         # ======================================================================
-        # only perform image logging for first N batches to avoid logging all 200 images
-        if batch_idx < self.config.Logging.num_val_images:
-            base_lr = lr_imgs  # use original LR for visualization
+        # Only inspect the first N validation batches. Local artifacts are
+        # opt-in because they can be expensive on large validation batches.
+        logging_cfg = self.config.Logging
+        local_images = bool(getattr(logging_cfg, "local_images", False))
+        wandb_images = bool(logging_cfg.wandb.enabled)
+        trainer = getattr(self, "trainer", None)
+        is_sanity_check = bool(getattr(trainer, "sanity_checking", False))
+        is_global_zero = bool(getattr(trainer, "is_global_zero", True))
+        if (
+            batch_idx < logging_cfg.num_val_images
+            and not is_sanity_check
+            and (local_images or (wandb_images and is_global_zero))
+        ):
+            live_imgs = None
+            if bool(getattr(logging_cfg, "log_live_and_ema", False)) and self._ema_applied:
+                live_imgs = self._live_validation_prediction(lr_imgs)
+            matched_imgs = self.postprocess(sr_imgs, lr_imgs)
+            saved_panels = []
+            if local_images or (live_imgs is not None and wandb_images):
+                saved_panels = save_validation_artifacts(
+                    lr_imgs,
+                    sr_imgs,
+                    hr_imgs,
+                    getattr(logging_cfg, "output_dir", "logs"),
+                    epoch=self.current_epoch,
+                    num_images=lr_imgs.shape[0],
+                    sample_offset=batch_idx * lr_imgs.shape[0],
+                    local_images=True,
+                    is_global_zero=is_global_zero,
+                    matched=matched_imgs,
+                    live_sr=live_imgs,
+                )
 
-            # --- Select visualization bands (if multispectral) ---
-            if self.config.Model.in_bands < 3:
-                # show only first band
-                lr_vis = base_lr[:, :1, :, :]  # e.g., single-band input
-                hr_vis = hr_imgs[:, :1, :, :]  # subset HR
-                sr_vis = sr_imgs[:, :1, :, :]  # subset SR
-            elif self.config.Model.in_bands == 3:
-                lr_vis = base_lr
-                hr_vis = hr_imgs
-                sr_vis = sr_imgs
-            elif self.config.Model.in_bands == 4:
-                # assume its RGB-NIR, show RGB
-                lr_vis = base_lr[:, :3, :, :]  # e.g., Sentinel-2 RGB
-                hr_vis = hr_imgs[:, :3, :, :]  # subset HR
-                sr_vis = sr_imgs[:, :3, :, :]  # subset SR
-            elif self.config.Model.in_bands > 4:  # e.g., Sentinel-2 with >3 channels
-                # random selection of bands
-                idx = np.random.choice(
-                    sr_imgs.shape[1], 3, replace=False
-                )  # randomly select 3 bands
-                lr_vis = base_lr[:, idx, :, :]  # subset LR
-                hr_vis = hr_imgs[:, idx, :, :]  # subset HR
-                sr_vis = sr_imgs[:, idx, :, :]  # subset SR
-            # --- Clone tensors for plotting to avoid affecting main tensors ---
-            plot_lr_img = lr_vis.clone()
-            plot_hr_img = hr_vis.clone()
-            plot_sr_img = sr_vis.clone()
+            if wandb_images and is_global_zero and saved_panels:
+                payload = {"validation/epoch": self.current_epoch}
+                for band in ("rgb", "nir"):
+                    panels = [path for path in saved_panels if path.stem.endswith("_" + band)]
+                    if panels:
+                        image_key = f"validation/ema_live_{band}" if live_imgs is not None else f"validation/{band}"
+                        payload[image_key] = [
+                            wandb.Image(str(path), caption=path.stem) for path in panels
+                        ]
+                self.logger.experiment.log(payload)
+            elif wandb_images and is_global_zero:
+                base_lr = lr_imgs  # use original LR for visualization
+                if self.config.Model.in_bands < 3:
+                    lr_vis = base_lr[:, :1, :, :]
+                    hr_vis = hr_imgs[:, :1, :, :]
+                    sr_vis = sr_imgs[:, :1, :, :]
+                    matched_vis = matched_imgs[:, :1, :, :]
+                elif self.config.Model.in_bands == 3:
+                    lr_vis, hr_vis, sr_vis = base_lr, hr_imgs, sr_imgs
+                    matched_vis = matched_imgs
+                elif self.config.Model.in_bands == 4:
+                    lr_vis = base_lr[:, :3, :, :]
+                    hr_vis = hr_imgs[:, :3, :, :]
+                    sr_vis = sr_imgs[:, :3, :, :]
+                    matched_vis = matched_imgs[:, :3, :, :]
+                else:
+                    idx = np.random.choice(sr_imgs.shape[1], 3, replace=False)
+                    lr_vis = base_lr[:, idx, :, :]
+                    hr_vis = hr_imgs[:, idx, :, :]
+                    sr_vis = sr_imgs[:, idx, :, :]
+                    matched_vis = matched_imgs[:, idx, :, :]
 
-            # --- Generate matplotlib visualization (LR, SR, HR side-by-side) ---
-            val_img = plot_tensors(plot_lr_img, plot_sr_img, plot_hr_img, title="Val")
-
-            # --- Cleanup ---
-            del plot_lr_img, plot_hr_img, plot_sr_img  # free memory after plotting
-
-            # --- Log image to WandB (or compatible logger), if wanted ---
-            if self.config.Logging.wandb.enabled:
-                self.logger.experiment.log(
-                    {"Val SR": wandb.Image(val_img)}
-                )  # upload to dashboard
+                val_img = plot_tensors(
+                    lr_vis.float().clone(), sr_vis.float().clone(), hr_vis.float().clone(),
+                    title="Val", matched=matched_vis.float().clone(),
+                )
+                self.logger.experiment.log({"Val SR": wandb.Image(val_img)})
 
         # Discriminator validation must run for every validation batch so its
         # epoch aggregate is suitable for ReduceLROnPlateau.
@@ -1134,6 +1173,17 @@ class SRGAN_model(pl.LightningModule):
         adv_weight = self._compute_adv_loss_weight()
         self._log_adv_loss_weight(adv_weight)
         return adv_weight
+
+    @torch.no_grad()
+    def _live_validation_prediction(self, lr_imgs):
+        """Temporarily use live weights, preserving the EMA validation context."""
+        was_ema_applied = self._ema_applied
+        self._restore_generator_weights()
+        try:
+            return self.generator(lr_imgs).detach().clone()
+        finally:
+            if was_ema_applied:
+                self._apply_generator_ema_weights()
 
     def _apply_generator_ema_weights(self) -> None:
         """Swap the generator's parameters to their EMA-smoothed counterparts.

@@ -42,6 +42,42 @@ After the model has been created, use `predict_step` for tensor inference. This 
 sr = model.predict_step(lr)
 ```
 
+## Prediction matching
+
+`predict_step` uses histogram matching by default, including for older configs
+without a `Postprocessing` section. Set the method explicitly in YAML:
+
+```yaml
+Postprocessing:
+  method: back_projection  # or histogram
+  back_projection:
+    blur_sigma: 0.0
+    max_iterations: 100
+    tolerance: 1.0e-6
+    relaxation: 1.0
+```
+
+Hydra also supports `postprocessing=histogram` and
+`postprocessing=back_projection`. Unknown methods raise an error.
+Histogram matching keeps the historical sequence: normalize, generate, match,
+then denormalize. Back-projection corrects the denormalized prediction against
+the original LR measurements. With zero blur it matches block means while
+preserving within-block differences; optional scalar/per-band Gaussian sigma
+is measured in HR pixels and uses periodic boundaries. Scale is inferred.
+
+Back-projection runs without gradients, promotes half precision to float32,
+and does not clip after correction. Tolerance is LR RMSE in supplied units.
+Zero LR pixels are valid measurements. The standalone
+`opensr_srgan.utils.back_projection.back_projection` function also accepts
+boolean LR `valid_mask`, HR `output_mask`, and `return_info=True` diagnostics.
+Its implementation retains the upstream OpenSR attribution.
+
+`model.postprocess(sr, lr)` applies the configured method to tensors in a shared
+value range without normalization. `forward`, training losses, validation metrics,
+and discriminator evaluation use raw generator predictions. Validation panels
+show raw and matched SR using a common display range, including alongside
+optional EMA/live comparisons.
+
 ## 3.2 Super-resolve a full tile with OpenSR-Utils
 
 You can build on top of the `opensr-utils` package to handle stitching, georeferencing, and patching automatically. This currently targets RGB-NIR Sentinel-2 inference.

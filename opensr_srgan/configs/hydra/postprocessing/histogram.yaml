@@ -1,0 +1,9 @@
+# @package _global_
+
+Postprocessing:
+  method: histogram
+  back_projection:
+    blur_sigma: 0.0
+    max_iterations: 100
+    tolerance: 1.0e-6
+    relaxation: 1.0
