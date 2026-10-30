@@ -2,7 +2,7 @@
 
 | **PyPI** | **Versions** | **Docs & License** | **Tests** | **Reference** |
 |:---------:|:-------------:|:------------------:|:----------:|:--------------:|
-| [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.12--v3.14-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PyTorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) |  [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)  <br> [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17590993.svg)](https://doi.org/10.5281/zenodo.17590993)
+| [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.12--v3.14-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PyTorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) |  [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)  <br> [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17590993.svg)](https://doi.org/10.5281/zenodo.17590993)<br><a style="border-width:0" href="https://doi.org/10.21105/joss.11254"><img src="https://joss.theoj.org/papers/10.21105/joss.11254/status.svg" alt="DOI badge"></a> |
 
 
 
@@ -129,16 +129,18 @@ If you wish to contribute (such as new models, data or functionalities), please 
 
 If you use this work, please cite:
 
-```bibtex  
-@misc{donike2025opensrsrganflexiblesuperresolutionframework,
-      title={OpenSR-SRGAN: A Flexible Super-Resolution Framework for Multispectral Earth Observation Data}, 
-      author={Simon Donike and Cesar Aybar and Julio Contreras and Luis Gómez-Chova},
-      year={2025},
-      doi={10.48550/arXiv.2511.10461},
-      eprint={2511.10461},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2511.10461}, 
+```bibtex
+@article{Donike2026,
+  doi = {10.21105/joss.11254},
+  url = {https://doi.org/10.21105/joss.11254},
+  year = {2026},
+  publisher = {The Open Journal},
+  volume = {11},
+  number = {126},
+  pages = {11254},
+  author = {Donike, Simon and Aybar, Cesar and Contreras, Julio and Gómez-Chova, Luis},
+  title = {OpenSR-SRGAN: A Flexible Super-Resolution Framework for Multispectral Earth Observation Data},
+  journal = {Journal of Open Source Software}
 }
 ```
 ---

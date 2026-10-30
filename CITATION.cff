@@ -1,57 +1,67 @@
-cff-version: 1.2.0
-title: OpenSR-SRGAN
-message: >-
-  If you use this software, please cite it using the
-  metadata from this file.
-type: software
-
+cff-version: "1.2.0"
 authors:
-  - given-names: Simon
+- email: simon.donike@uv.es
+  family-names: Donike
+  given-names: Simon
+  orcid: "https://orcid.org/0000-0002-4440-3835"
+- family-names: Aybar
+  given-names: Cesar
+  orcid: "https://orcid.org/0000-0003-2745-9535"
+- family-names: Contreras
+  given-names: Julio
+  orcid: "https://orcid.org/0009-0001-5408-7055"
+- family-names: Gómez-Chova
+  given-names: Luis
+  orcid: "https://orcid.org/0000-0003-3924-1269"
+contact:
+- email: simon.donike@uv.es
+  family-names: Donike
+  given-names: Simon
+  orcid: "https://orcid.org/0000-0002-4440-3835"
+doi: 10.5281/zenodo.23740121
+message: If you use this software, please cite our article in the
+  Journal of Open Source Software.
+preferred-citation:
+  authors:
+  - email: simon.donike@uv.es
     family-names: Donike
-    email: simon.donike@uv.es
-    orcid: 'https://orcid.org/0000-0002-4440-3835'
-  - given-names: Cesar
-    family-names: Aybar
-    orcid: 'https://orcid.org/0000-0003-2745-9535'
-  - given-names: Julio
-    family-names: Contreras
-    orcid: 'https://orcid.org/0009-0001-5408-7055'
-  - given-names: Luis
-    family-names: Gómez-Chova
-    orcid: 'https://orcid.org/0000-0003-3924-1269'
-
-repository-code: 'https://github.com/ESAOpenSR/SRGAN'
-url: 'https://srgan.opensr.eu/'
-doi: 10.5281/zenodo.17590993
+    given-names: Simon
+    orcid: "https://orcid.org/0000-0002-4440-3835"
+  - family-names: Aybar
+    given-names: Cesar
+    orcid: "https://orcid.org/0000-0003-2745-9535"
+  - family-names: Contreras
+    given-names: Julio
+    orcid: "https://orcid.org/0009-0001-5408-7055"
+  - family-names: Gómez-Chova
+    given-names: Luis
+    orcid: "https://orcid.org/0000-0003-3924-1269"
+  date-published: 2026-10-30
+  doi: 10.21105/joss.11254
+  issn: 2475-9066
+  issue: 126
+  journal: Journal of Open Source Software
+  publisher:
+    name: Open Journals
+  start: 11254
+  title: "OpenSR-SRGAN: A Flexible Super-Resolution Framework for
+    Multispectral Earth Observation Data"
+  type: article
+  url: "https://joss.theoj.org/papers/10.21105/joss.11254"
+  volume: 11
+title: "OpenSR-SRGAN: A Flexible Super-Resolution Framework for
+  Multispectral Earth Observation Data"
+type: software
+repository-code: https://github.com/ESAOpenSR/SRGAN
+url: https://srgan.opensr.eu/
 version: 1.1.0.dev0
 date-released: 2026-10-30
-
 keywords:
-  - super-resolution
-  - remote sensing
-  - GAN
-  - Earth observation
-  - Sentinel-2
-  - PyTorch
-  - OpenSR
-
+- super-resolution
+- remote sensing
+- GAN
+- Earth observation
+- Sentinel-2
+- PyTorch
+- OpenSR
 license: Apache-2.0
-
-
-preferred-citation:
-  type: article
-  title: "OpenSR-SRGAN: A Flexible Super-Resolution Framework for Multispectral Earth Observation Data"
-  authors:
-    - family-names: Donike
-      given-names: Simon
-    - family-names: Aybar
-      given-names: Cesar
-    - family-names: Contreras
-      given-names: Julio
-    - family-names: Gómez-Chova
-      given-names: Luis
-  doi: 10.48550/arXiv.2511.10461
-  year: 2025
-  journal: "arXiv preprint"
-  url: "https://arxiv.org/abs/2511.10461"
-  notes: "Preprint version of the OpenSR-SRGAN paper."
