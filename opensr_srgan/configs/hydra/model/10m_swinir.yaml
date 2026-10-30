@@ -1,0 +1,29 @@
+# @package _global_
+
+# SwinIR-style transformer generator for four-band, 4x Sentinel-2 -> NAIP
+# experiments.  The generator needs reconstruction pretraining from scratch;
+# ESRGAN/RRDB checkpoints are not shape-compatible with this backbone.
+Model:
+  in_bands: 4
+  continue_training: false
+  load_checkpoint: false
+
+Generator:
+  model_type: swinir
+  out_channels: 4
+  embed_dim: 180
+  depths: [6, 6, 6, 6, 6, 6]
+  num_heads: [6, 6, 6, 6, 6, 6]
+  window_size: 8
+  mlp_ratio: 2.0
+  qkv_bias: true
+  drop_rate: 0.0
+  attn_drop_rate: 0.0
+  drop_path_rate: 0.1
+  use_checkpoint: false
+  scaling_factor: 4
+
+Discriminator:
+  model_type: patchgan
+  n_blocks: 3
+  use_spectral_norm: false

@@ -1,0 +1,46 @@
+# @package _global_
+
+# SEN2NAIP SwinIR-style reconstruction starter. Set the dataset paths in
+# data:sen2naip as required by the local experiment. This phase intentionally
+# does not enable GAN training; use its checkpoint to initialize a separately
+# reviewed adversarial phase.
+defaults:
+  - override /data: sen2naip
+  - override /model: 10m_swinir
+  - override /training: 10m
+  - override /logging: csv
+
+Data:
+  # Fill both paths before launching. Keeping the split manifest fixed is
+  # required for a comparable spatial validation/test holdout.
+  sen2naip_taco_file: null
+  sen2naip_split_file: null
+  sen2naip_crop_size: 64
+  sen2naip_num_bands: 4
+  sen2naip_augment: true
+
+Training:
+  max_epochs: 9999
+  max_steps: 30000
+  limit_val_batches: 1.0
+  pretrain_g_only: true
+  g_pretrain_steps: -1
+  EMA:
+    enabled: true
+    decay: 0.999
+    update_after_step: 0
+    use_num_updates: true
+  Losses:
+    adv_loss_beta: 0.0
+    l1_weight: 1.0
+    sam_weight: 0.0
+    perceptual_weight: 0.0
+    tv_weight: 0.0
+
+# Reconstruction defaults match the existing SEN2NAIP pretrain recipe.
+# D remains frozen throughout this phase.
+Optimizers:
+  optim_g_lr: 0.0002
+  optim_d_lr: 0.00001
+  betas: [0.9, 0.99]
+  gradient_clip_val: 1.0

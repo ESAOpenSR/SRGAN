@@ -8,6 +8,7 @@ Supported model types
 ---------------------
 - SRResNet family (standard / res / rcab / rrdb / lka via FlexibleGenerator)
 - ESRGAN (RRDBNet-style)
+- SwinIR (shifted-window transformer)
 - Stochastic conditional GAN (noise-modulated)
 """
 
@@ -36,6 +37,7 @@ _SRRESNET_BLOCK_ALIASES = {
 _MODEL_TYPE_ALIASES = {
     "srresnet": {"srresnet", "sr_resnet", "sr-resnet"},
     "esrgan": {"esrgan", "rrdbnet", "rrdb_net"},
+    "swinir": {"swinir", "swin_ir", "transformer"},
     "stochastic_gan": {
         "stochastic_gan",
         "stochastic",
@@ -196,7 +198,7 @@ def build_generator(config: Any) -> nn.Module:
     Returns
     -------
     torch.nn.Module
-        A fully constructed generator (SRResNet/Flexible, ESRGAN, or StochasticGenerator).
+        A fully constructed SRResNet/Flexible, ESRGAN, SwinIR, or stochastic generator.
 
     Raises
     ------
@@ -233,6 +235,32 @@ def build_generator(config: Any) -> nn.Module:
 
     in_channels = int(getattr(model_cfg, "in_bands"))
     scale = int(getattr(generator_cfg, "scaling_factor", 4))
+
+    if model_type == "swinir":
+        from .swinir import SwinIRGenerator
+
+        _warn_overridden_options(
+            "Generator", "swinir",
+            _collect_overridden(
+                generator_cfg, "block_type", "large_kernel_size", "small_kernel_size",
+                "n_channels", "n_blocks", "growth_channels", "res_scale", "use_icnr", "noise_dim",
+            ),
+        )
+        return SwinIRGenerator(
+            in_channels=in_channels,
+            out_channels=getattr(generator_cfg, "out_channels", None),
+            scale=scale,
+            embed_dim=getattr(generator_cfg, "embed_dim", 180),
+            depths=tuple(getattr(generator_cfg, "depths", (6, 6, 6, 6, 6, 6))),
+            num_heads=tuple(getattr(generator_cfg, "num_heads", (6, 6, 6, 6, 6, 6))),
+            window_size=getattr(generator_cfg, "window_size", 8),
+            mlp_ratio=getattr(generator_cfg, "mlp_ratio", 2.0),
+            qkv_bias=bool(getattr(generator_cfg, "qkv_bias", True)),
+            drop_rate=getattr(generator_cfg, "drop_rate", 0.0),
+            attn_drop_rate=getattr(generator_cfg, "attn_drop_rate", 0.0),
+            drop_path_rate=getattr(generator_cfg, "drop_path_rate", 0.1),
+            use_checkpoint=bool(getattr(generator_cfg, "use_checkpoint", False)),
+        )
 
     if model_type == "srresnet":
         large_kernel = int(getattr(generator_cfg, "large_kernel_size", 9))

@@ -108,3 +108,16 @@ These helpers allow the generator to operate in a normalised space while still r
    inference.
 
 This modular design keeps the research workflow flexible: swap components with configuration changes, extend the factories with new architectures, or plug in custom losses without touching the training loop itself.
+
+## SwinIR generator
+
+Select `Generator.model_type: swinir`, or compose `model=10m_swinir`, to use
+the four-band shifted-window transformer. Its settings include `embed_dim`,
+`depths`, `num_heads`, `window_size`, and optional activation checkpointing through
+`use_checkpoint`. Padding and cropping support input sizes that are not multiples
+of the window size.
+
+`experiment=swinir_sen2naip` supplies reconstruction-only pretraining settings.
+Set its SEN2NAIP manifest and spatial split paths before training. SwinIR needs
+its own reconstruction checkpoint: ESRGAN/RRDB weights are incompatible. This
+preset is independent of the ESRGAN texture recipe.
