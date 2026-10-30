@@ -115,6 +115,10 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 | `sam_weight` | `0.05` | Weight of the spectral angle mapper loss. |
 | `perceptual_weight` | `0.1` | Weight of the perceptual feature loss. |
 | `perceptual_metric` | `vgg` | Backbone used for perceptual features (`vgg` or `lpips`). |
+| `vgg_before_activation` | `False` | Compare features before the selected VGG ReLU. |
+| `vgg_input_normalization` | `False` | Apply ImageNet mean/std to VGG inputs; enabled explicitly in the texture recipe. |
+| `texture_weight` | `0.0` | Local-Gram texture loss weight; zero disables it. Requires a VGG backbone through conv3_4 or deeper. |
+| `texture_grid` | `4` | Number of tiles along each feature axis; must divide the selected feature dimensions. |
 | `fixed_idx` | unset | Optional fixed 3-band indices used by perceptual loss when `in_bands > 3` (recommended: `[0, 1, 2]` for RGB+NIR setups). |
 | `tv_weight` | `0.0` | Total variation regularisation strength. |
 | `max_val` | `1.0` | Peak value assumed by PSNR/SSIM computations. |
@@ -124,7 +128,7 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `model_type` | `SRResNet` | Generator family (`SRResNet`, `stochastic_gan`, or `esrgan`). |
+| `model_type` | `SRResNet` | Generator family (`SRResNet`, `stochastic_gan`, `esrgan`, or `swinir`). |
 | `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`/`esrgan`. |
 | `large_kernel_size` | `9` | Kernel size for input/output convolution layers. |
 | `small_kernel_size` | `3` | Kernel size for residual/attention blocks. |
@@ -133,8 +137,14 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 | `scaling_factor` | `8` | Super-resolution scale factor (2, 4, 8, ...). |
 | `growth_channels` | `32` | ESRGAN-only: growth channels inside each RRDB block. |
 | `res_scale` | `0.2` | Residual scaling used by stochastic/ESRGAN variants. |
-| `out_channels` | `Model.in_bands` | ESRGAN-only: override the number of output bands. |
+| `out_channels` | `Model.in_bands` | ESRGAN/SwinIR: override the number of output bands. |
 | `use_icnr` | `True` | ESRGAN-only: apply ICNR initialization to pre-PixelShuffle convolutions to reduce checkerboard artifacts in low-frequency regions. |
+
+SwinIR uses `embed_dim` (180), `depths` (six groups of six), `num_heads`
+(six heads per group), `window_size` (8), `mlp_ratio` (2.0), `qkv_bias` (true),
+`drop_rate`/`attn_drop_rate` (0), `drop_path_rate` (0.1), and `use_checkpoint`
+(false). Its CNN-only width/block settings are ignored with a factory notice.
+See `model=10m_swinir` and the [architecture guide](architecture.md#swinir-generator).
 
 ## Discriminator
 
@@ -261,3 +271,11 @@ Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` sel
   runtime using `OmegaConf.merge`.
 
 With a clear understanding of these fields, you can rapidly iterate on architectures, datasets, and training strategies without modifying the underlying code.
+
+## SEN2NAIP texture continuation
+
+The [local-Gram fine-tuning recipe](sen2naip-texture.md) is available as
+`experiment=sen2naip_texture` and a matching flat YAML. It requires explicit
+dataset, spatial split, and full-state checkpoint paths. SwinIR remains a
+separate reconstruction preset. Prediction matching is configurable through
+`Postprocessing.method` (or the Hydra `postprocessing` group).

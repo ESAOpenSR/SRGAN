@@ -577,3 +577,202 @@ def test_load_weights_from_checkpoint_accepts_lightning_state_dict(tmp_path, cap
     model.load_weights_from_checkpoint(checkpoint_path, map_location="cpu")
 
     assert "Loaded weights from checkpoint" in capsys.readouterr().out
+
+
+def test_ema_checkpoint_runtime_device_is_localized(monkeypatch):
+    model = SRGAN_model(config=_small_srgan_config(), mode="train")
+    ema = DummyEma()
+    ema.device = torch.device("cuda:0")
+    model.ema = ema
+    model._ema_applied = False
+
+    model.on_load_checkpoint({"ema_state": {"device": "cuda:0", "shadow": 2}})
+    loaded = [call for call in ema.calls if call[0] == "load_state_dict"][-1][1]
+    assert loaded["device"] is None
+
+    monkeypatch.setattr(SRGAN, "print_model_summary", lambda *_args, **_kwargs: None)
+    model.on_fit_start()
+    assert ema.calls[-1] == ("to", model.device)
+
+
+@pytest.mark.parametrize("normalization", ["identity", "normalise_10k", "normalise_10k_signed", "zero_one_signed"])
+def test_predict_step_corrects_final_output_and_preserves_detail(normalization):
+    config = _small_srgan_config()
+    config.Data = {"normalization": normalization}
+    model = SRGAN_model(config=config, mode="eval")
+
+    class DetailGenerator(torch.nn.Module):
+        def forward(self, lr):
+            base = torch.nn.functional.interpolate(lr, scale_factor=2, mode="nearest")
+            detail = lr.new_tensor([[-0.02, 0.02], [0.02, -0.02]]).repeat(*lr.shape[-2:])
+            return base + detail + 0.05
+
+    model.config.Postprocessing = {"method": "back_projection"}
+    model.generator = DetailGenerator().eval()
+    lr = torch.linspace(0.1, 0.2, 12).reshape(1, 1, 3, 4)
+    if "10k" in normalization:
+        lr = lr * 10000
+    normalized = model.normalizer.normalize(lr)
+    raw = model(normalized)
+    raw_before = raw.clone()
+    decoded = model.normalizer.denormalize(raw)
+    corrected = model.predict_step(lr)
+    torch.testing.assert_close(torch.nn.functional.avg_pool2d(corrected, 2), lr)
+    # Removing each LR block's mean isolates the newly generated detail.
+    def detail(image):
+        means = torch.nn.functional.avg_pool2d(image, 2)
+        return image - means.repeat_interleave(2, -2).repeat_interleave(2, -1)
+    torch.testing.assert_close(detail(corrected), detail(decoded), atol=5e-4, rtol=1e-4)
+    assert torch.equal(raw, raw_before)
+    assert not torch.allclose(corrected, decoded)
+
+
+def test_predict_step_accepts_integer_dn_inputs():
+    config = _small_srgan_config()
+    config.Data = {"normalization": "normalise_10k"}
+    model = SRGAN_model(config=config, mode="eval")
+    model.config.Postprocessing = {"method": "back_projection"}
+    model.generator = torch.nn.Upsample(scale_factor=2, mode="nearest").eval()
+    lr = torch.full((1, 1, 3, 4), 2000, dtype=torch.int32)
+    torch.testing.assert_close(model.predict_step(lr), lr.float().repeat_interleave(2, -2).repeat_interleave(2, -1))
+
+
+def test_predict_step_preserves_measurements_with_inplace_normalizer():
+    model = SRGAN_model(config=_small_srgan_config(), mode="eval")
+    model.normalizer = types.SimpleNamespace(
+        normalize=lambda image: image.mul_(0.1),
+        denormalize=lambda image: image * 10.0,
+    )
+    model.config.Postprocessing = {"method": "back_projection"}
+    model.generator = torch.nn.Upsample(scale_factor=2, mode="nearest").eval()
+    lr = torch.full((1, 1, 3, 4), 2.0)
+    corrected = model.predict_step(lr)
+    assert torch.all(lr == 2.0)
+    torch.testing.assert_close(torch.nn.functional.avg_pool2d(corrected, 2), lr)
+
+
+def test_validation_online_uploads_rgb_and_nir_panels(monkeypatch, tmp_path):
+    harness = ValidationHarness(in_bands=4, pretrain=True)
+    harness.config.Logging.wandb.enabled = True
+    harness.config.Logging.local_images = True
+    harness.config.Logging.output_dir = str(tmp_path)
+    harness.current_epoch = 3
+    harness.trainer = types.SimpleNamespace(is_global_zero=True, sanity_checking=False)
+    uploaded = []
+    harness.logger = types.SimpleNamespace(
+        experiment=types.SimpleNamespace(log=uploaded.append)
+    )
+    paths = [tmp_path / "sample-000_rgb.png", tmp_path / "sample-000_nir.png"]
+    monkeypatch.setattr(SRGAN, "save_validation_artifacts", lambda *a, **k: paths)
+    monkeypatch.setattr(SRGAN, "wandb", types.SimpleNamespace(
+        Image=lambda path, caption: {"path": path, "caption": caption}
+    ))
+    def no_legacy_plot(*a, **k):
+        raise AssertionError("Online panels must bypass legacy percentile plotting")
+    monkeypatch.setattr(SRGAN, "plot_tensors", no_legacy_plot)
+    batch = (torch.ones(1, 4, 4, 4, dtype=torch.bfloat16), torch.zeros(1, 4, 4, 4))
+    SRGAN_model.validation_step(harness, batch, batch_idx=0)
+    assert uploaded[0]["validation/epoch"] == 3
+    assert len(uploaded[0]["validation/rgb"]) == 1
+    assert len(uploaded[0]["validation/nir"]) == 1
+
+
+def test_validation_visualization_disabled_does_not_plot(monkeypatch):
+    harness = ValidationHarness(in_bands=4, pretrain=True)
+
+    def fail_if_plotted(*_args, **_kwargs):
+        raise AssertionError("disabled W&B visualization should not plot")
+
+    monkeypatch.setattr(SRGAN, "plot_tensors", fail_if_plotted)
+    harness.postprocess = fail_if_plotted
+    batch = (torch.ones(1, 4, 2, 2), torch.zeros(1, 4, 2, 2))
+
+    SRGAN_model.validation_step(harness, batch, batch_idx=0)
+
+
+def test_postprocess_uses_configured_per_band_measurement_operator():
+    from opensr_srgan.utils.back_projection import BlurDownsample
+
+    harness = ValidationHarness(in_bands=4)
+    harness.config.Postprocessing = {"method": "back_projection", "back_projection": {
+        "blur_sigma": [0.0, 0.4, 0.8, 1.0], "max_iterations": 3000,
+        "tolerance": 1e-7, "relaxation": 0.8,
+    }}
+    operator = BlurDownsample(4, scale=2, blur_sigma=(0.0, 0.4, 0.8, 1.0)).double()
+    truth = torch.rand(
+        1, 4, 8, 12, dtype=torch.float64, generator=torch.Generator().manual_seed(42)
+    )
+    observed = operator(truth)
+    result = harness.postprocess(torch.zeros_like(truth), observed)
+    torch.testing.assert_close(operator(result), observed, atol=1e-6, rtol=0)
+    harness.config.Postprocessing.back_projection.scale = 4
+    with pytest.raises(ValueError, match="spatial shape"):
+        harness.postprocess(torch.zeros_like(truth), observed)
+
+
+def test_validation_logs_both_images_but_scores_raw_prediction(monkeypatch):
+    harness = ValidationHarness(in_bands=1, pretrain=False, wasserstein=True)
+    harness.config.Postprocessing = {"method": "back_projection"}
+    harness.config.Logging.wandb.enabled = True
+    harness.logger = types.SimpleNamespace(experiment=types.SimpleNamespace(log=lambda _: None))
+    lr = torch.full((1, 1, 2, 3), 0.2)
+    raw = torch.full((1, 1, 4, 6), 0.7)
+    harness.forward = lambda _: raw
+    discriminator_inputs = []
+    harness.discriminator.register_forward_pre_hook(lambda _, args: discriminator_inputs.append(args[0].clone()))
+    captured = {}
+    def plot(lr, sr, hr, **kwargs):
+        captured.update(raw=sr, matched=kwargs["matched"])
+        return object()
+    monkeypatch.setattr(SRGAN, "plot_tensors", plot)
+    monkeypatch.setattr(SRGAN, "wandb", types.SimpleNamespace(Image=lambda image: image))
+    SRGAN_model.validation_step(harness, (lr, raw.clone()), batch_idx=0)
+    assert harness.logged["val_metrics/l1"] == 0
+    torch.testing.assert_close(captured["raw"], raw)
+    torch.testing.assert_close(torch.nn.functional.avg_pool2d(captured["matched"], 2), lr)
+    assert not torch.equal(captured["matched"], captured["raw"])
+    torch.testing.assert_close(discriminator_inputs[1], raw)
+
+
+def test_texture_selection_stays_raw_during_ramp_and_fidelity_rejection(monkeypatch):
+    harness = ValidationHarness(in_bands=1, pretrain=False)
+    harness.config.Schedulers = {
+        "texture_selection_metric": "val_metrics/texture_selection",
+        "texture_selection_warmup_penalty": 999.0,
+    }
+    harness.config.Training = {
+        "pretrain_g_only": False,
+        "g_pretrain_steps": 0,
+        "adv_loss_ramp_steps": 10,
+        "Losses": {
+            "texture_selection_perceptual_weight": 1.0,
+            "texture_selection_l1_weight": 0.01,
+            "texture_selection_max_l1": 0.05,
+        },
+    }
+    harness.g_pretrain_steps = 0
+    harness.pretrain_g_only = False
+    harness.adv_loss_ramp_steps = 10
+    harness.global_step = 5
+    harness.content_loss_criterion.return_metrics = lambda sr, hr, prefix: {
+        f"{prefix}l1": torch.tensor(2.0),
+        f"{prefix}perceptual": torch.tensor(3.0),
+    }
+    monkeypatch.setattr(SRGAN, "plot_tensors", lambda *args, **kwargs: object())
+
+    SRGAN_model.validation_step(
+        harness, (torch.ones(1, 1, 2, 2), torch.zeros(1, 1, 2, 2)), 0
+    )
+    assert harness.logged["val_metrics/texture_selection"] == pytest.approx(3.02)
+    assert harness.logged["val_metrics/texture_selection_batch_fidelity_fraction"] == 0.0
+
+    harness.global_step = 10
+    harness.content_loss_criterion.return_metrics = lambda sr, hr, prefix: {
+        f"{prefix}l1": torch.tensor(0.01),
+        f"{prefix}perceptual": torch.tensor(3.0),
+    }
+    SRGAN_model.validation_step(
+        harness, (torch.ones(1, 1, 2, 2), torch.zeros(1, 1, 2, 2)), 0
+    )
+    assert harness.logged["val_metrics/texture_selection"] == pytest.approx(3.0001)
+    assert harness.logged["val_metrics/texture_selection_batch_fidelity_fraction"] == 1.0

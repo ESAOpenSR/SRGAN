@@ -122,6 +122,30 @@ def build_lightning_kwargs(
         callbacks=[checkpoint_callback, early_stop_callback],
     )
 
+    # Keep run-length and validation controls in the config.  These are
+    # especially useful for GAN smoke tests and staged texture experiments.
+    optional_training = (
+        "max_steps",
+        "limit_train_batches",
+        "num_sanity_val_steps",
+        "precision",
+        "check_val_every_n_epoch",
+    )
+    for key in optional_training:
+        value = getattr(config.Training, key, None)
+        if value is not None:
+            trainer_kwargs[key] = value
+
+    # Manual GAN optimization performs explicit D and G updates inside one
+    # batch. Lightning's automatic gradient accumulation would silently alter
+    # that update ratio, so reject it rather than launching a misleading run.
+    accumulation = getattr(config.Training, "accumulate_grad_batches", 1)
+    if accumulation not in (None, 1):
+        raise ValueError(
+            "Training.accumulate_grad_batches must be 1 for manual GAN "
+            "optimization; accumulate gradients inside the training step instead."
+        )
+
     # ``strategy`` defaults to ``None`` on CPU runs.  Lightning does not accept
     # explicit ``None`` values in its constructor, therefore we prune every
     # key/value pair whose value evaluates to ``None`` before forwarding the

@@ -77,9 +77,10 @@ def test_back_projection_promotes_half_and_does_not_clip():
     torch.testing.assert_close(result.mean(), torch.tensor(.5))
 
 
-def test_unknown_method_fails_before_building_model():
+@pytest.mark.parametrize('method', ['typo', 1, []])
+def test_unknown_method_fails_before_building_model(method):
     with pytest.raises(ValueError, match='Postprocessing.method'):
-        model_for('typo')
+        model_for(method)
 
 
 def test_back_projection_rejects_incompatible_geometry():

@@ -79,6 +79,9 @@ def train_module(monkeypatch):
             self.args = args
             self.kwargs = kwargs
 
+        def log_hyperparams(self, params):
+            self.hyperparams = params
+
     loggers_mod.CSVLogger = CSVLogger
     loggers_mod.WandbLogger = WandbLogger
     monkeypatch.setitem(sys.modules, "pytorch_lightning.loggers", loggers_mod)
@@ -92,6 +95,10 @@ def train_module(monkeypatch):
 
     callbacks_mod.ModelCheckpoint = ModelCheckpoint
     monkeypatch.setitem(sys.modules, "pytorch_lightning.callbacks", callbacks_mod)
+    training_callbacks_mod = types.ModuleType("opensr_srgan.utils.training_callbacks")
+    training_callbacks_mod.QualityModelCheckpoint = callbacks_mod.ModelCheckpoint
+    training_callbacks_mod.LatestCheckpoint = lambda directory: ("latest", directory)
+    monkeypatch.setitem(sys.modules, "opensr_srgan.utils.training_callbacks", training_callbacks_mod)
 
     early_stopping_mod = types.ModuleType("pytorch_lightning.callbacks.early_stopping")
 
@@ -281,6 +288,7 @@ def test_train_uses_wandb_logger_and_saves_config_when_global_zero(
     train_mod.train(config)
 
     assert state["builder_logger"].__class__.__name__ == "WandbLogger"
+    assert state["builder_logger"].hyperparams["Logging"]["wandb"]["enabled"] is True
     config_files = list((tmp_path / "logs" / "unit-tests").glob("*/config.yaml"))
     assert (
         config_files
@@ -301,6 +309,8 @@ def test_train_respects_logging_output_dir(train_module, monkeypatch, tmp_path):
 
     assert (output_dir / "config.yaml").is_file()
     assert state["builder_checkpoint_callback"].kwargs["dirpath"] == str(output_dir)
+    assert state["builder_checkpoint_callback"].kwargs["save_on_train_epoch_end"] is False
+    assert state["builder_early_stop_callback"].kwargs["check_on_train_epoch_end"] is False
     assert state["builder_logger"].kwargs["save_dir"] == str(output_dir)
 
 
@@ -345,6 +355,10 @@ def test_train_module_main_guard(monkeypatch):
     callbacks_mod = types.ModuleType("pytorch_lightning.callbacks")
     callbacks_mod.ModelCheckpoint = lambda *args, **kwargs: "checkpoint"
     monkeypatch.setitem(sys.modules, "pytorch_lightning.callbacks", callbacks_mod)
+    training_callbacks_mod = types.ModuleType("opensr_srgan.utils.training_callbacks")
+    training_callbacks_mod.QualityModelCheckpoint = callbacks_mod.ModelCheckpoint
+    training_callbacks_mod.LatestCheckpoint = lambda directory: ("latest", directory)
+    monkeypatch.setitem(sys.modules, "opensr_srgan.utils.training_callbacks", training_callbacks_mod)
 
     early_stopping_mod = types.ModuleType("pytorch_lightning.callbacks.early_stopping")
     early_stopping_mod.EarlyStopping = lambda *args, **kwargs: "early_stop"

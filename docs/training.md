@@ -154,3 +154,11 @@ Checkpoints store both the live and EMA weights, so resuming training preserves 
 
 With these components understood, you can safely modify the trainer arguments, replace callbacks, or integrate advanced logging
 without losing the benefits of the existing automation.
+
+## SEN2NAIP texture continuation
+
+The [local-Gram fine-tuning recipe](sen2naip-texture.md) is available as
+`experiment=sen2naip_texture` and a matching flat YAML. It requires explicit
+dataset, spatial split, and full-state checkpoint paths. SwinIR remains a
+separate reconstruction preset. Prediction matching is configurable through
+`Postprocessing.method` (or the Hydra `postprocessing` group).

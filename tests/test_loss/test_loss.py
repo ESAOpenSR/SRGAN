@@ -8,6 +8,19 @@ import types
 from opensr_srgan.model.loss.loss import GeneratorContentLoss
 
 
+def test_sam_loss_is_finite_for_bfloat16_inputs():
+    """SAM must not produce NaNs when cosine similarity rounds near one."""
+    sr = torch.ones(1, 4, 3, 3, dtype=torch.bfloat16, requires_grad=True)
+    hr = (sr.detach() * (1 + torch.tensor(1e-3, dtype=torch.bfloat16))).requires_grad_()
+
+    value = GeneratorContentLoss._sam_loss(sr, hr)
+
+    assert torch.isfinite(value)
+    value.backward()
+    assert sr.grad is not None
+    assert torch.isfinite(sr.grad.float()).all()
+
+
 @pytest.fixture(scope="session")
 def cfg_10m():
     cfg_path = Path("opensr_srgan/configs/config_10m.yaml")

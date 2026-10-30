@@ -69,7 +69,7 @@ class SRGAN_model(pl.LightningModule):
     Configuration overview (minimal)
     --------------------------------
     - **Model**: `in_bands` (int)
-        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`, `"esrgan"`),
+        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`, `"esrgan"`, `"swinir"`),
         optional `block_type` for SRResNet variants (`"standard"`, `"res"`, `"rcab"`,
         `"rrdb"`, `"lka"`), `n_channels`, `n_blocks`, `large_kernel_size`,
         `small_kernel_size`, `scaling_factor`, plus ESRGAN-specific knobs
@@ -111,8 +111,9 @@ class SRGAN_model(pl.LightningModule):
     ------------------------
     - **Forward**: `lr_imgs` of shape `(B, C, H, W)` → SR output with spatial scale set by
     `Generator.scaling_factor`.
-    - **Predict**: Applies optional normalization (0–10000 → 0–1), EMA averaging, histogram
-    matching, and denormalization back to the input range; returns CPU tensors.
+    - **Predict**: Applies optional normalization (0–10000 → 0–1), EMA averaging,
+    configurable matching, and denormalization; returns CPU tensors in input units.
+    Histogram matching is the compatibility default; back-projection is opt-in.
 
     Example
     -------
@@ -374,6 +375,7 @@ class SRGAN_model(pl.LightningModule):
                 self.generator,
                 decay=ema_decay,
                 use_num_updates=use_num_updates,
+                device=ema_device,
             )
             self._ema_update_after_step = int(getattr(ema_cfg, "update_after_step", 0))
 
@@ -400,7 +402,7 @@ class SRGAN_model(pl.LightningModule):
     def _postprocessing_method(self):
         settings = getattr(self.config, "Postprocessing", None)
         method = getattr(settings, "method", "histogram")
-        if method not in {"histogram", "back_projection"}:
+        if not isinstance(method, str) or method not in {"histogram", "back_projection"}:
             raise ValueError("Postprocessing.method must be 'histogram' or 'back_projection'")
         return method
 
@@ -413,6 +415,9 @@ class SRGAN_model(pl.LightningModule):
         This helper does not normalize inputs and never changes raw predictions.
         """
         if self._postprocessing_method() == "histogram":
+            if torch.bfloat16 in (lr_imgs.dtype, sr_imgs.dtype):
+                # NumPy has no bfloat16 dtype; preserve the target dtype on return.
+                return histogram_match(lr_imgs.float(), sr_imgs.float()).to(sr_imgs.dtype)
             return histogram_match(lr_imgs, sr_imgs)
         settings = getattr(self.config, "Postprocessing", None)
         options = dict(getattr(settings, "back_projection", {}))
@@ -527,6 +532,42 @@ class SRGAN_model(pl.LightningModule):
             self.log(
                 f"{key}", value, sync_dist=True
             )  # log each metric to logger (e.g., W&B, TensorBoard)
+
+        # A reconstruction-only warmup can produce the lowest L1 while still
+        # lacking texture. Expose this auxiliary metric only for runs that
+        # explicitly select it.
+        sched_cfg = getattr(self.config, "Schedulers", None)
+        loss_cfg = getattr(getattr(self.config, "Training", None), "Losses", None)
+        texture_metric_name = getattr(sched_cfg, "texture_selection_metric", None)
+        checkpoint_monitor = getattr(sched_cfg, "checkpoint_monitor", None)
+        texture_selection_enabled = bool(texture_metric_name) or (
+            checkpoint_monitor == "val_metrics/texture_selection"
+        )
+        if texture_selection_enabled:
+            texture_metric_name = str(
+                texture_metric_name or "val_metrics/texture_selection"
+            )
+            texture_perceptual_weight = float(
+                getattr(loss_cfg, "texture_selection_perceptual_weight", 1.0)
+            )
+            texture_l1_weight = float(
+                getattr(loss_cfg, "texture_selection_l1_weight", 0.01)
+            )
+            # Keep this metric on its natural scale for graphs and schedulers.
+            # QualityModelCheckpoint gates complete epochs independently.
+            texture_selection = (
+                texture_perceptual_weight * metrics["val_metrics/perceptual"]
+                + texture_l1_weight * metrics["val_metrics/l1"]
+            )
+            max_l1 = getattr(loss_cfg, "texture_selection_max_l1", None)
+            if max_l1 is not None:
+                l1 = metrics["val_metrics/l1"]
+                self.log(
+                    "val_metrics/texture_selection_batch_fidelity_fraction",
+                    float(bool(torch.isfinite(l1) and l1 <= float(max_l1))),
+                    sync_dist=True,
+                )
+            self.log(texture_metric_name, texture_selection, sync_dist=True)
 
         # ======================================================================
         # SECTION: Optional visualization — Log example SR/HR/LR images
@@ -783,7 +824,7 @@ class SRGAN_model(pl.LightningModule):
             factor=float(getattr(cfg_sch, "factor_g", 0.5)),
             patience=int(getattr(cfg_sch, "patience_g", 5)),
             threshold=float(getattr(cfg_sch, "threshold", 1e-3)),
-            threshold_mode="rel",
+            threshold_mode=str(getattr(cfg_sch, "threshold_mode", "rel")),
             cooldown=int(getattr(cfg_sch, "cooldown", 0)),
             min_lr=float(getattr(cfg_sch, "min_lr", 1e-7)),
         )
@@ -854,6 +895,9 @@ class SRGAN_model(pl.LightningModule):
             batch (Any): The current batch of training data.
             batch_idx (int): Index of the current batch in the epoch.
         """
+        # Resume can restore optimizer state after on_fit_start. Align rates
+        # before either optimizer takes its first (or any subsequent) step.
+        self._sync_discriminator_lr()
         pre = self._pretrain_check()  # check if currently in pretraining phase
         for p in self.discriminator.parameters():  # loop over all discriminator params
             p.requires_grad = not pre  # freeze D during pretrain, unfreeze otherwise
@@ -870,7 +914,22 @@ class SRGAN_model(pl.LightningModule):
             batch_idx (int): Index of the current batch in the epoch.
         """
         self._step_generator_warmup()
+        self._sync_discriminator_lr()
         self._log_lrs()  # log LR's on each batch end
+
+    def _sync_discriminator_lr(self) -> None:
+        """Optionally preserve the configured D/G LR ratio through warmup/decay."""
+        ratio = getattr(self.config.Schedulers, "d_lr_ratio_to_g", None)
+        if ratio is None:
+            return
+        ratio = float(ratio)
+        if not math.isfinite(ratio) or ratio <= 0:
+            raise ValueError("d_lr_ratio_to_g must be finite and positive")
+        optimizer_d, optimizer_g = self.trainer.optimizers
+        if len(optimizer_d.param_groups) != len(optimizer_g.param_groups):
+            raise ValueError("Coupled D/G learning rates require matching parameter groups")
+        for group_d, group_g in zip(optimizer_d.param_groups, optimizer_g.param_groups):
+            group_d["lr"] = ratio * group_g["lr"]
 
     def _step_generator_warmup(self) -> None:
         """Advance generator warmup once per update, then stop permanently.
@@ -893,6 +952,10 @@ class SRGAN_model(pl.LightningModule):
             return
 
         callback_metrics = getattr(trainer, "callback_metrics", {})
+        sched_cfg = self.config.Schedulers
+        wait_for_ramp = bool(getattr(sched_cfg, "g_plateau_after_ramp", False))
+        ramp_start = max(0, self.g_pretrain_steps) if self.pretrain_g_only else 0
+        ramp_finished = (not self._pretrain_check() and self.global_step >= ramp_start + max(0, self.adv_loss_ramp_steps))
         scheduler_specs = (
             (
                 getattr(self, "_plateau_scheduler_d", None),
@@ -904,7 +967,14 @@ class SRGAN_model(pl.LightningModule):
             ),
         )
         warned_metrics = getattr(self, "_missing_plateau_metrics_warned", set())
-        for scheduler, metric_name in scheduler_specs:
+        for index, (scheduler, metric_name) in enumerate(scheduler_specs):
+            if index == 0 and (
+                self._pretrain_check() or not bool(getattr(sched_cfg, "d_plateau_enabled", True))
+                or getattr(sched_cfg, "d_lr_ratio_to_g", None) is not None
+            ):
+                continue
+            if index == 1 and wait_for_ramp and not ramp_finished:
+                continue
             if scheduler is None or not metric_name:
                 continue
             metric = callback_metrics.get(metric_name)
@@ -925,6 +995,8 @@ class SRGAN_model(pl.LightningModule):
                 metric = metric.item()
             scheduler.step(float(metric))
         self._missing_plateau_metrics_warned = warned_metrics
+        if getattr(sched_cfg, "d_lr_ratio_to_g", None) is not None:
+            self._sync_discriminator_lr()
 
     def on_fit_start(self):  # called once at the start of training
         """Hook executed once at the beginning of model fitting.
@@ -939,8 +1011,17 @@ class SRGAN_model(pl.LightningModule):
             to avoid duplicated output in distributed training.
         """
         super().on_fit_start()
-        if self.ema is not None and self.ema.device is None:  # move ema weights
-            self.ema.to(self.device)
+        self._sync_discriminator_lr()
+        if self.ema is not None:
+            # The serialized EMA device belongs to the saving process (often
+            # cuda:0). Every DDP rank must place its shadow tensors on its own
+            # local model device, unless the config explicitly requests an
+            # offload device such as CPU.
+            ema_cfg = getattr(getattr(self.config, "Training", None), "EMA", None)
+            configured_device = getattr(ema_cfg, "device", None)
+            target_device = configured_device or self.device
+            if self.ema.device != torch.device(target_device):
+                self.ema.to(target_device)
         from opensr_srgan.utils.gpu_rank import _is_global_zero
 
         if _is_global_zero():
@@ -1223,7 +1304,21 @@ class SRGAN_model(pl.LightningModule):
         Args:
             checkpoint (dict): Mutable checkpoint dictionary provided by Lightning.
         """
+        # Ensure model state stores live weights if a save occurs while an
+        # evaluation hook has temporarily applied EMA weights.
+        was_ema_applied = self._ema_applied
+        self._restore_generator_weights()
         super().on_save_checkpoint(checkpoint)
+        # Lightning may have obtained state_dict() before entering this hook;
+        # state_dict tensors can alias live parameters. Explicitly replace the
+        # generator entries when an EMA swap was active so the checkpoint is
+        # unambiguously the live training model.
+        if was_ema_applied and isinstance(checkpoint.get("state_dict"), dict):
+            model_state = checkpoint["state_dict"]
+            for name, value in self.generator.state_dict().items():
+                key = f"generator.{name}"
+                if key in model_state:
+                    model_state[key] = value.detach().clone()
         if self.ema is not None:
             checkpoint["ema_state"] = self.ema.state_dict()
 
@@ -1236,7 +1331,14 @@ class SRGAN_model(pl.LightningModule):
         """
         super().on_load_checkpoint(checkpoint)
         if self.ema is not None and "ema_state" in checkpoint:
-            self.ema.load_state_dict(checkpoint["ema_state"])
+            ema_state = dict(checkpoint["ema_state"])
+            # Do not eagerly restore rank-0's runtime CUDA device on another
+            # rank. Load CPU tensors, then on_fit_start moves them locally.
+            ema_cfg = getattr(getattr(self.config, "Training", None), "EMA", None)
+            configured_device = getattr(ema_cfg, "device", None)
+            if "device" in ema_state:
+                ema_state["device"] = configured_device
+            self.ema.load_state_dict(ema_state)
 
     def _log_lrs(self) -> None:
         """Log learning rates for discriminator and generator optimizers.
@@ -1296,4 +1398,15 @@ class SRGAN_model(pl.LightningModule):
             else ckpt
         )
         self.load_state_dict(state_dict, strict=strict)
+        # This helper is deliberately a weights-only import (used for stage-2
+        # initialization). Seed EMA from the imported generator rather than
+        # retaining a shadow copy built from the constructor's random weights.
+        if getattr(self, "ema", None) is not None:
+            self.ema = ExponentialMovingAverage(
+                self.generator,
+                decay=self.ema.decay,
+                use_num_updates=self.ema.num_updates is not None,
+                device=self.ema.device,
+            )
+            self._ema_applied = False
         print(f"Loaded weights from checkpoint {ckpt_path}")

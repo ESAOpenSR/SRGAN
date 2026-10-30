@@ -105,3 +105,11 @@ Use Hydra when you want quick overrides, reusable experiment pieces, or clean pe
 ## References
 
 Hydra composes these configs through a Defaults List. See the Hydra Defaults List documentation for the underlying mechanism: <https://hydra.cc/docs/1.1/advanced/defaults_list/>. The SRGAN entry point also uses an explicit `version_base` and `config_path`, following Hydra's upgrade guidance: <https://hydra.cc/docs/1.3/upgrades/version_base/>.
+
+## SEN2NAIP texture continuation
+
+The [local-Gram fine-tuning recipe](sen2naip-texture.md) is available as
+`experiment=sen2naip_texture` and a matching flat YAML. It requires explicit
+dataset, spatial split, and full-state checkpoint paths. SwinIR remains a
+separate reconstruction preset. Prediction matching is configurable through
+`Postprocessing.method` (or the Hydra `postprocessing` group).

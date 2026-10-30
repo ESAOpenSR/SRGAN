@@ -1,0 +1,15 @@
+# @package _global_
+
+Logging:
+  output_dir: null
+  num_val_images: 4
+  local_images: true
+  wandb:
+    enabled: false
+    entity: null
+    project: sen2naip_texture
+    name: null
+    group: null
+    id: null
+    resume: null
+  log_live_and_ema: true

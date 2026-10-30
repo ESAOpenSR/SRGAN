@@ -11,6 +11,12 @@ python -m pytest -q
 
 The automated suite covers model components, training logic, data handling, inference, and deployment utilities. CI runs it with CPU-only PyTorch. The separate GPU integration check below is opt-in and requires two CUDA GPUs.
 
+The suite also covers SwinIR gradients and checkpoint round-trips, histogram
+compatibility and back-projection consistency, and CPU full-state texture
+continuation (live/EMA weights, Adam moments, schedulers, step counters, and
+checkpoint-selection history). These checks use synthetic data and do not
+launch the full SEN2NAIP recipe.
+
 ## Optional two-GPU DDP smoke test
 
 The standalone integration check in `tests/manual/ddp_smoke.py` runs the real Lightning manual-optimization path on two CUDA GPUs with small, seeded random LR/HR tensors. It is not collected by `pytest` or run by ordinary CI. From the repository root, with the package and its dependencies installed, run:
@@ -37,7 +43,7 @@ The test uses the production trainer builder's `ddp_find_unused_parameters_true`
 
 Each rank prints epoch progress, including its batch count, optimizer-step count, generator learning rate, and adversarial weight. The later epochs check continued training after both warmup and adversarial ramping have completed.
 
-Gradient-norm clipping is enabled through `Optimizers.gradient_clip_val=0.5` in the manual training step. This check uses `32-true` precision and one node. It does not validate AMP, gradient accumulation, multi-node execution, checkpoint resume, every architecture/loss combination, or long-run convergence. Ordinary BatchNorm running buffers are not required to match across data shards; the synchronization assertions cover parameters, including EMA shadow parameters. The standard trainer builder does not currently forward `precision`, `accumulate_grad_batches`, or `num_nodes` from configuration; the manual loop updates optimizers every batch.
+Gradient-norm clipping is enabled through `Optimizers.gradient_clip_val=0.5` in the manual training step. This check uses `32-true` precision and one node. It does not validate AMP, gradient accumulation, multi-node execution, checkpoint resume, every architecture/loss combination, or long-run convergence. Ordinary BatchNorm running buffers are not required to match across data shards; the synchronization assertions cover parameters, including EMA shadow parameters. The trainer builder forwards `precision`, `max_steps`, and batch/validation limits. It rejects `accumulate_grad_batches` values other than 1 because the manual loop updates optimizers every batch; `num_nodes` is not forwarded.
 
 ## Troubleshooting
 

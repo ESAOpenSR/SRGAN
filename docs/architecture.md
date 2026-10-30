@@ -23,7 +23,7 @@ Because every generator variant (residual, RCAB, RRDB, large-kernel attention, E
   `Generator.model_type`/`block_type` and `Discriminator.model_type`. Unsupported combinations fail fast with clear error
   messages.
 * **Loss construction.** `GeneratorContentLoss` (from `opensr_srgan.model.loss`) provides L1, spectral angle mapper (SAM), perceptual, and
-  total-variation terms. Adversarial supervision uses BCE-with-logits or Wasserstein objectives, with optional label smoothing, relativistic-average BCE, and R1 penalty depending on the config.
+  total-variation terms, plus optional local-Gram texture statistics. Adversarial supervision uses BCE-with-logits or Wasserstein objectives, with optional label smoothing, relativistic-average BCE, and R1 penalty depending on the config.
 * **Optimiser scheduling.** `configure_optimizers()` returns paired Adam optimisers (generator + discriminator) with
   `ReduceLROnPlateau` schedulers that monitor a configurable validation metric.
 * **Training orchestration.** `setup_lightning()` binds `training_step_PL2()` and enables manual optimisation
@@ -33,7 +33,8 @@ Because every generator variant (residual, RCAB, RRDB, large-kernel attention, E
 * **Validation and logging.** `validation_step()` computes the same content metrics, logs discriminator diagnostics, and pushes
   qualitative image panels to Weights & Biases according to `Logging.num_val_images`.
 * **Inference pipeline.** `predict_step()` automatically normalises Sentinel-2 style 0–10000 inputs, runs the generator,
-  histogram matches the result to the low-resolution source, and denormalises if necessary.
+  applies the configured histogram matching or back-projection, and returns the supplied input units.
+  Histogram matching precedes denormalisation; back-projection follows it.
 
 ### Key helper methods
 
@@ -82,6 +83,7 @@ Both discriminators use LeakyReLU activations and strided convolutions to progre
 * **L1 reconstruction** over all spectral bands.
 * **Spectral Angle Mapper (SAM)** to preserve spectral signatures.
 * **Perceptual similarity** via VGG or LPIPS feature spaces, depending on `Training.Losses.perceptual_metric`.
+* **Local-Gram texture loss** on preactivation VGG conv2_2/conv3_4 features when `texture_weight` is non-zero.
 * **Total variation regularisation** for smoothing when `tv_weight` is non-zero.
 
 The same module exposes `return_metrics()` so validation can log PSNR/SSIM-style diagnostics without recomputing forward passes.
@@ -89,10 +91,11 @@ The same module exposes `return_metrics()` so validation can log PSNR/SSIM-style
 ## Data flow and normalisation
 
 The Lightning module expects batches of `(lr_imgs, hr_imgs)` tensors supplied by the `LightningDataModule` returned from
-`opensr_srgan/data/dataset_selector.py`. `predict_step()` uses the configured `opensr_srgan.data.utils.Normalizer` plus histogram matching from `opensr_srgan.utils.radiometrics`:
+`opensr_srgan/data/dataset_selector.py`. `predict_step()` uses the configured `opensr_srgan.data.utils.Normalizer` plus the matching method selected by `Postprocessing.method`:
 
 * `Normalizer`: Applies the configured `Data.normalization` strategy, such as `normalise_10k`, `zero_one`, or a custom callable.
-* `histogram`: Matches the SR histogram to the LR reference to minimise domain gaps during inference.
+* `histogram` (default): Matches the SR histogram to the LR reference before denormalisation.
+* `back_projection`: Corrects denormalised SR so its downsampled measurements reproduce the LR input.
 
 These helpers allow the generator to operate in a normalised space while still reporting outputs in physical units when needed.
 

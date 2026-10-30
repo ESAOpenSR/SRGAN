@@ -1,0 +1,16 @@
+# @package _global_
+
+Data:
+  dataset_type: SEN2NAIP
+  sen2naip_taco_file: ???
+  sen2naip_val_fraction: 0.1
+  sen2naip_split_seed: 20261028
+  sen2naip_num_bands: 4
+  sen2naip_crop_size: 64
+  sen2naip_augment: true
+  normalization: normalise_10k
+  train_batch_size: 6
+  val_batch_size: 2
+  num_workers: 4
+  prefetch_factor: 2
+  sen2naip_split_file: ???

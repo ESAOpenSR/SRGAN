@@ -22,7 +22,7 @@ Full docs live at **[srgan.opensr.eu](https://srgan.opensr.eu/)**. They cover us
 
 ## 🧠 Highlights
 
-* **Flexible models:** swap between SRResNet, RCAB, RRDB, LKA, ESRGAN, and stochastic generators with YAML-only changes.
+* **Flexible models:** swap between SRResNet, RCAB, RRDB, LKA, ESRGAN, SwinIR, and stochastic generators with YAML-only changes.
 * **Remote-sensing aware losses:** combine spectral, perceptual, and adversarial objectives with tunable weights.
 * **Stable training loop:** generator pretraining, adversarial ramp-ups, EMA, and multi-GPU Lightning support out of the box.
 * **PyPI distribution:** `pip install opensr-srgan` for ready-to-use presets or custom configs.
@@ -144,3 +144,8 @@ Developed within the **ESA Φ-lab / OpenSR** initiative. Simon Donike is the mai
 The added complexity that came with (a) the implementation of many different models and blocks, (b) more data sources, (c) according normalizations, and (d) testing and documentation structures, was handled to varying degrees with the help of *Codex*. Specifically, the docs, the automated testing workflows, and the normalizer class are in (large) parts AI generated. This code and its functionalities have been verified and tested to the best of my ability.
 
 ---
+
+The [SEN2NAIP local-Gram recipe](docs/sen2naip-texture.md) supports full-state
+ESRGAN refinement through the shared Hydra/flat-YAML trainer. See the
+[inference guide](docs/inference.md#prediction-matching) for selectable histogram
+matching and back-projection. Development version: **1.1.0.dev0**.

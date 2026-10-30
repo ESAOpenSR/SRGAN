@@ -102,6 +102,7 @@ nav:
 
   - Training:
       - Training Workflow: training.md
+      - SEN2NAIP Texture Recipe: sen2naip-texture.md
       - Trainer Details: trainer-details.md
       - Training Guideline: training-guideline.md
       - Architecture: architecture.md

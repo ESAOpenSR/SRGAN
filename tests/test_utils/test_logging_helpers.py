@@ -180,3 +180,19 @@ def test_validation_panel_includes_ema_and_live_in_one_shared_display(monkeypatc
         assert labels == ['LR', 'Bicubic', 'SR EMA', 'SR live (non-EMA)', 'HR']
         torch.testing.assert_close(images[2], torch.full_like(images[2], 0.2))
         torch.testing.assert_close(images[3], torch.full_like(images[3], 0.8))
+
+
+def test_live_and_matched_columns_are_both_retained(monkeypatch, tmp_path):
+    panels = []
+    def panel(images, labels, title):
+        panels.append(labels)
+        return Image.new('RGB', (16, 16))
+    monkeypatch.setattr(logging_helpers, '_panel_image', panel)
+    lr = torch.zeros(1, 4, 2, 2)
+    sr = torch.zeros(1, 4, 8, 8)
+    paths = logging_helpers.save_validation_artifacts(
+        lr, sr, sr, tmp_path, epoch=0, num_images=1,
+        matched=sr + .1, live_sr=sr + .2,
+    )
+    assert len(paths) == len(panels) == 2
+    assert all(labels == ['LR', 'Bicubic', 'SR EMA', 'SR matched', 'SR live (non-EMA)', 'HR'] for labels in panels)

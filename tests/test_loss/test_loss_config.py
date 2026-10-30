@@ -113,6 +113,51 @@ def test_prepare_perceptual_input_uses_fixed_idx():
     assert torch.equal(hr_3[:, 0], hr[:, 3])
 
 
+@pytest.mark.parametrize("channels", [4, 6])
+@pytest.mark.parametrize("explicit_null", [False, True])
+def test_multispectral_default_shuffles_paired_bands_and_supervises_non_rgb(
+    monkeypatch, channels, explicit_null,
+):
+    losses = {"perceptual_weight": 0.0}
+    if explicit_null:
+        losses["fixed_idx"] = None
+    loss_fn = GeneratorContentLoss(OmegaConf.create({"Training": {"Losses": losses}}))
+    permutations = [torch.arange(channels - 1, -1, -1), torch.arange(channels).roll(1)]
+    calls = []
+
+    def randperm(count, *, device):
+        assert count == channels
+        idx = permutations[len(calls)].to(device)
+        calls.append(idx)
+        return idx
+
+    monkeypatch.setattr(torch, "randperm", randperm)
+    sr = torch.arange(channels * 4, dtype=torch.float32).reshape(1, channels, 2, 2).requires_grad_()
+    hr = sr.detach() + 100
+    selections = []
+    for _ in range(2):
+        sr_3, hr_3 = loss_fn._prepare_perceptual_input(sr, hr)
+        idx = calls[-1][:3]
+        assert len(idx.unique()) == 3
+        torch.testing.assert_close(sr_3, sr[:, idx])
+        torch.testing.assert_close(hr_3, hr[:, idx])
+        selections.append(sr_3)
+    assert len(calls) == 2 and not torch.equal(selections[0], selections[1])
+    selections[0].sum().backward()
+    assert torch.all(sr.grad[:, channels - 1] > 0)
+    assert torch.all(sr.grad[:, calls[0][3:]] == 0)
+
+
+def test_three_band_perceptual_input_keeps_original_order(monkeypatch):
+    loss_fn = GeneratorContentLoss(OmegaConf.create({
+        "Training": {"Losses": {"perceptual_weight": 0.0}},
+    }))
+    monkeypatch.setattr(torch, "randperm", lambda *args, **kwargs: pytest.fail("RGB must stay in order"))
+    sr, hr = torch.randn(1, 3, 2, 2), torch.randn(1, 3, 2, 2)
+    selected_sr, selected_hr = loss_fn._prepare_perceptual_input(sr, hr)
+    assert selected_sr is sr and selected_hr is hr
+
+
 def test_prepare_perceptual_input_rejects_out_of_range_fixed_idx():
     cfg = OmegaConf.create(
         {
@@ -131,3 +176,24 @@ def test_prepare_perceptual_input_rejects_out_of_range_fixed_idx():
 
     with pytest.raises(ValueError, match="fixed_idx"):
         loss_fn._prepare_perceptual_input(sr, hr)
+
+
+@pytest.mark.parametrize('enabled', [None, False, True])
+def test_vgg_input_normalization_is_explicit_and_legacy_defaults_are_preserved(enabled):
+    losses = {'perceptual_weight': 1.0, 'l1_weight': 0, 'sam_weight': 0}
+    if enabled is not None:
+        losses['vgg_input_normalization'] = enabled
+    criterion = GeneratorContentLoss(OmegaConf.create({'Training': {'Losses': losses}}), testing=True)
+    criterion.perceptual_model = torch.nn.Identity()
+    prediction = torch.full((1, 3, 4, 4), .4, requires_grad=True)
+    reference = torch.full_like(prediction, .2)
+    expected_prediction, expected_reference = prediction, reference
+    if enabled:
+        mean = prediction.new_tensor([.485, .456, .406]).view(1, 3, 1, 1)
+        std = prediction.new_tensor([.229, .224, .225]).view(1, 3, 1, 1)
+        expected_prediction = (prediction - mean) / std
+        expected_reference = (reference - mean) / std
+    actual = criterion._perceptual_distance(prediction, reference, build_graph=True)
+    torch.testing.assert_close(actual, torch.nn.functional.mse_loss(expected_prediction, expected_reference))
+    actual.backward()
+    assert torch.isfinite(prediction.grad).all()

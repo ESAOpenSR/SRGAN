@@ -1,0 +1,92 @@
+# @package _global_
+
+Training:
+  seed: 20261028
+  device: cuda
+  gpus:
+  - 0
+  - 1
+  precision: bf16-mixed
+  max_epochs: 1000
+  max_steps: 300000
+  val_check_interval: 250
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+  num_sanity_val_steps: 2
+  pretrain_g_only: false
+  g_pretrain_steps: 0
+  adv_loss_ramp_steps: 1000
+  label_smoothing: false
+  EMA:
+    enabled: true
+    decay: 0.99
+    update_after_step: 0
+    use_num_updates: true
+  Losses:
+    adv_loss_type: bce
+    relativistic_average_d: true
+    adv_loss_beta: 0.005
+    adv_loss_schedule: cosine
+    r1_gamma: 0.0
+    l1_weight: 0.01
+    sam_weight: 0.005
+    perceptual_weight: 1.0
+    perceptual_metric: vgg
+    vgg_before_activation: true
+    fixed_idx:
+    - 0
+    - 1
+    - 2
+    tv_weight: 0.0
+    max_val: 1.0
+    ssim_win: 11
+    texture_selection_perceptual_weight: 1.0
+    texture_selection_l1_weight: 0.01
+    texture_selection_max_l1: 0.05
+    texture_weight: 1.874061393737793
+    texture_grid: 4
+    vgg_input_normalization: true
+  checkpoint_optimizer_steps:
+  - 210000
+  - 220000
+  - 230000
+  - 240000
+  - 250000
+  - 260000
+  - 270000
+  - 280000
+  - 290000
+  - 300000
+Optimizers:
+  optim_g_lr: 1.0e-05
+  optim_d_lr: 1.0e-06
+  gradient_clip_val: 1.0
+  betas:
+  - 0.9
+  - 0.99
+  eps: 1.0e-07
+  weight_decay_g: 0.0
+  weight_decay_d: 0.0
+Schedulers:
+  g_warmup_steps: 100
+  g_warmup_type: linear
+  metric_g: val_metrics/perceptual
+  metric_d: validation/DISC_adversarial_loss
+  checkpoint_monitor: val_metrics/texture_selection
+  checkpoint_mode: min
+  save_top_k: 2
+  early_stopping_patience: 1000
+  patience_g: 1000
+  patience_d: 1000
+  factor_g: 0.5
+  factor_d: 0.5
+  min_lr: 1.0e-06
+  texture_selection_metric: val_metrics/texture_selection
+  g_plateau_after_ramp: true
+  threshold_mode: abs
+  threshold: 0.001
+  d_plateau_enabled: false
+  d_lr_ratio_to_g: 0.1
+TruncatedVGG:
+  i: 5
+  j: 4

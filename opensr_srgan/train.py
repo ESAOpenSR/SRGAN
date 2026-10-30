@@ -125,9 +125,14 @@ def train(config):
             "entity": config.Logging.wandb.entity,
             "log_model": False,
         }
+        for key in ("name", "group", "id", "resume"):
+            value = getattr(config.Logging.wandb, key, None)
+            if value:
+                wandb_kwargs[key] = str(value)
         if output_dir_is_set:
             wandb_kwargs["save_dir"] = experiment_dir
         wandb_logger = WandbLogger(**wandb_kwargs)
+        wandb_logger.log_hyperparams(OmegaConf.to_container(config, resolve=True))
     else:
         print("Not using Weights & Biases logging, reduced CSV logs written locally.")
         from pytorch_lightning.loggers import CSVLogger
@@ -138,7 +143,10 @@ def train(config):
         )
 
     # Configure Saving Checkpoints
-    from pytorch_lightning.callbacks import ModelCheckpoint
+    from opensr_srgan.utils.training_callbacks import (
+        LatestCheckpoint,
+        QualityModelCheckpoint,
+    )
 
     dir_save_checkpoints = experiment_dir
     from opensr_srgan.utils.gpu_rank import (
@@ -152,24 +160,49 @@ def train(config):
             os.path.join(dir_save_checkpoints, "config.yaml"), "w"
         ) as f:  # save config to experiment folder
             OmegaConf.save(config, f)
-    checkpoint_callback = ModelCheckpoint(
+    from pytorch_lightning.callbacks import ModelCheckpoint
+    texture_selection = bool(getattr(config.Schedulers, "texture_selection_metric", None)) or (
+        getattr(config.Schedulers, "checkpoint_monitor", None) == "val_metrics/texture_selection"
+    )
+    checkpoint_type = QualityModelCheckpoint if texture_selection else ModelCheckpoint
+    checkpoint_callback = checkpoint_type(
         dirpath=dir_save_checkpoints,
-        monitor=config.Schedulers.metric_g,
-        mode="min",
-        save_last=True,
-        save_top_k=2,
+        monitor=getattr(
+            config.Schedulers,
+            "checkpoint_monitor",
+            getattr(config.Schedulers, "metric_g", "val_metrics/l1"),
+        ),
+        mode=str(getattr(config.Schedulers, "checkpoint_mode", "min")),
+        save_last=not texture_selection,  # Texture latest/final is stored independently.
+        save_top_k=int(getattr(config.Schedulers, "save_top_k", 2)),
+        # Validation metrics are produced at validation end. Saving at
+        # train-epoch end can race the final validation callback on resume.
+        save_on_train_epoch_end=False,
     )
 
     # callback to set up early stopping
     from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
     early_stop_callback = EarlyStopping(
-        monitor=config.Schedulers.metric_g,
+        monitor=getattr(
+            config.Schedulers,
+            "early_stopping_monitor",
+            getattr(config.Schedulers, "metric_g", "val_metrics/l1"),
+        ),
         min_delta=0.00,
-        patience=250,
+        patience=int(getattr(config.Schedulers, "early_stopping_patience", 250)),
         verbose=True,
-        mode="min",
+        mode=str(
+            getattr(
+                config.Schedulers,
+                "early_stopping_mode",
+                getattr(config.Schedulers, "checkpoint_mode", "min"),
+            )
+        ),
         check_finite=True,
+        # The monitored metric is validation-only; checking at train epoch end
+        # sees an empty callback_metrics mapping in full-state resumes.
+        check_on_train_epoch_end=False,
     )  # patience in epochs
 
     #############################################################################################################
@@ -185,7 +218,14 @@ def train(config):
         early_stop_callback=early_stop_callback,
         resume_ckpt=resume_ckpt,
     )
-
+    if texture_selection:
+        trainer_kwargs["callbacks"] = list(trainer_kwargs.get("callbacks", [])) + [
+            LatestCheckpoint(experiment_dir)
+        ]
+    milestone_steps = getattr(config.Training, "checkpoint_optimizer_steps", None)
+    if milestone_steps:
+        from opensr_srgan.utils.training_callbacks import MilestoneCheckpoint
+        trainer_kwargs["callbacks"].append(MilestoneCheckpoint(experiment_dir, milestone_steps))
     # Start training
     trainer = pl.Trainer(**trainer_kwargs)
     try:

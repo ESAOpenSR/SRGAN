@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opensr-srgan"
-version = "1.0.0"
+version = "1.1.0.dev0"
 description = "Modular Super-Resolution GAN Framework for Remote Sensing."
 readme = "README.md"
 authors = [
@@ -54,6 +54,7 @@ include = ["opensr_srgan", "opensr_srgan.*", "deployment", "deployment.*"]
 opensr_srgan = [
   "configs/*.yaml",
   "configs/**/*.yaml",
+  "configs/splits/*.json",
 ]
 deployment = [
   "configs/*.yaml",
@@ -67,6 +68,7 @@ omit = [
 ]
 
 [project.optional-dependencies]
+sen2naip = ["tacoreader==0.6.5"]
 tests = [
   "pytest",
   "pytest-cov",

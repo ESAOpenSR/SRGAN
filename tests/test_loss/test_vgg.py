@@ -33,3 +33,10 @@ def test_truncated_vgg19_forward_consistency():
     # deeper truncation should produce smaller spatial size
     assert y2.shape[2] <= y1.shape[2]
     assert y2.shape[3] <= y1.shape[3]
+
+
+def test_truncated_vgg19_can_return_preactivation_features():
+    """The configured feature tap excludes the requested convolution's ReLU."""
+    post = TruncatedVGG19(i=1, j=1, weights=False, before_activation=False)
+    pre = TruncatedVGG19(i=1, j=1, weights=False, before_activation=True)
+    assert len(pre.truncated_vgg19) == len(post.truncated_vgg19) - 1

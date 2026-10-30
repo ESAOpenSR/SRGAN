@@ -179,4 +179,3 @@ def test_invalid_configuration_fails_early(kwargs):
         (ValueError, TypeError), match="(divisible|divide|length|window|scale|positive|greater)"
     ):
         _generator(**kwargs)
-

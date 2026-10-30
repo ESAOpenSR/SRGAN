@@ -1,0 +1,17 @@
+# @package _global_
+
+Model:
+  in_bands: 4
+  load_checkpoint: false
+  continue_training: ???
+Generator:
+  model_type: esrgan
+  n_channels: 64
+  n_blocks: 23
+  growth_channels: 32
+  scaling_factor: 4
+  res_scale: 0.2
+  use_icnr: true
+Discriminator:
+  model_type: patchgan
+  n_blocks: 3

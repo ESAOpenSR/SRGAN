@@ -148,3 +148,25 @@ def test_gradient_clipping_is_not_forwarded_to_trainer():
     trainer_kwargs, _ = _call_builder(config)
 
     assert "gradient_clip_val" not in trainer_kwargs
+
+
+def test_optional_run_controls_are_forwarded_to_trainer():
+    """Run-length, precision, and validation controls remain config-driven."""
+    config = _make_config(
+        max_steps=123,
+        limit_train_batches=7,
+        num_sanity_val_steps=0,
+        precision="32-true",
+    )
+    trainer_kwargs, _ = _call_builder(config)
+
+    assert trainer_kwargs["max_steps"] == 123
+    assert trainer_kwargs["limit_train_batches"] == 7
+    assert trainer_kwargs["num_sanity_val_steps"] == 0
+    assert trainer_kwargs["precision"] == "32-true"
+
+
+def test_manual_gan_rejects_gradient_accumulation():
+    config = _make_config(accumulate_grad_batches=2)
+    with pytest.raises(ValueError, match="accumulate_grad_batches"):
+        _call_builder(config)
