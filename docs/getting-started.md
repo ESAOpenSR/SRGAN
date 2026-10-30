@@ -65,7 +65,10 @@ Update at least the following fields:
 * `Model.continue_training`: Provide a path if you want to fully resume interrupted training (optimizer/scheduler/EMA/global-step state).
 * `Training.Losses.perceptual_metric`: Switch to `lpips` if you installed the optional dependency.
 
-See [Configuration](configuration.md) for a full breakdown of available options.
+For the transformer generator, choose `model=10m_swinir` or the complete
+`experiment=swinir_sen2naip` reconstruction preset. See the
+[SwinIR launch example](training.md#train-a-swinir-reconstruction-model) and
+[Configuration](configuration.md) for model and post-processing options.
 
 ## 4. Launch training
 
@@ -117,12 +120,15 @@ Training resumes automatically if `Model.continue_training` points to a Lightnin
     ```python
     from opensr_srgan.model.SRGAN import SRGAN_model
 
-    model = SRGAN_model("your_config.yaml")
+    model = SRGAN_model("your_config.yaml", mode="eval")
     model.load_weights_from_checkpoint("path/to/checkpoint.ckpt")
+    model.eval()
     sr_tiles = model.predict_step(lr_tiles)
     ```
-  In all cases the helpers automatically normalise Sentinel-2 ranges, apply histogram matching, and denormalise outputs for
-  easier comparison with the source imagery.
+  `predict_step` handles the configured normalization and prediction matching.
+  Older recipes use histogram matching; set `Postprocessing.method: back_projection`
+  to enable LR measurement matching. See [Inference](inference.md#prediction-matching)
+  for the two methods and their value ranges.
 
 ## 6. Create Data Pipeline
 

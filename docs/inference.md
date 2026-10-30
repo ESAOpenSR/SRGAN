@@ -59,6 +59,41 @@ Postprocessing:
 
 Hydra also supports `postprocessing=histogram` and
 `postprocessing=back_projection`. Unknown methods raise an error.
+The matching method is independent of the generator, so these settings apply
+to CNN and SwinIR models alike.
+
+| Method | What it matches | Value range used |
+| --- | --- | --- |
+| `histogram` | Per-band intensity distributions of SR and the resized LR reference. | Normalized generator output, before denormalization. |
+| `back_projection` | LR measurements produced by the configured blur/downsample operator. | Denormalized SR and the original supplied LR values. |
+
+To change the method for an already loaded model:
+
+```python
+# model was loaded from a config and checkpoint and is in eval mode.
+from omegaconf import OmegaConf
+
+model.config.Postprocessing = OmegaConf.create({
+    "method": "back_projection",
+    "back_projection": {
+        "blur_sigma": 0.0,
+        "max_iterations": 100,
+        "tolerance": 1e-6,
+        "relaxation": 1.0,
+    },
+})
+sr = model.predict_step(lr)
+
+# Restore the historical method without changing model weights.
+model.config.Postprocessing.method = "histogram"
+sr_histogram = model.predict_step(lr)
+```
+
+For SwinIR, load your own matching SwinIR config and trained checkpoint with
+`load_from_config(..., mode="eval")`. `load_inference_model` accepts the
+published `RGB-NIR` and `SWIR` presets; it does not select SwinIR by name.
+See [SwinIR reconstruction training](training.md#train-a-swinir-reconstruction-model).
+
 Histogram matching keeps the historical sequence: normalize, generate, match,
 then denormalize. Back-projection corrects the denormalized prediction against
 the original LR measurements. With zero blur it matches block means while
@@ -70,7 +105,27 @@ and does not clip after correction. Tolerance is LR RMSE in supplied units.
 Zero LR pixels are valid measurements. The standalone
 `opensr_srgan.utils.back_projection.back_projection` function also accepts
 boolean LR `valid_mask`, HR `output_mask`, and `return_info=True` diagnostics.
-Its implementation retains the upstream OpenSR attribution.
+The Gaussian operator is an optional periodic blur model, not a calibrated
+Sentinel-2 sensor response. Its implementation retains the upstream OpenSR attribution.
+
+The standalone helper also works on existing SR tensors without a model:
+
+```python
+from opensr_srgan.utils.back_projection import BackProjectionConfig, back_projection
+
+# raw_sr and lr are floating-point CHW or BCHW tensors, in the same units,
+# on the same device; raw_sr has four times the spatial resolution.
+matched, info = back_projection(
+    raw_sr, lr,
+    BackProjectionConfig(scale=4, blur_sigma=0.0),
+    return_info=True,
+)
+# info["converged"] and info["iterations"] report progress per image.
+```
+
+Use the [configuration reference](configuration.md#post-processing-postprocessing)
+for all settings and the [utility API](api-reference/utils.md#back-projection)
+for masks, dtype handling, and diagnostics.
 
 `model.postprocess(sr, lr)` applies the configured method to tensors in a shared
 value range without normalization. `forward`, training losses, validation metrics,

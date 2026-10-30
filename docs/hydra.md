@@ -1,6 +1,6 @@
 # Hydra experiment configs
 
-Hydra is the recommended entry point when you want to run repeatable experiments without copying and editing a full YAML file for every small change. The old single-file config workflow still works; Hydra is an additional layer that composes the same `Data`, `Model`, `Training`, `Generator`, `Discriminator`, `Optimizers`, `Schedulers`, and `Logging` sections that the SRGAN code already understands.
+Hydra is the recommended entry point when you want to run repeatable experiments without copying and editing a full YAML file for every small change. The old single-file config workflow still works; Hydra is an additional layer that composes the same `Data`, `Model`, `Training`, `Generator`, `Discriminator`, `Optimizers`, `Schedulers`, `Logging`, and `Postprocessing` sections that the SRGAN code already understands.
 
 ## Mental model
 
@@ -29,6 +29,7 @@ Hydra configs live in `opensr_srgan/configs/hydra/`:
 | `model/` | Combined `Model`, `Generator`, and `Discriminator` presets. |
 | `training/` | Combined `Training`, `Optimizers`, and `Schedulers` presets. |
 | `logging/` | CSV and W&B logging presets. |
+| `postprocessing/` | Histogram matching (default) or back-projection for predictions and validation panels. |
 | `experiment/` | Full experiment presets that reproduce the shipped legacy YAMLs. |
 | `hydra/default.yaml` | Hydra's own run-directory and working-directory settings. |
 
@@ -43,6 +44,14 @@ python -m opensr_srgan.train_hydra experiment=example
 python -m opensr_srgan.train_hydra experiment=10m
 python -m opensr_srgan.train_hydra experiment=20m
 ```
+
+The additional model/recipe presets use the same group structure:
+
+| Preset | Purpose | Checkpoint requirement |
+| --- | --- | --- |
+| `model=10m_swinir` | Four-band 4× transformer model; combines with your chosen data/training groups. | Use compatible SwinIR weights when loading a checkpoint. |
+| `experiment=swinir_sen2naip` | [SwinIR reconstruction pretraining](training.md#train-a-swinir-reconstruction-model). | Starts from scratch by default; set real-data manifest and split paths. |
+| `experiment=sen2naip_texture` | [Final ESRGAN local-Gram continuation](sen2naip-texture.md). | Requires an explicit full-state ESRGAN checkpoint plus real-data manifest and split paths. |
 
 Use direct overrides when you only want to change one or two values for a run:
 
@@ -60,6 +69,34 @@ python -m opensr_srgan.train_hydra data=sen2naip model=10m_esrgan training=10m l
 ```
 
 If a field does not already exist in the composed config, Hydra requires a `+` prefix. For normal SRGAN fields this is rarely needed because the presets define the expected sections up front.
+
+### SwinIR and prediction matching
+
+Inspect the transformer model and selected matching method without launching
+training:
+
+```bash
+python -m opensr_srgan.train_hydra --cfg job model=10m_swinir postprocessing=back_projection
+```
+
+For a complete SwinIR reconstruction run, set both paths in
+`experiment=swinir_sen2naip` as shown in the
+[training guide](training.md#train-a-swinir-reconstruction-model). Its checkpoint
+must belong to SwinIR; changing the generator does not convert ESRGAN weights.
+
+Select matching independently from the model or experiment:
+
+```bash
+python -m opensr_srgan.train_hydra --cfg job experiment=swinir_sen2naip postprocessing=back_projection
+python -m opensr_srgan.train_hydra --cfg job experiment=sen2naip_texture postprocessing=histogram
+```
+
+`postprocessing=...` selects the config group; `Postprocessing.method=...`
+overrides the underlying YAML field. Both methods' settings are present in the
+groups, so individual controls can also be overridden, for example
+`Postprocessing.back_projection.tolerance=1e-5`. The default group is histogram
+matching, while the texture experiment overrides it to back-projection.
+These choices affect predictions and figures, not the training objective.
 
 ## Output directories
 
@@ -105,11 +142,3 @@ Use Hydra when you want quick overrides, reusable experiment pieces, or clean pe
 ## References
 
 Hydra composes these configs through a Defaults List. See the Hydra Defaults List documentation for the underlying mechanism: <https://hydra.cc/docs/1.1/advanced/defaults_list/>. The SRGAN entry point also uses an explicit `version_base` and `config_path`, following Hydra's upgrade guidance: <https://hydra.cc/docs/1.3/upgrades/version_base/>.
-
-## SEN2NAIP texture continuation
-
-The [local-Gram fine-tuning recipe](sen2naip-texture.md) is available as
-`experiment=sen2naip_texture` and a matching flat YAML. It requires explicit
-dataset, spatial split, and full-state checkpoint paths. SwinIR remains a
-separate reconstruction preset. Prediction matching is configurable through
-`Postprocessing.method` (or the Hydra `postprocessing` group).

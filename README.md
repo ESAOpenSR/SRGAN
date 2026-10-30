@@ -20,6 +20,12 @@
 
 Full docs live at **[srgan.opensr.eu](https://srgan.opensr.eu/)**. They cover usage, configuration, training recipes, and deployment tips in depth.
 
+The development docs cover [SwinIR configuration and training](docs/architecture.md#swinir-generator),
+[histogram matching and back-projection](docs/inference.md#prediction-matching),
+and the [SEN2NAIP local-Gram continuation recipe](docs/sen2naip-texture.md).
+These additions are in development version **1.1.0.dev0**; use the current source
+checkout until that version is released.
+
 ## 🧠 Highlights
 
 * **Flexible models:** swap between SRResNet, RCAB, RRDB, LKA, ESRGAN, SwinIR, and stochastic generators with YAML-only changes.
@@ -142,10 +148,3 @@ If you use this work, please cite:
 Developed within the **ESA Φ-lab / OpenSR** initiative. Simon Donike is the main contributor and maintainer of the repository. Cesar Aybar and Julio Contreras contributed the datasets as well as implementation, documentation and publishing support. Prof. Luis Gómez-Chova contributed the remote sensing-specific perspective and signal processing advice.  
 > The development history of this code began in 2020 with the implementation of an SR-GAN for a MSc thesis project. Since then, over several iterations, the codebase has been expanded and many training tweaks implemented, based on the experiences made training SR-GANs for the OpenSR project. The fundamental training outline, training tweaks, normalizations, and inference procedures are built upon that experience.  
 The added complexity that came with (a) the implementation of many different models and blocks, (b) more data sources, (c) according normalizations, and (d) testing and documentation structures, was handled to varying degrees with the help of *Codex*. Specifically, the docs, the automated testing workflows, and the normalizer class are in (large) parts AI generated. This code and its functionalities have been verified and tested to the best of my ability.
-
----
-
-The [SEN2NAIP local-Gram recipe](docs/sen2naip-texture.md) supports full-state
-ESRGAN refinement through the shared Hydra/flat-YAML trainer. See the
-[inference guide](docs/inference.md#prediction-matching) for selectable histogram
-matching and back-projection. Development version: **1.1.0.dev0**.

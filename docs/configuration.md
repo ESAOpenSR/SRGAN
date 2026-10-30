@@ -15,6 +15,7 @@ Discriminator:
 Optimizers:
 Schedulers:
 Logging:
+Postprocessing:
 ```
 
 Each section maps directly to parameters consumed inside `opensr_srgan/model/SRGAN.py`, the dataset factory, or the training script.
@@ -129,7 +130,7 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 | Key | Default | Description |
 | --- | --- | --- |
 | `model_type` | `SRResNet` | Generator family (`SRResNet`, `stochastic_gan`, `esrgan`, or `swinir`). |
-| `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`/`esrgan`. |
+| `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`/`esrgan`/`swinir`. |
 | `large_kernel_size` | `9` | Kernel size for input/output convolution layers. |
 | `small_kernel_size` | `3` | Kernel size for residual/attention blocks. |
 | `n_channels` | `96` | Base number of feature channels (RRDB/ESRGAN trunk width). |
@@ -140,11 +141,30 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 | `out_channels` | `Model.in_bands` | ESRGAN/SwinIR: override the number of output bands. |
 | `use_icnr` | `True` | ESRGAN-only: apply ICNR initialization to pre-PixelShuffle convolutions to reduce checkerboard artifacts in low-frequency regions. |
 
-SwinIR uses `embed_dim` (180), `depths` (six groups of six), `num_heads`
-(six heads per group), `window_size` (8), `mlp_ratio` (2.0), `qkv_bias` (true),
-`drop_rate`/`attn_drop_rate` (0), `drop_path_rate` (0.1), and `use_checkpoint`
-(false). Its CNN-only width/block settings are ignored with a factory notice.
-See `model=10m_swinir` and the [architecture guide](architecture.md#swinir-generator).
+### SwinIR settings
+
+Select `Generator.model_type: swinir` or the Hydra group `model=10m_swinir`.
+These settings describe the transformer trunk; CNN-only width, block, kernel,
+RRDB, and ICNR fields are ignored with a factory notice.
+
+| Key under `Generator` | Default | Description |
+| --- | --- | --- |
+| `embed_dim` | `180` | Transformer feature width; must be divisible by every head count. |
+| `depths` | `[6, 6, 6, 6, 6, 6]` | Transformer blocks in each residual group. |
+| `num_heads` | `[6, 6, 6, 6, 6, 6]` | Attention heads per group; length must match `depths`. |
+| `window_size` | `8` | Attention-window side length, at least 2; inputs are padded and cropped automatically. |
+| `mlp_ratio` | `2.0` | Feed-forward hidden width relative to `embed_dim`. |
+| `qkv_bias` | `true` | Add bias to attention query/key/value projections. |
+| `drop_rate` | `0.0` | Projection and feed-forward dropout probability. |
+| `attn_drop_rate` | `0.0` | Attention-weight dropout probability. |
+| `drop_path_rate` | `0.1` | Maximum stochastic-depth probability across the trunk. |
+| `use_checkpoint` | `false` | Recompute transformer blocks during backward to reduce activation memory. |
+| `out_channels` | `Model.in_bands` | Number of generated bands; keep it equal to input bands for LR matching. |
+| `scaling_factor` | `4` | SwinIR supports 2, 3, or 4. |
+
+For a full flat-YAML example see [Architecture](architecture.md#swinir-generator).
+For reconstruction pretraining and checkpoint requirements see
+[Training](training.md#train-a-swinir-reconstruction-model).
 
 ## Discriminator
 
@@ -244,11 +264,57 @@ different validation metrics.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `num_val_images` | `5` | Number of validation batches visualised and logged to Weights & Biases when W&B is enabled. |
+| `num_val_images` | `5` | Maximum validation batches visualised when local images or W&B are enabled. |
+| `local_images` | `false` | Save fixed RGB/NIR comparison panels in `validation_images/`. |
+| `log_live_and_ema` | `false` | Include a separately labelled live-generator prediction when EMA is active; metrics still use EMA. |
 | `wandb.enabled` | `False` in example configs | Enables `WandbLogger`; when false, training uses `CSVLogger`. |
 | `wandb.entity` | `opensr` | W&B entity/team name. |
 | `wandb.project` | `SRGAN_10m` | Project name used by W&B and by the default checkpoint directory. |
 | `output_dir` | unset | Optional explicit run directory. Hydra sets this to its runtime output directory; legacy YAML runs fall back to `logs/<project>/<timestamp>`. |
+
+## Post-processing (`Postprocessing`)
+
+Post-processing is independent of the generator. It changes `predict_step`
+outputs and validation comparison images; `forward`, losses, validation metrics,
+and discriminator inputs retain raw SR predictions.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `method` | `histogram` | Select `histogram` or `back_projection`; any other value raises an error. |
+| `back_projection.blur_sigma` | `0.0` | HR-pixel Gaussian sigma, either a scalar or one value per band. Zero uses block averaging without blur. |
+| `back_projection.max_iterations` | `100` | Maximum correction iterations. |
+| `back_projection.tolerance` | `1e-6` | Stopping threshold for LR RMSE, measured in the supplied image units. |
+| `back_projection.relaxation` | `1.0` | Correction step fraction in `(0, 1]`. |
+| `back_projection.scale` | inferred | Optional scale override; must match the integer LR/SR shape ratio. |
+
+Keep historical prediction behavior explicitly with:
+
+```yaml
+Postprocessing:
+  method: histogram
+```
+
+Or enable measurement matching with:
+
+```yaml
+Postprocessing:
+  method: back_projection
+  back_projection:
+    blur_sigma: 0.0
+    max_iterations: 100
+    tolerance: 1.0e-6
+    relaxation: 1.0
+```
+
+Older configs without these settings use histogram matching. Back-projection
+options apply only when that method is selected. Hydra exposes the same choices
+through `postprocessing=histogram` and `postprocessing=back_projection`;
+`experiment=sen2naip_texture` selects back-projection explicitly.
+
+Histogram matching runs before denormalization. Back-projection runs afterward
+against the original LR values and does not clip the corrected result.
+See [Inference](inference.md#prediction-matching) for method selection, Python
+examples, and the standalone mask/diagnostic API.
 
 ## Hydra experiment configs
 
@@ -260,7 +326,10 @@ python -m opensr_srgan.train_hydra experiment=10m Training.max_epochs=5 Logging.
 srgan-train experiment=20m Training.gpus=[0,1]
 ```
 
-Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` selects simple defaults, while `experiment/example.yaml`, `experiment/10m.yaml`, and `experiment/20m.yaml` reproduce the shipped flat YAML presets through grouped `data`, `model`, `training`, and `logging` configs. Choose `experiment=...` for a full known setup; use direct overrides for a temporary change without editing files. See [Hydra Experiments](hydra.md) for a complete walkthrough.
+Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` selects simple defaults, while `experiment/example.yaml`, `experiment/10m.yaml`, and `experiment/20m.yaml` reproduce the shipped flat YAML presets through grouped `data`, `model`, `training`, `logging`, and `postprocessing` configs. `experiment=swinir_sen2naip` adds SwinIR reconstruction pretraining; `experiment=sen2naip_texture` provides the final ESRGAN local-Gram continuation. Choose `experiment=...` for a full known setup; use direct overrides for a temporary change without editing files. See [Hydra Experiments](hydra.md) for a complete walkthrough.
+
+See the [local-Gram continuation recipe](sen2naip-texture.md) for the promoted
+settings, required input paths, and absolute optimizer-step budget.
 
 ## Tips for managing configurations
 
@@ -271,11 +340,3 @@ Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` sel
   runtime using `OmegaConf.merge`.
 
 With a clear understanding of these fields, you can rapidly iterate on architectures, datasets, and training strategies without modifying the underlying code.
-
-## SEN2NAIP texture continuation
-
-The [local-Gram fine-tuning recipe](sen2naip-texture.md) is available as
-`experiment=sen2naip_texture` and a matching flat YAML. It requires explicit
-dataset, spatial split, and full-state checkpoint paths. SwinIR remains a
-separate reconstruction preset. Prediction matching is configurable through
-`Postprocessing.method` (or the Hydra `postprocessing` group).

@@ -42,10 +42,19 @@ training and validation dataloaders.
 | `Data.dataset_type` | Required fields | Notes |
 | --- | --- | --- |
 | `ExampleDataset` | none beyond the downloaded `example_dataset/` folder | Quick smoke-test dataset generated from HR `.npz` chips. |
-| `SEN2NAIP` / `sen2naip` | `Data.sen2naip_taco_file`; optional `Data.sen2naip_val_fraction` | Requires `tacoreader` and a Taco manifest. Used by the 10 m preset once the manifest path is configured. |
+| `SEN2NAIP` / `sen2naip` | `Data.sen2naip_taco_file`; optional `Data.sen2naip_val_fraction` | Install the pinned reader with `.[sen2naip]`. Supports explicit spatial split manifests, aligned crops, and paired augmentation. Used by the 10 m, SwinIR, and texture presets. |
 | `LRHRFolderDataset` | `Data.root_dir` or `Data.dataset_root` | Expects paired LR/HR folders; see the dataset class tests for the accepted layout. |
 
 Older labels such as `S2_6b`, `SPOT6`, or `cv` are not registered selector keys in the current code. If you start from an older config that uses one of those names, update `Data.dataset_type` or add a matching branch to the selector.
+
+For the new SEN2NAIP recipes, supply `Data.sen2naip_taco_file` and
+`Data.sen2naip_split_file`. The [packaged spatial split](sen2naip-texture.md#data-and-provenance)
+keeps 6,401 training pairs, 800 validation pairs, and 799 reserved test pairs.
+`Data.sen2naip_crop_size: 64` produces aligned 64×64 LR and 256×256 HR crops;
+`sen2naip_num_bands: 4` checks band counts and `sen2naip_augment: true` enables
+paired training augmentation. Validation uses fixed center crops without
+augmentation. Both [SwinIR reconstruction](training.md#train-a-swinir-reconstruction-model)
+and [ESRGAN texture continuation](sen2naip-texture.md) use this loader.
 
 ## Adding new datasets
 

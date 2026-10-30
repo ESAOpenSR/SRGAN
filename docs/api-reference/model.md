@@ -52,6 +52,21 @@ Classes and building blocks used to assemble SRGAN training and inference graphs
         - "!^_"
       members_order: source
 
+### SwinIR transformer
+
+The [architecture guide](../architecture.md#swinir-generator) explains the
+four-band model preset and supported scales. Instantiate it through
+`Generator.model_type: swinir`, the generator factory, or the class below.
+Preprocessing and matching remain in the shared SRGAN pipeline.
+
+::: opensr_srgan.model.generators.swinir.SwinIRGenerator
+    handler: python
+    options:
+      show_root_heading: true
+      show_root_full_path: true
+      show_source: true
+      members: []
+
 ## Discriminator architectures
 
 ::: opensr_srgan.model.discriminators

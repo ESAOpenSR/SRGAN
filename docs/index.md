@@ -18,18 +18,18 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 
 ## Why this repository?
 
-* **One configuration, many models.** Swap between SRResNet, RCAB, RRDB, large-kernel attention, ESRGAN, and stochastic generators, plus standard SRGAN, PatchGAN, and ESRGAN discriminators, by editing config values.
-* **Loss combinations that just work.** Mix pixel, spectral-angle, perceptual, total-variation, and adversarial objectives with sensible defaults for weights, schedules, and warm-up durations.
+* **One configuration, many models.** Swap between SRResNet, RCAB, RRDB, large-kernel attention, ESRGAN, SwinIR, and stochastic generators, plus standard SRGAN, PatchGAN, and ESRGAN discriminators, by editing config values.
+* **Loss combinations that just work.** Mix pixel, spectral-angle, perceptual, total-variation, local-Gram texture, and adversarial objectives with sensible defaults for weights, schedules, and warm-up durations.
 * **Battle-tested training loop.** PyTorch Lightning handles device placement, multi-GPU DDP, and restartable checkpoints while the repo layers in GAN-specific manual optimisation, adversarial weight ramping, gradient clipping, and learning-rate scheduling.
 * **Lightning 2+ training path.** Training uses manual optimization (`automatic_optimization=False`) and a single GAN training-step implementation.
-* **Remote-sensing aware defaults.** Normalisation, histogram matching, spectral-band handling, and Sentinel-2-oriented presets are ready-made for RGB-NIR and SWIR-style workflows and are extensible to other sensors.
+* **Remote-sensing aware defaults.** Normalisation, configurable histogram matching/back-projection, spectral-band handling, and Sentinel-2-oriented presets are ready-made for RGB-NIR and SWIR-style workflows and are extensible to other sensors.
 
 ## What you get out of the box
 
 | Capability | Highlights |
 | --- | --- |
-| **Generators & discriminators** | SRResNet, RCAB, RRDB, large-kernel attention, ESRGAN, stochastic generators, standard SRGAN, PatchGAN, and ESRGAN discriminators. |
-| **Losses** | Weighted combinations of L1, spectral-angle, perceptual (VGG/LPIPS), total-variation, BCE/Wasserstein, and optional relativistic adversarial losses. |
+| **Generators & discriminators** | SRResNet, RCAB, RRDB, large-kernel attention, ESRGAN, SwinIR, stochastic generators, standard SRGAN, PatchGAN, and ESRGAN discriminators. |
+| **Losses** | Weighted combinations of L1, spectral-angle, perceptual (VGG/LPIPS), local-Gram texture, total-variation, BCE/Wasserstein, and optional relativistic adversarial losses. |
 | **Training utilities** | Generator warm-up phases, on-plateau learning-rate schedules, adversarial-weight ramping, gradient clipping, and EMA tracking. |
 | **Experiment management** | Weights & Biases or CSV logging, checkpointing, saved resolved configs, and Hydra experiment presets. |
 | **Datasets** | Bundled example dataset for quick smoke tests plus a selector designed for custom collections. |
@@ -63,11 +63,13 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 4. **Monitor progress.** Use the included Weights & Biases logging to track perceptual losses, adversarial
    metrics, and validation imagery.
 5. **Deploy or evaluate.** The Lightning module exposes `predict_step` for batched inference, automatically normalising inputs and
-   matching output histograms to the low-resolution source.
+   applying the configured histogram matching or back-projection against the low-resolution source.
 
 ## Learn more
 
 * [Architecture](architecture.md) explains how the Lightning module orchestrates generators, discriminators, and losses.
+* [Inference](inference.md#prediction-matching) explains enabling and choosing prediction matching.
+* [SEN2NAIP texture recipe](sen2naip-texture.md) documents the promoted ESRGAN full-state continuation.
 * [Configuration](configuration.md) documents every YAML field and how it influences training.
 * [Data](data.md) details the supported datasets and how to integrate your own.
 * [Getting started](getting-started.md) walks through environment setup and the first training run.

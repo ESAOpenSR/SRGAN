@@ -34,13 +34,55 @@ python -m opensr_srgan.train_hydra experiment=10m Training.max_epochs=5 Logging.
 srgan-train experiment=20m Training.gpus=[0,1]
 ```
 
-Use `experiment=...` when you want a complete preset (`example`, `10m`, or `20m`). Use direct overrides such as `Training.max_epochs=5` or `Generator.n_blocks=8` for quick one-off changes. See [Hydra Experiments](hydra.md) for the config layout, override patterns, and output-directory behavior.
+Use `experiment=...` when you want a complete preset (`example`, `10m`, `20m`, `swinir_sen2naip`, or `sen2naip_texture`). Use direct overrides such as `Training.max_epochs=5` or `Generator.n_blocks=8` for quick one-off changes. See [Hydra Experiments](hydra.md) for the config layout, override patterns, and output-directory behavior.
 
 Both legacy entry points accept the same configuration file. The legacy CLI exposes a single optional argument:
 
 * `--config / -c`: Path to a YAML file describing the experiment. Defaults to `opensr_srgan/configs/config_10m.yaml`. For a local smoke test with the bundled dataset, pass `opensr_srgan/configs/config_training_example.yaml`.
 
 GPU assignment is handled directly in the configuration. Set `Training.gpus` to a list of device indices (for example `[0, 1, 2, 3]`) to enable multi-GPU training; a single value such as `[0]` keeps the run on one card. When more than one GPU is listed the trainer activates PyTorch Lightning DDP using `ddp_find_unused_parameters_true` by default, which fits the manual GAN update pattern.
+
+## Train a SwinIR reconstruction model
+
+Install the SEN2NAIP reader with `python -m pip install -e ".[sen2naip]"`, then
+launch the reconstruction preset with your crosssensor manifest and spatial
+split paths:
+
+```bash
+python -m opensr_srgan.train_hydra experiment=swinir_sen2naip \
+  Data.sen2naip_taco_file=/data/sen2naipv2-crosssensor.taco \
+  Data.sen2naip_split_file=/path/to/sen2naip_crosssensor.json \
+  Training.gpus=[0] \
+  Generator.use_checkpoint=true
+```
+
+The [packaged split](sen2naip-texture.md#launch-through-the-shared-trainer) can be
+located with `importlib.resources`; it keeps the same real-pair holdouts as the
+texture recipe. This preset uses a four-band, 4× SwinIR generator with an L1-only
+objective, EMA decay 0.999, and a 30,000-generator-update budget. The discriminator
+stays frozen because `g_pretrain_steps: -1` keeps generator-only training active.
+CSV logging is the default. Set `Logging.wandb.enabled=true` to use W&B.
+
+To use a flat YAML, replace its complete `Generator` section with the
+[documented SwinIR configuration](architecture.md#swinir-generator) and set the
+same reconstruction-training fields. `model=10m_swinir` selects only the model;
+`experiment=swinir_sen2naip` also supplies the reconstruction recipe.
+
+Start from scratch or use a compatible SwinIR checkpoint. ESRGAN/RRDB and official
+upstream SwinIR checkpoints cannot initialize this implementation. The promoted
+[local-Gram recipe](sen2naip-texture.md) remains an ESRGAN full-state continuation.
+Matching can be selected independently with `postprocessing=histogram` or
+`postprocessing=back_projection`; it does not change the reconstruction losses.
+
+## Continue the SEN2NAIP texture experiment
+
+`experiment=sen2naip_texture` and `config_sen2naip_texture.yaml` describe the
+promoted final ESRGAN local-Gram refinement. Supply the real-data manifest,
+spatial split, and `Model.continue_training` checkpoint paths. This restores
+optimizer, scheduler, EMA, callback, and loop state. See the
+[complete recipe](sen2naip-texture.md) for commands, provenance, and the absolute
+150,000-G-update target. Its back-projection default can be overridden without
+changing the training objective.
 
 ## Initialisation steps - Overview
 The code performs the following, regardless of whether the script is launched from the CLI or via import.
@@ -107,8 +149,11 @@ The following callbacks are registered with the Lightning trainer:
 
 | Callback | Purpose |
 | --- | --- |
-| `ModelCheckpoint` | Saves the top two checkpoints according to `Schedulers.metric_g` and always keeps the last epoch. |
-| `EarlyStopping` | Monitors the same metric as the schedulers with a patience of 250 epochs and finite-check enabled. |
+| `ModelCheckpoint` | Default top-k selection uses `Schedulers.metric_g`, unless `checkpoint_monitor` overrides it; defaults to two best checkpoints plus `last.ckpt`. |
+| `QualityModelCheckpoint` | Replaces ordinary top-k selection when texture selection is configured; waits for the ramp and checks epoch-average fidelity. |
+| `LatestCheckpoint` | Texture runs save `last.ckpt` after validation and both `last.ckpt` and `final.ckpt` at successful training end, independently of quality improvement. |
+| `MilestoneCheckpoint` | Enabled by `Training.checkpoint_optimizer_steps`; stores full state at explicit absolute optimizer-step counts. |
+| `EarlyStopping` | Defaults to `Schedulers.metric_g`, 250 validation checks, and finite-check enabled; monitor, mode, and patience are configurable. |
 
 Checkpoint directories default to `logs/<project>/<timestamp>`. Hydra runs set `Logging.output_dir`, so checkpoints and the resolved `config.yaml` land in Hydra's run directory.
 
@@ -117,9 +162,9 @@ Checkpoint directories default to `logs/<project>/<timestamp>`. Hydra runs set `
 The script builds a `Trainer` with the following notable arguments:
 
 * `accelerator='gpu'` with `devices=config.Training.gpus` for CUDA/GPU runs, or `accelerator='cpu'` with `devices=1` for CPU runs. When more than one GPU is requested, the script selects `ddp_find_unused_parameters_true` by default because manual GAN optimisation can leave one branch unused on a given step.
-* `limit_val_batches=250` as a safeguard against excessive validation time on large datasets.
+* `limit_val_batches=config.Training.limit_val_batches` controls validation work. Optional `precision`, `max_steps`, training-batch limits, and sanity-validation limits are forwarded when configured.
 * `logger=[wandb_logger]` to register the active W&B or CSV logger.
-* `callbacks=[checkpoint_callback, early_stop_callback]` to activate checkpointing and finite-check early stopping. Learning rates are logged by the Lightning module at the end of each training batch.
+* `callbacks` contains checkpointing and finite-check early stopping, plus any requested texture/latest/milestone callbacks. Learning rates are logged by the Lightning module at the end of each training batch.
 
 Finally, `trainer.fit(model, datamodule=pl_datamodule)` launches the optimisation loop and `wandb.finish()` ensures clean shutdown
 of the W&B session.
@@ -154,11 +199,3 @@ Checkpoints store both the live and EMA weights, so resuming training preserves 
 
 With these components understood, you can safely modify the trainer arguments, replace callbacks, or integrate advanced logging
 without losing the benefits of the existing automation.
-
-## SEN2NAIP texture continuation
-
-The [local-Gram fine-tuning recipe](sen2naip-texture.md) is available as
-`experiment=sen2naip_texture` and a matching flat YAML. It requires explicit
-dataset, spatial split, and full-state checkpoint paths. SwinIR remains a
-separate reconstruction preset. Prediction matching is configurable through
-`Postprocessing.method` (or the Hydra `postprocessing` group).

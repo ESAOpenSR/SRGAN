@@ -10,7 +10,7 @@ $$
 x' = \mathrm{Upsample}\!\left( \mathrm{Conv}_{\text{tail}}\!\left(\mathrm{Body}(x_{\text{head}}) + x_{\text{head}}\right)\! \right).
 $$
 
-Because every generator variant (residual, RCAB, RRDB, large-kernel attention, ESRGAN, or stochastic conditional) shares this template, you can swap block implementations without altering the training pipeline or configuration schema.
+Because every generator variant (residual, RCAB, RRDB, large-kernel attention, ESRGAN, SwinIR, or stochastic conditional) shares this template, you can swap block implementations without altering the training pipeline or configuration schema.
 
 
 ## SRGAN Lightning module
@@ -43,6 +43,7 @@ Because every generator variant (residual, RCAB, RRDB, large-kernel attention, E
 | `_pretrain_check()` | Determines whether the generator-only warm-up is active. |
 | `_compute_adv_loss_weight()` | Produces the ramped adversarial weight using `linear` or `cosine` schedules. |
 | `_log_generator_content_loss()` and `_log_adv_loss_weight()` | Centralise logging so metrics remain consistent across phases. |
+| `postprocess(sr, lr)` | Applies the selected histogram matching or back-projection to tensors in a shared value range. |
 | `on_fit_start()` | Prints informative status messages when training begins. |
 
 ## Generator options
@@ -58,10 +59,57 @@ The generator zoo lives under `opensr_srgan/model/generators/` and can be select
   enabling experiments where auxiliary metadata influences the super-resolution output.
 * **ESRGAN generator (`esrgan.py`).** Implements the RRDBNet trunk introduced with ESRGAN, exposing `n_blocks`, `growth_channels`,
   and `res_scale` so you can dial in deeper receptive fields and sharper textures. The shared training loop supports optional relativistic-average BCE and a two-step training phase (content-oriented pretraining of the generator followed by adversarial training with the discriminator).
+* **SwinIR generator (`swinir.py`).** Uses residual groups of regular and shifted-window self-attention, followed by a pixel-shuffle reconstruction head. See the settings and example below.
 * **Advanced variants (`SRGAN_advanced.py`).** Provides additional block implementations and compatibility aliases exposed in
   `__init__.py` for backwards compatibility.
 
-Common traits across generators include configurable input channel counts (`Model.in_bands`), support for upscaling factors from 2× to 8×, and residual scaling to stabilise deeper networks.
+All generators accept `Model.in_bands` and `Generator.scaling_factor`. Supported
+scales and trunk settings depend on the selected backbone; CNN residual scaling
+settings do not apply to SwinIR.
+
+### SwinIR generator
+
+SwinIR combines local self-attention with shifts between attention windows so
+features can interact across window boundaries. This implementation takes
+multispectral tensors, pads them to complete windows, and crops the output to
+exactly the requested scaled size. It supports 2×, 3×, and 4× upscaling, including
+small or non-square inputs. It applies no normalization or clipping internally;
+the shared data and inference pipeline handles value ranges.
+
+Select `model=10m_swinir` in Hydra, or replace the `Generator` section of an
+existing flat YAML with:
+
+```yaml
+Generator:
+  model_type: swinir
+  scaling_factor: 4
+  embed_dim: 180
+  depths: [6, 6, 6, 6, 6, 6]
+  num_heads: [6, 6, 6, 6, 6, 6]
+  window_size: 8
+  mlp_ratio: 2.0
+  qkv_bias: true
+  drop_rate: 0.0
+  attn_drop_rate: 0.0
+  drop_path_rate: 0.1
+  use_checkpoint: false
+```
+
+Input and default output bands come from `Model.in_bands`; the shipped model
+preset sets both to four. `depths` and `num_heads` must have equal nonzero lengths,
+and `embed_dim` must divide evenly by each head count. Set `use_checkpoint: true`
+to trade additional backward computation for lower activation memory use.
+CNN-only fields such as `n_channels`, `n_blocks`, and `growth_channels` are ignored
+with a factory notice.
+
+The [SwinIR training example](training.md#train-a-swinir-reconstruction-model)
+uses `experiment=swinir_sen2naip` for reconstruction pretraining from scratch.
+ESRGAN/RRDB checkpoints and official upstream SwinIR checkpoints are not compatible
+with this implementation. The successful [local-Gram recipe](sen2naip-texture.md)
+continues an ESRGAN model and remains a separate experiment.
+See the [configuration reference](configuration.md#swinir-settings) for all
+SwinIR controls and the [model API](api-reference/model.md#swinir-transformer)
+for its constructor.
 
 ## Discriminator options
 
@@ -111,16 +159,3 @@ These helpers allow the generator to operate in a normalised space while still r
    inference.
 
 This modular design keeps the research workflow flexible: swap components with configuration changes, extend the factories with new architectures, or plug in custom losses without touching the training loop itself.
-
-## SwinIR generator
-
-Select `Generator.model_type: swinir`, or compose `model=10m_swinir`, to use
-the four-band shifted-window transformer. Its settings include `embed_dim`,
-`depths`, `num_heads`, `window_size`, and optional activation checkpointing through
-`use_checkpoint`. Padding and cropping support input sizes that are not multiples
-of the window size.
-
-`experiment=swinir_sen2naip` supplies reconstruction-only pretraining settings.
-Set its SEN2NAIP manifest and spatial split paths before training. SwinIR needs
-its own reconstruction checkpoint: ESRGAN/RRDB weights are incompatible. This
-preset is independent of the ESRGAN texture recipe.
