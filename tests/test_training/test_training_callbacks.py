@@ -7,7 +7,10 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from opensr_srgan.utils.training_callbacks import (
-    LatestCheckpoint, QualityModelCheckpoint, texture_checkpoint_eligible,
+    LatestCheckpoint,
+    MilestoneCheckpoint,
+    QualityModelCheckpoint,
+    texture_checkpoint_eligible,
 )
 
 
@@ -24,6 +27,46 @@ def test_texture_gate_uses_epoch_average_without_penalties():
     assert texture_checkpoint_eligible(model, {"val_metrics/l1": torch.tensor(0.02)})
     assert not texture_checkpoint_eligible(model, {"val_metrics/l1": torch.tensor(0.06)})
     assert not texture_checkpoint_eligible(model, {"val_metrics/l1": torch.tensor(float("nan"))})
+    assert not texture_checkpoint_eligible(model, {})
+
+
+@pytest.mark.parametrize(
+    ("option", "metric", "bound", "value", "eligible"),
+    [
+        ("texture_selection_max_l1_rgb", "l1_rgb", 0.1, 0.1, True),
+        ("texture_selection_max_l1_nir", "l1_nir", 0.1, 0.11, False),
+        ("texture_selection_max_sam", "sam", 0.1, 0.2, False),
+        ("texture_selection_max_perceptual_rgb", "perceptual", 0.1, 0.05, True),
+        ("texture_selection_max_perceptual_nir", "perceptual_nir", 0.1, float("nan"), False),
+        ("texture_selection_min_ssim_rgb", "ssim_rgb", 0.8, 0.8, True),
+        ("texture_selection_min_ssim_nir", "ssim_nir", 0.8, 0.7, False),
+    ],
+)
+def test_texture_gate_applies_per_band_quality_bounds(
+    option, metric, bound, value, eligible
+):
+    losses = SimpleNamespace(**{option: bound})
+    model = SimpleNamespace(
+        _pretrain_check=lambda: False,
+        pretrain_g_only=True,
+        g_pretrain_steps=4,
+        adv_loss_ramp_steps=2,
+        global_step=6,
+        config=SimpleNamespace(Training=SimpleNamespace(Losses=losses)),
+    )
+
+    assert texture_checkpoint_eligible(model, {"val_metrics/" + metric: value}) is eligible
+
+
+def test_texture_gate_rejects_pretraining_phase_before_reading_metrics():
+    model = SimpleNamespace(
+        _pretrain_check=lambda: True,
+        pretrain_g_only=False,
+        g_pretrain_steps=0,
+        adv_loss_ramp_steps=0,
+        config=SimpleNamespace(Training=SimpleNamespace(Losses=SimpleNamespace())),
+    )
+
     assert not texture_checkpoint_eligible(model, {})
 
 
@@ -78,6 +121,33 @@ def test_quality_callback_skips_invalid_epochs_without_changing_metric(monkeypat
     assert selected == [10]
     assert logged[-1]["val_metrics/texture_selection_eligible"] == 0
     torch.testing.assert_close(trainer.callback_metrics["val_metrics/texture_selection"], torch.tensor(1.05))
+
+
+def test_quality_callback_skips_sanity_check_and_delegates_regular_monitor(monkeypatch):
+    from pytorch_lightning.callbacks import ModelCheckpoint
+
+    selected = []
+    monkeypatch.setattr(
+        ModelCheckpoint,
+        "on_validation_end",
+        lambda self, trainer, model: selected.append(trainer.global_step),
+    )
+    model = SimpleNamespace(config=SimpleNamespace(Schedulers=SimpleNamespace()))
+    callback = QualityModelCheckpoint(monitor="val_metrics/l1", save_top_k=1)
+    trainer = SimpleNamespace(
+        sanity_checking=True,
+        is_global_zero=False,
+        global_step=2,
+        current_epoch=0,
+        callback_metrics={},
+        loggers=[],
+    )
+
+    callback.on_validation_end(trainer, model)
+    assert selected == []
+    trainer.sanity_checking = False
+    callback.on_validation_end(trainer, model)
+    assert selected == [2]
 
 
 def test_coupled_lr_tracks_warmup_plateau_and_restored_optimizer_rates():
@@ -179,3 +249,45 @@ def test_quality_history_survives_resume_in_a_fresh_output_directory(tmp_path):
     trainer = SimpleNamespace(strategy=SimpleNamespace(remove_checkpoint=removed.append))
     restored._remove_checkpoint(trainer, old.best_model_path)
     assert removed == []
+
+    fresh = QualityModelCheckpoint(dirpath=tmp_path / "new", monitor="quality", save_top_k=1)
+    current_path = str(tmp_path / "new" / "current.ckpt")
+    fresh._remove_checkpoint(trainer, current_path)
+    assert removed == [current_path]
+
+
+def test_latest_checkpoint_saves_on_all_ranks_but_creates_directory_on_rank_zero(tmp_path):
+    callback = LatestCheckpoint(tmp_path / "checkpoints")
+    saved = []
+    trainer = SimpleNamespace(
+        is_global_zero=False,
+        save_checkpoint=lambda path, weights_only: saved.append((path, weights_only)),
+        sanity_checking=True,
+    )
+
+    callback.on_validation_end(trainer, None)
+    assert saved == []
+    callback.on_train_end(trainer, None)
+    assert [path.rsplit("/", 1)[-1] for path, _ in saved] == ["last.ckpt", "final.ckpt"]
+    assert all(weights_only is False for _, weights_only in saved)
+    assert not callback.directory.exists()
+    assert callback.last_model_path.endswith("last.ckpt")
+
+
+def test_milestone_checkpoint_saves_only_requested_optimizer_steps(tmp_path):
+    with pytest.raises(ValueError, match="positive"):
+        MilestoneCheckpoint(tmp_path, [0])
+
+    callback = MilestoneCheckpoint(tmp_path, [3, "5"])
+    saved = []
+    trainer = SimpleNamespace(
+        global_step=3,
+        is_global_zero=True,
+        save_checkpoint=lambda path: saved.append(path),
+    )
+    callback.on_train_batch_end(trainer, None, None, None, 0)
+    trainer.global_step = 4
+    callback.on_train_batch_end(trainer, None, None, None, 1)
+
+    assert callback.directory.is_dir()
+    assert saved == [str(tmp_path / "optimizer-step-00000003.ckpt")]

@@ -24,6 +24,8 @@ def test_gram_has_only_prediction_gradients_and_safe_bfloat_statistics():
     assert target.grad is None
     with pytest.raises(ValueError):
         local_gram_distance(prediction, target, 3)
+    with pytest.raises(ValueError, match="matching BCHW"):
+        local_gram_distance(prediction, target[:, :, :, :-1], 2)
 
 
 def test_texture_only_content_objective_reaches_rgb_and_freezes_vgg():

@@ -24,8 +24,30 @@ def test_to_numpy_img_variants_and_validation():
     multi_img = logging_helpers._to_numpy_img(multi)
     assert multi_img.shape == (2, 2, 3)
 
+    two_band = logging_helpers._to_numpy_img(torch.ones(2, 2, 2))
+    assert two_band.shape == (2, 2, 2)
+
     with pytest.raises(ValueError):
         logging_helpers._to_numpy_img(torch.zeros(2, 2))
+
+
+def test_display_helpers_handle_noncontiguous_tensors_and_invalid_batch_shape():
+    noncontiguous = torch.arange(12, dtype=torch.float32).reshape(3, 4).t()
+    plot_data = logging_helpers._tensor_to_plot_data(noncontiguous)
+    assert plot_data.flags["C_CONTIGUOUS"]
+    np.testing.assert_array_equal(plot_data, noncontiguous.numpy())
+
+    with pytest.raises(ValueError, match="B,C,H,W"):
+        logging_helpers._select_display_bands(torch.zeros(3, 2, 2))
+    assert logging_helpers._select_display_bands(torch.ones(1, 3, 2, 2)).shape[1] == 3
+    assert logging_helpers._select_display_bands(torch.ones(1, 4, 2, 2)).shape[1] == 3
+
+
+def test_common_display_range_handles_nonfinite_and_constant_data():
+    assert logging_helpers._common_display_range([torch.tensor([float("nan")])]) == (0.0, 1.0)
+    low, high = logging_helpers._common_display_range([torch.full((2, 2), 3.0)])
+    assert low == 3.0
+    assert high == 4.0
 
 
 def test_plot_tensors_returns_pil_image():
@@ -113,6 +135,45 @@ def test_save_validation_artifacts_is_disabled_without_local_rank_zero(tmp_path)
         )
         == []
     )
+
+
+@pytest.mark.parametrize(
+    "lr,sr,hr,error",
+    [
+        (torch.ones(4, 2, 2), torch.ones(1, 4, 2, 2), torch.ones(1, 4, 2, 2), "shape"),
+        (torch.ones(1, 4, 2, 2), torch.ones(2, 4, 2, 2), torch.ones(1, 4, 2, 2), "batch size"),
+        (torch.ones(1, 4, 2, 2), torch.ones(1, 4, 4, 4), torch.ones(1, 4, 2, 2), "spatial shape"),
+    ],
+)
+def test_save_validation_artifacts_rejects_incompatible_tensors(tmp_path, lr, sr, hr, error):
+    with pytest.raises(ValueError, match=error):
+        logging_helpers.save_validation_artifacts(lr, sr, hr, tmp_path, epoch=1, num_images=1)
+
+
+def test_save_validation_artifacts_validates_optional_outputs_and_rgb_only(tmp_path):
+    lr = torch.zeros(2, 3, 2, 2)
+    sr = torch.zeros(2, 3, 4, 4)
+    with pytest.raises(ValueError, match="matched"):
+        logging_helpers.save_validation_artifacts(
+            lr, sr, sr, tmp_path, epoch=1, num_images=1, matched=sr[:, :, :, :-1]
+        )
+    with pytest.raises(ValueError, match="live_sr"):
+        logging_helpers.save_validation_artifacts(
+            lr, sr, sr, tmp_path, epoch=1, num_images=1, live_sr=sr[:, :, :, :-1]
+        )
+
+    paths = logging_helpers.save_validation_artifacts(
+        lr, sr, sr, tmp_path, epoch=2, num_images=5, sample_offset=9
+    )
+    assert [path.name for path in paths] == [
+        "epoch-0002_sample-009_rgb.png",
+        "epoch-0002_sample-010_rgb.png",
+    ]
+
+    single_band = torch.zeros(1, 1, 4, 4)
+    assert logging_helpers.save_validation_artifacts(
+        single_band[:, :, :2, :2], single_band, single_band, tmp_path, epoch=3, num_images=1
+    ) == []
 
 
 def test_save_validation_artifacts_accepts_bfloat16(tmp_path):

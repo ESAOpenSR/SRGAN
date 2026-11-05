@@ -1374,7 +1374,7 @@ class SRGAN_model(pl.LightningModule):
         self._ema_applied = False
 
     def on_save_checkpoint(self, checkpoint: dict) -> None:
-        """Augment the checkpoint with EMA state, if available.
+        """Save live weights and EMA state while preserving evaluation weights.
 
         Adds the EMA buffer/metadata to the checkpoint so that EMA can be restored upon load.
 
@@ -1385,19 +1385,22 @@ class SRGAN_model(pl.LightningModule):
         # evaluation hook has temporarily applied EMA weights.
         was_ema_applied = self._ema_applied
         self._restore_generator_weights()
-        super().on_save_checkpoint(checkpoint)
-        # Lightning may have obtained state_dict() before entering this hook;
-        # state_dict tensors can alias live parameters. Explicitly replace the
-        # generator entries when an EMA swap was active so the checkpoint is
-        # unambiguously the live training model.
-        if was_ema_applied and isinstance(checkpoint.get("state_dict"), dict):
-            model_state = checkpoint["state_dict"]
-            for name, value in self.generator.state_dict().items():
-                key = f"generator.{name}"
-                if key in model_state:
-                    model_state[key] = value.detach().clone()
-        if self.ema is not None:
-            checkpoint["ema_state"] = self.ema.state_dict()
+        try:
+            super().on_save_checkpoint(checkpoint)
+            # Lightning may have copied state_dict() while EMA was active.
+            # Clone the live entries before reapplying EMA, as state_dict()
+            # tensors can also alias the running model's parameters.
+            if was_ema_applied and isinstance(checkpoint.get("state_dict"), dict):
+                model_state = checkpoint["state_dict"]
+                for name, value in self.generator.state_dict().items():
+                    key = f"generator.{name}"
+                    if key in model_state:
+                        model_state[key] = value.detach().clone()
+            if self.ema is not None:
+                checkpoint["ema_state"] = self.ema.state_dict()
+        finally:
+            if was_ema_applied:
+                self._apply_generator_ema_weights()
 
     def on_load_checkpoint(self, checkpoint: dict) -> None:
         """Restore EMA state from a checkpoint, if present.

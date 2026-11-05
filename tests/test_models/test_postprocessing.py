@@ -87,3 +87,33 @@ def test_back_projection_rejects_incompatible_geometry():
     model = model_for('back_projection')
     with pytest.raises(ValueError, match='integer multiple'):
         model.postprocess(torch.zeros(1, 1, 7, 8), torch.zeros(1, 1, 3, 4))
+
+
+@pytest.mark.parametrize('sr_rank,lr_rank', [(3, 4), (4, 3)])
+def test_back_projection_postprocess_requires_batched_images(sr_rank, lr_rank):
+    model = model_for('back_projection')
+    with pytest.raises(ValueError, match='BCHW'):
+        model.postprocess(torch.ones((2,) * sr_rank), torch.ones((2,) * lr_rank))
+
+
+def test_histogram_accepts_bfloat16_and_preserves_output_dtype():
+    model = model_for('histogram')
+    lr = torch.linspace(.1, .8, 12).reshape(1, 1, 3, 4).to(torch.bfloat16)
+    sr = F.interpolate(lr.float(), scale_factor=2, mode='nearest').to(torch.bfloat16)
+    expected = histogram(lr.float(), sr.float()).to(torch.bfloat16)
+
+    result = model.postprocess(sr, lr)
+
+    assert result.dtype == torch.bfloat16
+    torch.testing.assert_close(result, expected)
+
+
+def test_back_projection_prediction_promotes_autocast_output_to_float32():
+    model = model_for('back_projection')
+    lr = torch.linspace(.1, .8, 12).reshape(1, 1, 3, 4)
+    with torch.autocast('cpu', dtype=torch.bfloat16):
+        result = model.predict_step(lr)
+
+    assert result.dtype == torch.float32
+    assert torch.isfinite(result).all()
+    torch.testing.assert_close(F.avg_pool2d(result, 2), lr)

@@ -228,6 +228,34 @@ def test_bad_shapes_bands_masks_and_nonfinite_values():
         back_projection(x.int(), y)
 
 
+def test_operator_and_projection_reject_invalid_tensor_interfaces():
+    with pytest.raises(ValueError, match="positive integer"):
+        BlurDownsample(channels=False)
+    operator = BlurDownsample(channels=2, scale=2)
+    with pytest.raises(ValueError, match="configured channel"):
+        operator(torch.ones(1, 1, 4, 4))
+    with pytest.raises(ValueError, match="divisible"):
+        operator(torch.ones(1, 2, 3, 4))
+
+    source = torch.ones(2, 4, 4)
+    observed = torch.ones(2, 2, 2)
+    with pytest.raises(TypeError, match="BackProjectionConfig"):
+        back_projection(source, observed, config={})
+    with pytest.raises(ValueError, match="both be CHW"):
+        back_projection(source.unsqueeze(0), observed)
+    with pytest.raises(ValueError, match="same device"):
+        back_projection(source, observed.to("meta"))
+    with pytest.raises(ValueError, match="matching nonempty"):
+        back_projection(torch.ones(0, 2, 4, 4), torch.ones(0, 2, 2, 2))
+    with pytest.raises(ValueError, match="broadcast"):
+        back_projection(
+            source,
+            observed,
+            BackProjectionConfig(scale=2),
+            valid_mask=torch.ones(3, 3, dtype=torch.bool),
+        )
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
 def test_cuda_matches_cpu_and_stays_on_device():
     x, y = torch.rand(1, 4, 16, 20), torch.rand(1, 4, 4, 5)

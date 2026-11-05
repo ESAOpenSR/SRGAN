@@ -7,7 +7,12 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn.functional as F
 
-from opensr_srgan.model.adversarial import critic_auc, normalized_patch_r1, relativistic_means
+from opensr_srgan.model.adversarial import (
+    critic_auc,
+    image_logits,
+    normalized_patch_r1,
+    relativistic_means,
+)
 
 
 def _objective(weight, rank=None, global_batch=False, generator=False):
@@ -69,12 +74,41 @@ def test_r1_is_patch_count_independent_and_differentiable():
         assert not inputs.requires_grad
 
 
+def test_local_relativistic_statistics_and_image_scores_keep_gradients_local():
+    real = torch.tensor([[[[1.0, 3.0]]]], requires_grad=True)
+    fake = torch.tensor([[[[-2.0, 4.0]]]], requires_grad=True)
+
+    real_mean, fake_mean = relativistic_means(real, fake, global_batch=False)
+    global_real_mean, global_fake_mean = relativistic_means(
+        real, fake, global_batch=True
+    )
+    objective = (real - fake_mean).square().mean() + (fake - real_mean).square().mean()
+    objective.backward()
+
+    torch.testing.assert_close(real_mean, torch.tensor(2.0))
+    torch.testing.assert_close(fake_mean, torch.tensor(1.0))
+    torch.testing.assert_close(global_real_mean, real_mean)
+    torch.testing.assert_close(global_fake_mean, fake_mean)
+    assert torch.isfinite(real.grad).all()
+    assert torch.isfinite(fake.grad).all()
+    torch.testing.assert_close(
+        image_logits(torch.tensor([[[[1.0, 3.0]]], [[[2.0, 6.0]]]])),
+        torch.tensor([2.0, 4.0]),
+    )
+
+
 @pytest.mark.parametrize("real,fake,expected", [
     ([1000., 2000.], [-1000., -2000.], 1.), ([-2., -1.], [1., 2.], 0.),
     ([2., 2.], [2., 2.], .5), ([1., 2.], [0., 1.], .875),
 ])
 def test_critic_auc_handles_extreme_logits_and_ties(real, fake, expected):
     assert critic_auc(torch.tensor(real), torch.tensor(fake)).item() == expected
+
+
+@pytest.mark.parametrize("real,fake", [(torch.empty(0), torch.ones(1)), (torch.ones(1), torch.empty(0))])
+def test_critic_auc_requires_scores_from_both_classes(real, fake):
+    with pytest.raises(ValueError, match="requires real and generated"):
+        critic_auc(real, fake)
 
 
 def test_joint_rgb_nir_selection_and_fidelity_guards():

@@ -17,7 +17,11 @@ torch = pytest.importorskip("torch")
 from torch import nn  # noqa: E402
 
 from opensr_srgan.model.generators.swinir import (  # noqa: E402
+    DropPath,
+    Mlp,
+    ResidualSwinTransformerGroup,
     SwinIRGenerator,
+    SwinTransformerBlock,
     WindowAttention,
     calculate_mask,
     window_partition,
@@ -78,6 +82,28 @@ def test_shifted_window_mask_blocks_cyclic_wraparound_but_allows_local_connectio
     assert torch.all(mask == mask.transpose(-1, -2))
 
 
+def test_window_utilities_reject_noncanonical_shapes_and_invalid_shifts():
+    with pytest.raises(ValueError, match="BHWC"):
+        window_partition(torch.zeros(1, 4, 4), window_size=2)
+    with pytest.raises(ValueError, match="divisible"):
+        window_partition(torch.zeros(1, 3, 4, 2), window_size=2)
+    with pytest.raises(ValueError, match="does not match"):
+        window_reverse(torch.zeros(2, 3, 3, 2), window_size=2, height=4, width=4)
+    with pytest.raises(ValueError, match="expects windows"):
+        window_reverse(torch.zeros(2, 2, 2), window_size=2, height=4, width=4)
+    with pytest.raises(ValueError, match="divisible"):
+        window_reverse(torch.zeros(4, 2, 2, 2), window_size=2, height=3, width=4)
+    with pytest.raises(ValueError, match="Number of windows"):
+        window_reverse(torch.zeros(3, 2, 2, 2), window_size=2, height=4, width=4)
+    with pytest.raises(ValueError, match="shift_size"):
+        calculate_mask(4, 4, window_size=2, shift_size=2)
+    with pytest.raises(ValueError, match="shift_size"):
+        calculate_mask(4, 4, window_size=2, shift_size=False)
+    with pytest.raises(ValueError, match="divisible"):
+        calculate_mask(3, 4, window_size=2, shift_size=1)
+    assert calculate_mask(4, 4, window_size=2, shift_size=0) is None
+
+
 def test_attention_has_gradient_on_qkv_and_relative_position_bias():
     attention = WindowAttention(dim=24, window_size=4, num_heads=3)
     x = torch.randn(2, 16, 24, requires_grad=True)
@@ -87,6 +113,96 @@ def test_attention_has_gradient_on_qkv_and_relative_position_bias():
     assert attention.qkv.weight.grad.abs().sum() > 0
     assert attention.relative_position_bias_table.grad is not None
     assert attention.relative_position_bias_table.grad.abs().sum() > 0
+
+
+def test_attention_accepts_repeated_shift_masks_and_rejects_incompatible_ones():
+    attention = WindowAttention(dim=24, window_size=4, num_heads=3).eval()
+    x = torch.randn(8, 16, 24)
+    mask = calculate_mask(8, 8, window_size=4, shift_size=2)
+    with torch.no_grad():
+        output = attention(x, mask)
+    assert output.shape == x.shape
+    assert torch.isfinite(output).all()
+
+    with pytest.raises(ValueError, match="Attention mask"):
+        attention(x, torch.zeros(4, 15, 15))
+    with pytest.raises(ValueError, match="not divisible"):
+        attention(x[:3], mask)
+    with pytest.raises(ValueError, match="incompatible token shape"):
+        attention(torch.randn(1, 15, 24))
+    with pytest.raises(ValueError, match="expects"):
+        attention(torch.randn(1, 4, 4, 24))
+
+
+def test_drop_path_changes_training_samples_but_is_identity_during_evaluation():
+    drop_path = DropPath(drop_prob=0.5)
+    x = torch.ones(32, 2, 2, 2)
+    drop_path.train()
+    with torch.random.fork_rng(devices=[]):
+        torch.random.default_generator.manual_seed(3)
+        training_output = drop_path(x)
+    assert set(training_output.unique().tolist()) == {0.0, 2.0}
+    drop_path.eval()
+    assert torch.equal(drop_path(x), x)
+
+
+@pytest.mark.parametrize(
+    ("constructor", "message"),
+    [
+        (lambda: DropPath(-0.1), "drop_prob"),
+        (lambda: Mlp(dim=1, mlp_ratio=0.1, drop=0.0), "at least one"),
+        (lambda: WindowAttention(dim=10, window_size=2, num_heads=3), "divisible"),
+        (
+            lambda: ResidualSwinTransformerGroup(
+                4,
+                0,
+                1,
+                2,
+                mlp_ratio=2.0,
+                qkv_bias=True,
+                drop=0.0,
+                attn_drop=0.0,
+                drop_path=[],
+                use_checkpoint=False,
+            ),
+            "at least one",
+        ),
+        (
+            lambda: ResidualSwinTransformerGroup(
+                4,
+                2,
+                1,
+                2,
+                mlp_ratio=2.0,
+                qkv_bias=True,
+                drop=0.0,
+                attn_drop=0.0,
+                drop_path=[0.0],
+                use_checkpoint=False,
+            ),
+            "one value",
+        ),
+    ],
+)
+def test_internal_swin_components_validate_their_contracts(constructor, message):
+    with pytest.raises(ValueError, match=message):
+        constructor()
+
+
+def test_transformer_block_rejects_feature_width_mismatch():
+    block = SwinTransformerBlock(
+        4,
+        1,
+        2,
+        0,
+        mlp_ratio=2.0,
+        qkv_bias=True,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+    )
+    with pytest.raises(ValueError, match="Expected 4"):
+        block(torch.zeros(1, 3, 2, 2))
 
 
 def test_generator_gradients_reach_attention_and_reconstruction_head():
@@ -164,6 +280,48 @@ def test_bfloat16_autocast_forward_backward_is_finite():
     )
 
 
+def test_generator_rejects_invalid_runtime_inputs_before_attention():
+    model = _generator(scale=2).eval()
+    with pytest.raises(ValueError, match="BCHW"):
+        model(torch.randn(4, 8, 8))
+    with pytest.raises(ValueError, match="input bands"):
+        model(torch.randn(1, 3, 8, 8))
+    with pytest.raises(TypeError, match="floating-point"):
+        model(torch.ones(1, 4, 8, 8, dtype=torch.int64))
+
+
+def test_generator_supports_distinct_output_band_count_and_reflection_padding():
+    model = _generator(out_channels=2, scale=2).eval()
+    x = torch.randn(1, 4, 7, 9)
+    padded, original_height, original_width = model._pad_input(x)
+    assert padded.shape[-2:] == (8, 12)
+    assert (original_height, original_width) == (7, 9)
+    with torch.no_grad():
+        output = model(x)
+    assert output.shape == (1, 2, 14, 18)
+
+
+def test_generator_keeps_aligned_inputs_unpadded():
+    model = _generator(scale=2)
+    x = torch.randn(1, 4, 8, 8)
+    padded, height, width = model._pad_input(x)
+    assert padded is x
+    assert (height, width) == (8, 8)
+
+
+def test_generator_defaults_output_bands_to_input_bands():
+    model = SwinIRGenerator(
+        in_channels=4,
+        embed_dim=12,
+        depths=(1,),
+        num_heads=(3,),
+        window_size=4,
+        scale=2,
+        drop_path_rate=0.0,
+    )
+    assert model.out_channels == 4
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -171,11 +329,20 @@ def test_bfloat16_autocast_forward_backward_is_finite():
         {"depths": (2,), "num_heads": (3, 3)},
         {"depths": (2, 2), "num_heads": (3,)},
         {"window_size": 0},
+        {"window_size": 1},
         {"scale": 0},
+        {"scale": 5},
+        {"depths": "2"},
+        {"num_heads": "3"},
+        {"mlp_ratio": 0},
+        {"drop_rate": 1.0},
+        {"qkv_bias": 1},
+        {"use_checkpoint": 1},
     ],
 )
 def test_invalid_configuration_fails_early(kwargs):
     with pytest.raises(
-        (ValueError, TypeError), match="(divisible|divide|length|window|scale|positive|greater)"
+        (ValueError, TypeError),
+        match="(divisible|divide|length|window|scale|positive|greater|lie|bool)",
     ):
         _generator(**kwargs)

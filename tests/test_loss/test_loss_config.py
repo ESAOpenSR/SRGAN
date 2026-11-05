@@ -197,3 +197,58 @@ def test_vgg_input_normalization_is_explicit_and_legacy_defaults_are_preserved(e
     torch.testing.assert_close(actual, torch.nn.functional.mse_loss(expected_prediction, expected_reference))
     actual.backward()
     assert torch.isfinite(prediction.grad).all()
+
+
+@pytest.mark.parametrize(
+    "losses",
+    [
+        {"texture_weight": -0.1},
+        {"texture_weight": 0.1, "texture_grid": 0},
+        {"validation_fixed_idx": [0, 1]},
+    ],
+)
+def test_loss_configuration_rejects_invalid_texture_and_validation_options(losses):
+    with pytest.raises(ValueError):
+        GeneratorContentLoss(OmegaConf.create({"Training": {"Losses": losses}}))
+
+
+def test_texture_loss_requires_a_vgg_feature_backbone(monkeypatch):
+    class FakeLPIPS(torch.nn.Module):
+        def __init__(self, **_kwargs):
+            super().__init__()
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "lpips",
+        type("FakeLPIPSModule", (), {"LPIPS": FakeLPIPS}),
+    )
+    cfg = OmegaConf.create(
+        {
+            "Training": {
+                "Losses": {
+                    "perceptual_weight": 0.0,
+                    "texture_weight": 0.1,
+                    "perceptual_metric": "lpips",
+                }
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="requires the VGG backbone"):
+        GeneratorContentLoss(cfg, testing=True)
+
+
+def test_texture_loss_requires_vgg_features_through_conv3_4():
+    cfg = OmegaConf.create(
+        {
+            "Training": {
+                "Losses": {
+                    "perceptual_weight": 0.0,
+                    "texture_weight": 0.1,
+                    "perceptual_metric": "vgg",
+                }
+            },
+            "TruncatedVGG": {"i": 1, "j": 1},
+        }
+    )
+    with pytest.raises(ValueError, match="conv3_4"):
+        GeneratorContentLoss(cfg, testing=True)

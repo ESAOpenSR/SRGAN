@@ -37,6 +37,8 @@ def _make_config(load_checkpoint=False, continue_training=False):
 
 @pytest.fixture()
 def train_module(monkeypatch):
+    original_module = importlib.import_module("opensr_srgan.train")
+    original_namespace = original_module.__dict__.copy()
     state = {}
 
     # ------------------------------------------------------------------
@@ -98,6 +100,9 @@ def train_module(monkeypatch):
     training_callbacks_mod = types.ModuleType("opensr_srgan.utils.training_callbacks")
     training_callbacks_mod.QualityModelCheckpoint = callbacks_mod.ModelCheckpoint
     training_callbacks_mod.LatestCheckpoint = lambda directory: ("latest", directory)
+    training_callbacks_mod.MilestoneCheckpoint = (
+        lambda directory, steps: ("milestone", directory, tuple(steps))
+    )
     monkeypatch.setitem(sys.modules, "opensr_srgan.utils.training_callbacks", training_callbacks_mod)
 
     early_stopping_mod = types.ModuleType("pytorch_lightning.callbacks.early_stopping")
@@ -173,7 +178,13 @@ def train_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "opensr_srgan.utils.gpu_rank", gpu_rank_mod)
 
     train_mod = importlib.reload(importlib.import_module("opensr_srgan.train"))
-    return train_mod, state
+    try:
+        yield train_mod, state
+    finally:
+        # Restoring sys.modules alone leaves this cached module holding stubs.
+        # Restore its namespace so subsequent integration tests use real training.
+        train_mod.__dict__.clear()
+        train_mod.__dict__.update(original_namespace)
 
 
 def test_train_uses_instance_weight_loader_for_load_checkpoint(train_module):
@@ -312,6 +323,43 @@ def test_train_respects_logging_output_dir(train_module, monkeypatch, tmp_path):
     assert state["builder_checkpoint_callback"].kwargs["save_on_train_epoch_end"] is False
     assert state["builder_early_stop_callback"].kwargs["check_on_train_epoch_end"] is False
     assert state["builder_logger"].kwargs["save_dir"] == str(output_dir)
+
+
+def test_train_registers_texture_latest_and_milestone_callbacks(train_module, tmp_path):
+    train_mod, state = train_module
+    config = _make_config(load_checkpoint=False, continue_training=False)
+    config.Logging.output_dir = str(tmp_path / "texture-run")
+    config.Schedulers.texture_selection_metric = "val_metrics/texture_selection"
+    config.Training.checkpoint_optimizer_steps = [10, 20]
+
+    train_mod.train(config)
+
+    checkpoint = state["builder_checkpoint_callback"]
+    assert checkpoint.kwargs["save_last"] is False
+    assert state["trainer_kwargs"]["callbacks"] == [
+        ("latest", str(tmp_path / "texture-run")),
+        ("milestone", str(tmp_path / "texture-run"), (10, 20)),
+    ]
+
+
+def test_train_seeds_workers_and_finishes_enabled_wandb_run(train_module, tmp_path):
+    train_mod, state = train_module
+    seeds = []
+    train_mod.pl.seed_everything = lambda seed, workers: seeds.append((seed, workers))
+    config = _make_config(load_checkpoint=False, continue_training=False)
+    config.Training.seed = 17
+    config.Logging.wandb.enabled = True
+    config.Logging.wandb.name = "run-name"
+    config.Logging.wandb.group = "release"
+    config.Logging.output_dir = str(tmp_path / "wandb-run")
+
+    train_mod.train(config)
+
+    assert seeds == [(17, True)]
+    assert state["builder_logger"].kwargs["name"] == "run-name"
+    assert state["builder_logger"].kwargs["group"] == "release"
+    assert state["builder_logger"].kwargs["save_dir"] == str(tmp_path / "wandb-run")
+    assert state["wandb_finish_calls"] == 1
 
 
 def test_train_module_main_guard(monkeypatch):

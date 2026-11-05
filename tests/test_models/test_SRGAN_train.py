@@ -171,6 +171,68 @@ def test_training_step_pl2_wasserstein_with_r1_and_gradient_clipping():
     assert "generator/adversarial_loss" in harness.logged
 
 
+def test_training_step_logs_clipped_gradient_diagnostics_and_normalized_r1():
+    harness = TrainingHarness(pretrain=False)
+    harness.automatic_optimization = False
+    harness.relativistic_average_d = True
+    harness.r1_gamma = 0.2
+    harness.global_step = 0
+    harness.config = OmegaConf.create(
+        {
+            "Optimizers": {"gradient_clip_val": 0.1},
+            "Schedulers": {},
+            "Training": {
+                "Losses": {
+                    "global_relativistic_average": True,
+                    "log_gan_diagnostics": True,
+                    "r1_normalize_patch_mean": True,
+                    "r1_interval": 1,
+                    "r1_start_optimizer_step": 0,
+                }
+            },
+        }
+    )
+
+    class PrecisionPlugin:
+        def __init__(self):
+            self.unscaled = 0
+
+        def unscale_optimizer(self, optimizer):
+            self.unscaled += 1
+
+    precision = PrecisionPlugin()
+    harness.trainer = types.SimpleNamespace(precision_plugin=precision)
+
+    training_step_PL.training_step_PL2(harness, _sample_batch(), batch_idx=0)
+
+    assert precision.unscaled == 2
+    assert "discriminator/r1_raw" in harness.logged
+    assert harness.logged["discriminator/r1_raw"] > 0
+    assert "discriminator/adversarial_loss_without_r1" in harness.logged
+    assert "gradients/discriminator_norm_before_clip" in harness.logged
+    assert "gradients/generator_norm_before_clip" in harness.logged
+
+
+def test_training_step_rejects_nonfinite_clipped_gradients(monkeypatch):
+    harness = TrainingHarness(pretrain=True)
+    harness.automatic_optimization = False
+    harness.config = OmegaConf.create(
+        {
+            "Optimizers": {"gradient_clip_val": 0.1},
+            "Schedulers": {},
+            "Training": {"Losses": {"log_gan_diagnostics": True}},
+        }
+    )
+    monkeypatch.setattr(
+        torch.nn.utils,
+        "clip_grad_norm_",
+        lambda *_args, **_kwargs: torch.tensor(float("nan")),
+    )
+
+    with pytest.raises(FloatingPointError, match="Non-finite GAN"):
+        training_step_PL.training_step_PL2(harness, _sample_batch(), batch_idx=0)
+
+
 def _small_srgan_config():
     return OmegaConf.create(
         {
@@ -536,6 +598,97 @@ def test_validation_discriminator_metric_is_not_limited_by_image_logging(monkeyp
     SRGAN_model.validation_step(harness, batch, batch_idx=2)
 
     assert "validation/DISC_adversarial_loss" in harness.logged
+
+
+@pytest.mark.parametrize(
+    "losses,match",
+    [
+        (
+            {
+                "texture_selection_nir_weight": 0.5,
+                "texture_selection_rgb_reference": 0.0,
+                "texture_selection_nir_reference": 1.0,
+            },
+            "Invalid normalized RGB/NIR",
+        ),
+        (
+            {
+                "texture_selection_nir_weight": 0.5,
+                "texture_selection_rgb_reference": 1.0,
+                "texture_selection_nir_reference": 1.0,
+            },
+            "requires report_band_metrics",
+        ),
+    ],
+)
+def test_validation_rejects_incomplete_multiband_texture_selection(losses, match):
+    harness = ValidationHarness(in_bands=4, pretrain=True)
+    harness.config.Logging.num_val_images = 0
+    harness.config.Schedulers = {"texture_selection_metric": "val_metrics/texture_selection"}
+    harness.config.Training = {"Losses": losses}
+    harness.content_loss_criterion.return_metrics = lambda *_args, **_kwargs: {
+        "val_metrics/l1": torch.tensor(0.1),
+        "val_metrics/perceptual": torch.tensor(0.2),
+    }
+
+    with pytest.raises(ValueError, match=match):
+        SRGAN_model.validation_step(
+            harness,
+            (torch.ones(1, 4, 2, 2), torch.zeros(1, 4, 2, 2)),
+            batch_idx=0,
+        )
+
+
+def test_validation_logs_live_critic_diagnostics_with_global_relativistic_means():
+    harness = ValidationHarness(in_bands=1, pretrain=False)
+    harness.config.Logging.num_val_images = 0
+    harness.config.Training = {
+        "Losses": {
+            "global_relativistic_average": True,
+            "log_gan_diagnostics": True,
+        }
+    }
+    harness.relativistic_average_d = True
+    harness._ema_applied = True
+    harness._live_validation_prediction = lambda image: image + 0.25
+    harness._critic_validation_scores = [[], []]
+
+    SRGAN_model.validation_step(
+        harness,
+        (torch.ones(2, 1, 2, 2), torch.zeros(2, 1, 2, 2)),
+        batch_idx=0,
+    )
+
+    assert len(harness._critic_validation_scores[0]) == 1
+    assert len(harness._critic_validation_scores[1]) == 1
+    for name in ("real_rel", "fake_rel", "logit_gap", "patch_accuracy"):
+        assert f"validation/critic_live_{name}" in harness.logged
+
+
+def test_validation_epoch_end_gathers_critic_scores_before_auc(monkeypatch):
+    model = SRGAN_model(config=_small_srgan_config(), mode="eval")
+    model._trainer = types.SimpleNamespace(sanity_checking=True)
+    model._critic_validation_scores = [
+        [torch.tensor([3.0, 2.0])],
+        [torch.tensor([-2.0, -1.0])],
+    ]
+    logged = _capture_logs(model, monkeypatch)
+
+    monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.distributed, "get_world_size", lambda: 2)
+
+    def all_gather(outputs, packed):
+        outputs[0].copy_(packed)
+        outputs[1].copy_(torch.tensor([[-3.0, -4.0], [1.0, 0.0]]))
+
+    monkeypatch.setattr(torch.distributed, "all_gather", all_gather)
+
+    model.on_validation_epoch_end()
+
+    # The local rank is perfectly ranked; the deliberately inverted second
+    # rank verifies that the reported value uses the gathered population.
+    assert logged["validation/critic_live_auc"] == pytest.approx(0.5)
+    assert model._critic_validation_scores == [[], []]
 
 
 def test_training_step_dispatches_bound_implementation():
