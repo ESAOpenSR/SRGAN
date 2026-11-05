@@ -1,6 +1,6 @@
 # Configuration
 
-ESA OpenSR relies on YAML files to control every aspect of the training pipeline. This page documents the available keys and how they influence the underlying code. Use `opensr_srgan/configs/config_training_example.yaml` for a smoke test, `config_10m.yaml` for SEN2NAIP-style runs, or the Hydra presets described below for composable experiments.
+ESA OpenSR relies on YAML files to control every aspect of the training pipeline. This page documents the available keys and how they influence the underlying code. Use `opensr_srgan/configs/config_training_example.yaml` for a smoke test, `config_10m.yaml` for a four-band baseline, or the Hydra presets described below for composable experiments.
 
 ## File structure
 
@@ -117,7 +117,7 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 | `perceptual_weight` | `0.1` | Weight of the perceptual feature loss. |
 | `perceptual_metric` | `vgg` | Backbone used for perceptual features (`vgg` or `lpips`). |
 | `vgg_before_activation` | `False` | Compare features before the selected VGG ReLU. |
-| `vgg_input_normalization` | `False` | Apply ImageNet mean/std to VGG inputs; enabled explicitly in the texture recipe. |
+| `vgg_input_normalization` | `False` | Apply ImageNet mean/std to VGG inputs. |
 | `texture_weight` | `0.0` | Local-Gram texture loss weight; zero disables it. Requires a VGG backbone through conv3_4 or deeper. |
 | `texture_grid` | `4` | Number of tiles along each feature axis; must divide the selected feature dimensions. |
 | `fixed_idx` | unset | Optional fixed 3-band indices used by perceptual loss when `in_bands > 3` (recommended: `[0, 1, 2]` for RGB+NIR setups). |
@@ -163,8 +163,6 @@ RRDB, and ICNR fields are ignored with a factory notice.
 | `scaling_factor` | `4` | SwinIR supports 2, 3, or 4. |
 
 For a full flat-YAML example see [Architecture](architecture.md#swinir-generator).
-For reconstruction pretraining and checkpoint requirements see
-[Training](training.md#train-a-swinir-reconstruction-model).
 
 ## Discriminator
 
@@ -308,8 +306,7 @@ Postprocessing:
 
 Older configs without these settings use histogram matching. Back-projection
 options apply only when that method is selected. Hydra exposes the same choices
-through `postprocessing=histogram` and `postprocessing=back_projection`;
-`experiment=sen2naip_texture` selects back-projection explicitly.
+through `postprocessing=histogram` and `postprocessing=back_projection`.
 
 Histogram matching runs before denormalization. Back-projection runs afterward
 against the original LR values and does not clip the corrected result.
@@ -326,10 +323,7 @@ python -m opensr_srgan.train_hydra experiment=10m Training.max_epochs=5 Logging.
 srgan-train experiment=20m Training.gpus=[0,1]
 ```
 
-Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` selects simple defaults, while `experiment/example.yaml`, `experiment/10m.yaml`, and `experiment/20m.yaml` reproduce the shipped flat YAML presets through grouped `data`, `model`, `training`, `logging`, and `postprocessing` configs. `experiment=swinir_sen2naip` adds SwinIR reconstruction pretraining; `experiment=sen2naip_texture` provides the final ESRGAN local-Gram continuation. Choose `experiment=...` for a full known setup; use direct overrides for a temporary change without editing files. See [Hydra Experiments](hydra.md) for a complete walkthrough.
-
-See the [local-Gram continuation recipe](sen2naip-texture.md) for the promoted
-settings, required input paths, and absolute optimizer-step budget.
+Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` selects simple defaults, while `experiment/example.yaml`, `experiment/10m.yaml`, and `experiment/20m.yaml` reproduce the shipped flat YAML presets through grouped `data`, `model`, `training`, `logging`, and `postprocessing` configs. Choose `experiment=...` for a full known setup; use direct overrides for a temporary change without editing files. See [Hydra Experiments](hydra.md) for a complete walkthrough.
 
 ## Tips for managing configurations
 

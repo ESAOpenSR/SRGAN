@@ -40,7 +40,7 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 * **From PyPI for inference** – `python -m pip install opensr-srgan` installs the lightweight package that exposes
   `load_from_config` and `load_inference_model`. The former instantiates a Lightning module from any repo config +
   checkpoint path, while the latter fetches the published RGB-NIR and SWIR presets from the
-  [`simon-donike/SR-GAN`](https://huggingface.co/simon-donike/SR-GAN) space on Hugging Face.
+  [`simon-donike/SR-GAN`](https://huggingface.co/simon-donike/SR-GAN) model repository on Hugging Face.
 * **From source for training & development** – clone this repository when you want to modify architectures, retrain
   models, or work on new datasets. The [Getting started](getting-started.md) guide covers environment setup.
 
@@ -69,7 +69,7 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 
 * [Architecture](architecture.md) explains how the Lightning module orchestrates generators, discriminators, and losses.
 * [Inference](inference.md#prediction-matching) explains enabling and choosing prediction matching.
-* [SEN2NAIP texture recipe](sen2naip-texture.md) documents the promoted ESRGAN full-state continuation.
+* The supported [SEN2-SR model card](https://huggingface.co/simon-donike/SR-GAN/blob/main/models/sen2-sr/v1/README.md) documents its pretrained inference inputs and outputs.
 * [Configuration](configuration.md) documents every YAML field and how it influences training.
 * [Data](data.md) details the supported datasets and how to integrate your own.
 * [Getting started](getting-started.md) walks through environment setup and the first training run.

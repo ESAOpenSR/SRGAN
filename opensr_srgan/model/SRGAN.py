@@ -1024,9 +1024,6 @@ class SRGAN_model(pl.LightningModule):
 
     def _step_plateau_schedulers(self) -> None:
         """Step manual-optimization plateau schedulers from validation metrics."""
-        fixed_restart = getattr(self.config.Schedulers, "fixed_restart", None)
-        if fixed_restart is not None and bool(getattr(fixed_restart, "enabled", False)):
-            return
         trainer = getattr(self, "trainer", None)
         if trainer is None or getattr(trainer, "sanity_checking", False):
             return

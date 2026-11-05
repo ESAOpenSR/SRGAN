@@ -34,7 +34,7 @@ python -m opensr_srgan.train_hydra experiment=10m Training.max_epochs=5 Logging.
 srgan-train experiment=20m Training.gpus=[0,1]
 ```
 
-Use `experiment=...` when you want a complete preset (`example`, `10m`, `20m`, `swinir_sen2naip`, or `sen2naip_texture`). Use direct overrides such as `Training.max_epochs=5` or `Generator.n_blocks=8` for quick one-off changes. See [Hydra Experiments](hydra.md) for the config layout, override patterns, and output-directory behavior.
+Use `experiment=...` when you want a complete preset (`example`, `10m`, or `20m`). Use direct overrides such as `Training.max_epochs=5` or `Generator.n_blocks=8` for quick one-off changes. See [Hydra Experiments](hydra.md) for the config layout, override patterns, and output-directory behavior.
 
 Both legacy entry points accept the same configuration file. The legacy CLI exposes a single optional argument:
 
@@ -42,47 +42,13 @@ Both legacy entry points accept the same configuration file. The legacy CLI expo
 
 GPU assignment is handled directly in the configuration. Set `Training.gpus` to a list of device indices (for example `[0, 1, 2, 3]`) to enable multi-GPU training; a single value such as `[0]` keeps the run on one card. When more than one GPU is listed the trainer activates PyTorch Lightning DDP using `ddp_find_unused_parameters_true` by default, which fits the manual GAN update pattern.
 
-## Train a SwinIR reconstruction model
+## Train a SwinIR model
 
-Install the SEN2NAIP reader with `python -m pip install -e ".[sen2naip]"`, then
-launch the reconstruction preset with your crosssensor manifest and spatial
-split paths:
-
-```bash
-python -m opensr_srgan.train_hydra experiment=swinir_sen2naip \
-  Data.sen2naip_taco_file=/data/sen2naipv2-crosssensor.taco \
-  Data.sen2naip_split_file=/path/to/sen2naip_crosssensor.json \
-  Training.gpus=[0] \
-  Generator.use_checkpoint=true
-```
-
-The [packaged split](sen2naip-texture.md#launch-through-the-shared-trainer) can be
-located with `importlib.resources`; it keeps the same real-pair holdouts as the
-texture recipe. This preset uses a four-band, 4× SwinIR generator with an L1-only
-objective, EMA decay 0.999, and a 30,000-generator-update budget. The discriminator
-stays frozen because `g_pretrain_steps: -1` keeps generator-only training active.
-CSV logging is the default. Set `Logging.wandb.enabled=true` to use W&B.
-
-To use a flat YAML, replace its complete `Generator` section with the
-[documented SwinIR configuration](architecture.md#swinir-generator) and set the
-same reconstruction-training fields. `model=10m_swinir` selects only the model;
-`experiment=swinir_sen2naip` also supplies the reconstruction recipe.
-
-Start from scratch or use a compatible SwinIR checkpoint. ESRGAN/RRDB and official
-upstream SwinIR checkpoints cannot initialize this implementation. The promoted
-[local-Gram recipe](sen2naip-texture.md) remains an ESRGAN full-state continuation.
-Matching can be selected independently with `postprocessing=histogram` or
-`postprocessing=back_projection`; it does not change the reconstruction losses.
-
-## Continue the SEN2NAIP texture experiment
-
-`experiment=sen2naip_texture` and `config_sen2naip_texture.yaml` describe the
-promoted final ESRGAN local-Gram refinement. Supply the real-data manifest,
-spatial split, and `Model.continue_training` checkpoint paths. This restores
-optimizer, scheduler, EMA, callback, and loop state. See the
-[complete recipe](sen2naip-texture.md) for commands, provenance, and the absolute
-150,000-G-update target. Its back-projection default can be overridden without
-changing the training objective.
+Set `Generator.model_type: swinir` or select `model=10m_swinir`, then combine it
+with compatible data and training settings. SwinIR checkpoints must match this
+implementation; switching generators does not convert weights. Prediction
+matching remains independent of the reconstruction objective. See
+[Architecture](architecture.md#swinir-generator) for the generator settings.
 
 ## Initialisation steps - Overview
 The code performs the following, regardless of whether the script is launched from the CLI or via import.
@@ -110,38 +76,26 @@ To disable W&B logging, set `Logging.wandb.enabled: false` in YAML or override i
 The Lightning module logs scalar metrics through the active Lightning logger, either W&B or CSV. Generator-only pretraining, adversarial training, and the EMA helper each contribute their own indicators, so the
 logs make it clear which subsystem is active at any given step.
 
-| Metric | Description | Expected behaviour |
-| --- | --- | --- |
-| `training/pretrain_phase` | Flag indicating whether the generator-only warm-up is running. | Stays at `1` until `g_pretrain_steps` elapses, then remains `0`. |
-| `discriminator/adversarial_loss` | Binary cross-entropy loss of the discriminator on real vs. fake batches. | Drops below ~0.7 as the discriminator learns; continues trending down when D keeps up. |
-| `discriminator/D(y)_prob` | Mean discriminator confidence that HR inputs are real. | Rises toward 0.8–1.0 during stable training. |
-| `discriminator/D(G(x))_prob` | Mean discriminator confidence that SR predictions are real. | Starts low (~0.0–0.2) and climbs toward 0.5 as the generator improves. |
-| `train_metrics/l1` | Mean absolute error between SR and HR tensors and one component of the configured content objective. | Decreases toward 0 as reconstructions sharpen. |
-| `train_metrics/sam` | Spectral angle mapper (radians) averaged over pixels. | Falls toward 0; values <0.1 indicate strong spectral fidelity. |
-| `train_metrics/perceptual` | Perceptual distance (VGG or LPIPS) on selected RGB bands. | Decreases as textures align; exact range depends on the chosen metric. |
-| `train_metrics/tv` | Total variation penalty capturing SR smoothness. | Remains small; near-zero means little high-frequency noise. |
-| `train_metrics/psnr` | Peak signal-to-noise ratio (dB) on normalised tensors. | Climbs above 20 dB early; mature models reach 25–35 dB depending on data. |
-| `train_metrics/ssim` | Structural Similarity Index (0–1). | Increases toward 1.0; >0.8 is typical for converged runs. |
-| `generator/content_loss` | Configured weighted content objective used in both generator-only pretraining and adversarial training. | Should steadily decline and remain stable when adversarial training starts. |
-| `generator/total_loss` | Sum of content and adversarial terms used to update the generator. | Tracks `generator/content_loss` early, then stabilises once adversarial weight ramps in. |
-| `val_metrics/l1` | Validation MAE. | Should roughly match `train_metrics/l1`; lower is better. |
-| `val_metrics/sam` | Validation SAM. | Mirrors the training trend; values <0.1 rad indicate good spectra. |
-| `val_metrics/perceptual` | Validation perceptual distance. | Declines as validation textures improve. |
-| `val_metrics/tv` | Validation total variation. | Stays low; spikes may signal noisy SR outputs. |
-| `val_metrics/psnr` | Validation PSNR. | Rises with image quality; plateaus signal convergence. |
-| `val_metrics/ssim` | Validation SSIM. | Increases toward 1.0; >0.85 suggests good structural reconstructions. |
-| `validation/DISC_adversarial_loss` | Discriminator loss evaluated on validation batches. | Tracks the training discriminator loss; large swings may hint at instability. |
-| `training/adv_loss_weight` | Instantaneous adversarial weight applied to the generator loss. | Sits at 0 during pretrain and ramps to `Training.Losses.adv_loss_beta`. |
-| `lr_discriminator` | Learning rate used for the discriminator optimiser. | Starts at `Optimizers.optim_d_lr` and changes only when schedulers trigger. |
-| `lr_generator` | Learning rate used for the generator optimiser. | Starts at `Optimizers.optim_g_lr` and follows warm-up/plateau scheduling. |
-| `EMA/enabled` | Indicates whether the exponential moving average helper is active. | Constant `1` when EMA is configured, otherwise `0`. |
-| `EMA/decay` | EMA decay coefficient applied to generator weights. | Fixed to the configured decay (e.g. 0.995–0.9999). |
-| `EMA/update_after_step` | Step index after which EMA updates start. | Constant equal to `Training.EMA.update_after_step`. |
-| `EMA/use_num_updates` | Flag showing whether the EMA tracks the number of applied updates. | `1` when `use_num_updates=True`, else `0`. |
-| `EMA/is_active` | Per-step indicator that the EMA performed an update. | `0` until the warm-up expires, then `1` on steps where EMA applies. |
-| `EMA/steps_until_activation` | Countdown of steps remaining before EMA activation. | Decrements to 0 and stays there once active. |
-| `EMA/last_decay` | Effective decay used on the latest EMA update. | Matches the configured decay whenever the EMA updates. |
-| `EMA/num_updates` | Total count of EMA updates applied so far. | Monotonically increases after activation when `use_num_updates=True`. |
+| Metric | Description |
+| --- | --- |
+| `training/pretrain_phase` | Flag indicating whether generator-only warm-up is active. |
+| `discriminator/adversarial_loss` | Discriminator loss on real and generated batches. |
+| `discriminator/D(y)_prob` | Mean discriminator confidence for HR inputs. |
+| `discriminator/D(G(x))_prob` | Mean discriminator confidence for generated inputs. |
+| `train_metrics/l1` / `val_metrics/l1` | Mean absolute error between SR and HR tensors. |
+| `train_metrics/sam` / `val_metrics/sam` | Spectral angle mapper averaged over pixels. |
+| `train_metrics/perceptual` / `val_metrics/perceptual` | Perceptual distance from VGG or LPIPS features. |
+| `train_metrics/tv` / `val_metrics/tv` | Total-variation regularization term. |
+| `train_metrics/psnr` / `val_metrics/psnr` | Peak signal-to-noise ratio. |
+| `train_metrics/ssim` / `val_metrics/ssim` | Structural similarity index. |
+| `generator/content_loss` | Configured weighted reconstruction objective. |
+| `generator/total_loss` | Content and adversarial terms used for the generator update. |
+| `validation/DISC_adversarial_loss` | Discriminator loss on validation batches. |
+| `training/adv_loss_weight` | Current adversarial weight applied to the generator loss. |
+| `lr_discriminator` / `lr_generator` | Optimizer learning rates. |
+| `EMA/enabled`, `EMA/decay`, `EMA/update_after_step` | EMA configuration values. |
+| `EMA/use_num_updates`, `EMA/is_active`, `EMA/steps_until_activation` | EMA update state. |
+| `EMA/last_decay`, `EMA/num_updates` | EMA update diagnostics. |
 
 ## Callbacks
 
@@ -149,10 +103,7 @@ The following callbacks are registered with the Lightning trainer:
 
 | Callback | Purpose |
 | --- | --- |
-| `ModelCheckpoint` | Default top-k selection uses `Schedulers.metric_g`, unless `checkpoint_monitor` overrides it; defaults to two best checkpoints plus `last.ckpt`. |
-| `QualityModelCheckpoint` | Replaces ordinary top-k selection when texture selection is configured; waits for the ramp and checks epoch-average fidelity. |
-| `LatestCheckpoint` | Texture runs save `last.ckpt` after validation and both `last.ckpt` and `final.ckpt` at successful training end, independently of quality improvement. |
-| `MilestoneCheckpoint` | Enabled by `Training.checkpoint_optimizer_steps`; stores full state at explicit absolute optimizer-step counts. |
+| `ModelCheckpoint` | Saves the top checkpoints according to the selected monitor and keeps the latest checkpoint. |
 | `EarlyStopping` | Defaults to `Schedulers.metric_g`, 250 validation checks, and finite-check enabled; monitor, mode, and patience are configurable. |
 
 Checkpoint directories default to `logs/<project>/<timestamp>`. Hydra runs set `Logging.output_dir`, so checkpoints and the resolved `config.yaml` land in Hydra's run directory.
@@ -164,7 +115,7 @@ The script builds a `Trainer` with the following notable arguments:
 * `accelerator='gpu'` with `devices=config.Training.gpus` for CUDA/GPU runs, or `accelerator='cpu'` with `devices=1` for CPU runs. When more than one GPU is requested, the script selects `ddp_find_unused_parameters_true` by default because manual GAN optimisation can leave one branch unused on a given step.
 * `limit_val_batches=config.Training.limit_val_batches` controls validation work. Optional `precision`, `max_steps`, training-batch limits, and sanity-validation limits are forwarded when configured.
 * `logger=[wandb_logger]` to register the active W&B or CSV logger.
-* `callbacks` contains checkpointing and finite-check early stopping, plus any requested texture/latest/milestone callbacks. Learning rates are logged by the Lightning module at the end of each training batch.
+* `callbacks` contains checkpointing and finite-check early stopping. Learning rates are logged by the Lightning module at the end of each training batch.
 
 Finally, `trainer.fit(model, datamodule=pl_datamodule)` launches the optimisation loop and `wandb.finish()` ensures clean shutdown
 of the W&B session.

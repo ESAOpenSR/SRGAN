@@ -54,7 +54,6 @@ include = ["opensr_srgan", "opensr_srgan.*", "deployment", "deployment.*"]
 opensr_srgan = [
   "configs/*.yaml",
   "configs/**/*.yaml",
-  "configs/splits/*.json",
 ]
 deployment = [
   "configs/*.yaml",

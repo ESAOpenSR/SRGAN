@@ -65,9 +65,9 @@ Update at least the following fields:
 * `Model.continue_training`: Provide a path if you want to fully resume interrupted training (optimizer/scheduler/EMA/global-step state).
 * `Training.Losses.perceptual_metric`: Switch to `lpips` if you installed the optional dependency.
 
-For the transformer generator, choose `model=10m_swinir` or the complete
-`experiment=swinir_sen2naip` reconstruction preset. See the
-[SwinIR launch example](training.md#train-a-swinir-reconstruction-model) and
+For the transformer generator, choose `model=10m_swinir` or set
+`Generator.model_type: swinir` in a compatible configuration. See
+[Architecture](architecture.md#swinir-generator) and
 [Configuration](configuration.md) for model and post-processing options.
 
 ## 4. Launch training

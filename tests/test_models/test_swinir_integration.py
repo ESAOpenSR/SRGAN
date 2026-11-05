@@ -42,19 +42,19 @@ def test_swinir_factory_reports_inherited_cnn_options(capsys):
     assert "growth_channels, n_blocks, n_channels" in notice
 
 
-def test_swinir_hydra_presets_compose_and_build():
+def test_swinir_hydra_model_group_composes_and_builds():
     config_dir = ROOT / "opensr_srgan/configs/hydra"
     with hydra.initialize_config_dir(config_dir=str(config_dir), version_base="1.3"):
-        config = hydra.compose(config_name="train", overrides=["experiment=swinir_sen2naip"])
+        config = hydra.compose(config_name="train", overrides=["model=10m_swinir"])
+
     assert config.Generator.model_type == "swinir"
     assert config.Model.in_bands == 4
     assert config.Generator.scaling_factor == 4
-    assert config.Training.pretrain_g_only
-    assert config.Training.g_pretrain_steps == -1
-    assert config.Training.Losses.perceptual_weight == 0
-    assert config.Optimizers.optim_g_lr == pytest.approx(2e-4)
-    assert list(config.Optimizers.betas) == [.9, .99]
-    # Build the real preset, but use a tiny image for a CPU-only forward check.
+    assert config.Data.dataset_type == "ExampleDataset"
+    assert config.Training.device == "cpu"
+
+    # Build the model-group configuration with the default CPU-safe data and
+    # training groups, then use a tiny input for its forward contract.
     generator = build_generator(config).eval()
     assert sum(p.numel() for p in generator.parameters()) > 1_000_000
     with torch.no_grad():

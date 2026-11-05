@@ -22,7 +22,7 @@ Full docs live at **[srgan.opensr.eu](https://srgan.opensr.eu/)**. They cover us
 
 Version **1.1.0** adds [SwinIR configuration and training](docs/architecture.md#swinir-generator),
 [histogram matching and back-projection](docs/inference.md#prediction-matching),
-and a supported [Sen2 SR pretrained model and training recipe](docs/sen2naip-texture.md).
+and a supported [Sen2 SR pretrained model](https://huggingface.co/simon-donike/SR-GAN/blob/main/models/sen2-sr/v1/README.md).
 See the [release notes](CHANGELOG.md) for changes and upgrade notes.
 
 ## 🧠 Highlights
@@ -91,8 +91,9 @@ Follow the [installation instructions](https://srgan.opensr.eu/getting-started/)
 * **Training:** Launch a smoke test with `python -m opensr_srgan.train --config opensr_srgan/configs/config_training_example.yaml`, or use Hydra with `python -m opensr_srgan.train_hydra experiment=example`. Use the `10m` and `20m` presets once the matching datasets are configured.
 * **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/inference/).
 
-For the supported four-band Sentinel-2 recipe, use the `SEN2-SR` preset from
-[simon-donike/SR-GAN](https://huggingface.co/simon-donike/SR-GAN). It accepts
+For the supported four-band Sentinel-2 model, use the `SEN2-SR` preset. Its
+[model card](https://huggingface.co/simon-donike/SR-GAN/blob/main/models/sen2-sr/v1/README.md)
+documents inputs and outputs. It accepts
 red/green/blue/NIR Sentinel-2 DN tensors and returns 2.5 m predictions:
 
 ```bash
@@ -104,9 +105,6 @@ from opensr_srgan import load_inference_model
 model = load_inference_model("SEN2-SR", map_location="cpu")
 prediction = model.predict_step(raw_dn_tensor)
 ```
-
-The exact continuation and checkpoint lineage are documented in
-[docs/sen2naip-texture.md](docs/sen2naip-texture.md).
 
 ---
 

@@ -22,7 +22,7 @@ model = load_inference_model("SEN2-SR", map_location="cpu")
 model = model.to("cuda")
 ```
 
-`load_inference_model` retrieves the configuration and checkpoint that correspond to the selected preset (here the supported four-band Sentinel-2 model), restores the Lightning module, and switches it to evaluation mode so that it is ready for inference. Release assets are downloaded from the structured `models/<preset>/v1/` layout at the package-pinned Hub revision. `map_location` controls checkpoint deserialization only; it does not place the model for inference. Load on CPU, then use `.to("cuda")` for GPU inference or `.to("cpu")` to keep it on CPU.
+`load_inference_model` retrieves the configuration and checkpoint that correspond to the selected preset, restores the Lightning module, and switches it to evaluation mode so that it is ready for inference. `map_location` controls checkpoint deserialization only; it does not place the model for inference. Load on CPU, then use `.to("cuda")` for GPU inference or `.to("cpu")` to keep it on CPU. The supported four-band Sentinel-2 preset is described in its [model card](https://huggingface.co/simon-donike/SR-GAN/blob/main/models/sen2-sr/v1/README.md).
 
 ## 2.2 Instantiate your own model
 
@@ -86,16 +86,14 @@ model.config.Postprocessing = OmegaConf.create({
 })
 sr = model.predict_step(lr)
 
-# Restore the historical method without changing model weights.
+# Select histogram matching without changing model weights.
 model.config.Postprocessing.method = "histogram"
 sr_histogram = model.predict_step(lr)
 ```
 
-For SwinIR, load your own matching SwinIR config and trained checkpoint with
-`load_from_config(..., mode="eval")`. `load_inference_model` accepts the
-published `SEN2-SR`, `RGB-NIR`, and `SWIR` presets; it does not select SwinIR
-by name.
-See [SwinIR reconstruction training](training.md#train-a-swinir-reconstruction-model).
+For SwinIR, load a matching config and trained checkpoint with
+`load_from_config(..., mode="eval")`. Use a checkpoint produced by the same
+architecture; selecting a generator does not convert weights from another model.
 
 Histogram matching keeps the historical sequence: normalize, generate, match,
 then denormalize. Back-projection corrects the denormalized prediction against

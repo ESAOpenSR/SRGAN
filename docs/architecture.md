@@ -102,11 +102,8 @@ to trade additional backward computation for lower activation memory use.
 CNN-only fields such as `n_channels`, `n_blocks`, and `growth_channels` are ignored
 with a factory notice.
 
-The [SwinIR training example](training.md#train-a-swinir-reconstruction-model)
-uses `experiment=swinir_sen2naip` for reconstruction pretraining from scratch.
 ESRGAN/RRDB checkpoints and official upstream SwinIR checkpoints are not compatible
-with this implementation. The successful [local-Gram recipe](sen2naip-texture.md)
-continues an ESRGAN model and remains a separate experiment.
+with this implementation.
 See the [configuration reference](configuration.md#swinir-settings) for all
 SwinIR controls and the [model API](api-reference/model.md#swinir-transformer)
 for its constructor.

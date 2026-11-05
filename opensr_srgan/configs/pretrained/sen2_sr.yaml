@@ -1,4 +1,4 @@
-# SEN2-SR v1 inference configuration.  model_ema.ckpt contains EMA generator
+# SEN2-SR v1 inference configuration.  weights/inference.ckpt contains EMA generator
 # weights, so EMA tracking is disabled for this inference-only configuration.
 Data:
   dataset_type: SEN2NAIP

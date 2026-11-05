@@ -11,11 +11,8 @@ python -m pytest -q
 
 The automated suite covers model components, training logic, data handling, inference, and deployment utilities. CI runs it with CPU-only PyTorch. The separate GPU integration check below is opt-in and requires two CUDA GPUs.
 
-The suite also covers SwinIR gradients and checkpoint round-trips, histogram
-compatibility and back-projection consistency, and CPU full-state texture
-continuation (live/EMA weights, Adam moments, schedulers, step counters, and
-checkpoint-selection history). These checks use synthetic data and do not
-launch the full SEN2NAIP recipe.
+The suite also covers SwinIR gradients and checkpoint round-trips, plus
+histogram compatibility and back-projection consistency.
 
 ## Optional two-GPU DDP smoke test
 

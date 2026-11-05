@@ -205,16 +205,6 @@ def train(config):
         check_on_train_epoch_end=False,
     )  # patience in epochs
 
-    convergence = getattr(config.Schedulers, "convergence", None)
-    if convergence is not None and bool(getattr(convergence, "enabled", False)):
-        from opensr_srgan.utils.training_callbacks import ConvergenceStop
-
-        early_stop_callback = ConvergenceStop(
-            monitor=str(convergence.monitor), min_steps=int(convergence.min_steps),
-            lr_floor=float(config.Schedulers.min_lr),
-            patience=int(convergence.patience), min_delta=float(convergence.min_delta),
-        )
-
     #############################################################################################################
     """ Set Args for Training and Start Training """
     """ Build trainer kwargs and launch training """
@@ -236,20 +226,6 @@ def train(config):
     if milestone_steps:
         from opensr_srgan.utils.training_callbacks import MilestoneCheckpoint
         trainer_kwargs["callbacks"].append(MilestoneCheckpoint(experiment_dir, milestone_steps))
-    fixed_restart = getattr(config.Schedulers, "fixed_restart", None)
-    if fixed_restart is not None and bool(getattr(fixed_restart, "enabled", False)):
-        from opensr_srgan.utils.training_callbacks import FixedRestartSchedule
-
-        schedule_kwargs = OmegaConf.to_container(fixed_restart, resolve=True)
-        schedule_kwargs.pop("enabled")
-        trainer_kwargs["callbacks"].append(FixedRestartSchedule(**schedule_kwargs))
-    stop_at_utc = getattr(config.Training, "stop_at_utc", None)
-    if stop_at_utc:
-        from opensr_srgan.utils.training_callbacks import DeadlineStop
-
-        trainer_kwargs["callbacks"].append(DeadlineStop(
-            stop_at_utc, getattr(config.Training, "deadline_save_margin_seconds", 120)
-        ))
     # Start training
     trainer = pl.Trainer(**trainer_kwargs)
     try:

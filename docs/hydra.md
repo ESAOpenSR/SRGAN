@@ -45,13 +45,11 @@ python -m opensr_srgan.train_hydra experiment=10m
 python -m opensr_srgan.train_hydra experiment=20m
 ```
 
-The additional model/recipe presets use the same group structure:
+The model presets use the same group structure:
 
 | Preset | Purpose | Checkpoint requirement |
 | --- | --- | --- |
-| `model=10m_swinir` | Four-band 4× transformer model; combines with your chosen data/training groups. | Use compatible SwinIR weights when loading a checkpoint. |
-| `experiment=swinir_sen2naip` | [SwinIR reconstruction pretraining](training.md#train-a-swinir-reconstruction-model). | Starts from scratch by default; set real-data manifest and split paths. |
-| `experiment=sen2naip_texture` | [Final ESRGAN local-Gram continuation](sen2naip-texture.md). | Requires an explicit full-state ESRGAN checkpoint plus real-data manifest and split paths. |
+| `model=10m_swinir` | Four-band 4× transformer model; combine it with your chosen data and training groups. | Use compatible SwinIR weights when loading a checkpoint. |
 
 Use direct overrides when you only want to change one or two values for a run:
 
@@ -79,24 +77,21 @@ training:
 python -m opensr_srgan.train_hydra --cfg job model=10m_swinir postprocessing=back_projection
 ```
 
-For a complete SwinIR reconstruction run, set both paths in
-`experiment=swinir_sen2naip` as shown in the
-[training guide](training.md#train-a-swinir-reconstruction-model). Its checkpoint
+Use `model=10m_swinir` with compatible data and training groups. Its checkpoint
 must belong to SwinIR; changing the generator does not convert ESRGAN weights.
 
 Select matching independently from the model or experiment:
 
 ```bash
-python -m opensr_srgan.train_hydra --cfg job experiment=swinir_sen2naip postprocessing=back_projection
-python -m opensr_srgan.train_hydra --cfg job experiment=sen2naip_texture postprocessing=histogram
+python -m opensr_srgan.train_hydra --cfg job model=10m_swinir postprocessing=back_projection
+python -m opensr_srgan.train_hydra --cfg job experiment=example postprocessing=histogram
 ```
 
 `postprocessing=...` selects the config group; `Postprocessing.method=...`
 overrides the underlying YAML field. Both methods' settings are present in the
 groups, so individual controls can also be overridden, for example
-`Postprocessing.back_projection.tolerance=1e-5`. The default group is histogram
-matching, while the texture experiment overrides it to back-projection.
-These choices affect predictions and figures, not the training objective.
+`Postprocessing.back_projection.tolerance=1e-5`. These choices affect
+predictions and figures, not the training objective.
 
 ## Output directories
 

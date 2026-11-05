@@ -1,4 +1,4 @@
-"""Exercise the promoted full-state continuation through the shared trainer."""
+"""Exercise generic full-state continuation through the shared trainer."""
 from pathlib import Path
 
 from omegaconf import OmegaConf
@@ -25,7 +25,7 @@ def assert_same_state(actual, expected):
         assert actual == expected
 
 
-def test_full_texture_state_is_restored_before_first_resumed_update(monkeypatch, tmp_path):
+def test_full_training_state_is_restored_before_first_resumed_update(monkeypatch, tmp_path):
     import importlib
     train_module = importlib.import_module('opensr_srgan.train')
     builder_module = importlib.import_module('opensr_srgan.utils.build_trainer_kwargs')
@@ -76,13 +76,14 @@ def test_full_texture_state_is_restored_before_first_resumed_update(monkeypatch,
         return trainer_kwargs, fit_kwargs
     monkeypatch.setattr(builder_module, 'build_lightning_kwargs', builder)
 
-    cfg = OmegaConf.load(ROOT / 'opensr_srgan/configs/config_sen2naip_texture.yaml')
+    cfg = OmegaConf.load(ROOT / 'opensr_srgan/configs/config_training_example.yaml')
     cfg.Model.continue_training = False  # Create only the synthetic source checkpoint.
-    cfg.Data.sen2naip_taco_file = 'unused-by-test-datamodule'
-    cfg.Data.sen2naip_split_file = 'unused-by-test-datamodule'
+    cfg.Model.in_bands = 4
+    cfg.Generator.model_type = 'esrgan'
     cfg.Generator.n_channels = 4
     cfg.Generator.n_blocks = 1
     cfg.Generator.growth_channels = 2
+    cfg.Discriminator.model_type = 'patchgan'
     cfg.Discriminator.n_blocks = 1
     cfg.Training.device = 'cpu'
     cfg.Training.gpus = []
@@ -93,8 +94,28 @@ def test_full_texture_state_is_restored_before_first_resumed_update(monkeypatch,
     cfg.Training.val_check_interval = 1.0
     cfg.Training.limit_val_batches = 1
     cfg.Training.adv_loss_ramp_steps = 0
+    cfg.Training.pretrain_g_only = False
+    cfg.Training.g_pretrain_steps = 0
+    cfg.Training.EMA.enabled = True
+    cfg.Training.EMA.decay = .99
+    cfg.Training.Losses.l1_weight = .01
+    cfg.Training.Losses.sam_weight = .005
+    cfg.Training.Losses.perceptual_weight = 1.0
+    cfg.Training.Losses.texture_weight = .2
+    cfg.Training.Losses.texture_grid = 4
+    cfg.Training.Losses.vgg_input_normalization = True
+    cfg.Training.Losses.vgg_before_activation = True
+    cfg.Training.Losses.fixed_idx = None
+    cfg.Training.Losses.validation_fixed_idx = [0, 1, 2]
+    cfg.Training.Losses.report_band_metrics = True
+    cfg.Training.Losses.global_relativistic_average = True
+    cfg.Training.Losses.r1_normalize_patch_mean = True
     cfg.Training.checkpoint_optimizer_steps = [4, 6]
     cfg.Training.Losses.texture_selection_max_l1 = 2.0
+    cfg.Schedulers.checkpoint_monitor = 'val_metrics/texture_selection'
+    cfg.Schedulers.texture_selection_metric = 'val_metrics/texture_selection'
+    cfg.Schedulers.d_lr_ratio_to_g = .1
+    cfg.Optimizers.optim_d_lr = cfg.Optimizers.optim_g_lr * .1
     cfg.Schedulers.g_warmup_steps = 2
     cfg.Logging.local_images = False
     cfg.Logging.num_val_images = 0
