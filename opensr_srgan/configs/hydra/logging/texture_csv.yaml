@@ -2,12 +2,12 @@
 
 Logging:
   output_dir: null
-  num_val_images: 4
+  num_val_images: 8
   local_images: true
   wandb:
     enabled: false
     entity: null
-    project: sen2naip_texture
+    project: sen2naip_texture_local
     name: null
     group: null
     id: null

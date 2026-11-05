@@ -43,11 +43,20 @@ class _Preset:
         Name of the YAML configuration file inside the repository.
     checkpoint_filename : str
         Name of the model checkpoint file inside the repository.
+    revision : str, optional
+        Immutable Hugging Face revision for the released artifact.  ``None``
+        keeps historical presets on the Hub default revision.
+    strict : bool
+        Whether inference must load the checkpoint as a complete model state.
+        Release artifacts are strict; the two historical presets remain
+        tolerant for backwards compatibility.
     """
 
     repo_id: str
     config_filename: str
     checkpoint_filename: str
+    revision: Optional[str] = None
+    strict: bool = False
 
 
 _PRESETS = {
@@ -60,6 +69,13 @@ _PRESETS = {
         repo_id="simon-donike/SR-GAN",
         config_filename="config_SWIR.yaml",
         checkpoint_filename="SWIR_6band_inference.ckpt",
+    ),
+    "SEN2-SR": _Preset(
+        repo_id="simon-donike/SR-GAN",
+        config_filename="sen2-sr-v1/config.yaml",
+        checkpoint_filename="sen2-sr-v1/model_ema.ckpt",
+        revision="b55d470dcb5062a4633a482da701d113d3d1e24b",
+        strict=True,
     ),
 }
 
@@ -112,6 +128,7 @@ def load_from_config(
     *,
     map_location: Optional[Union[str, torch.device]] = None,
     mode: str = "train",
+    strict: bool = False,
 ) -> LightningModule:
     """Instantiate an :class:`SRGAN_model` from a configuration and optional checkpoint.
 
@@ -126,6 +143,10 @@ def load_from_config(
         Device mapping passed to :func:`torch.load` when deserializing the checkpoint.
     mode : {"train", "eval"}, default="train"
         Desired mode in which to initialize the model.
+    strict : bool, default=False
+        Require the checkpoint state to exactly match the instantiated model.
+        This is used by supported release artifacts; historical checkpoints
+        retain tolerant loading by default.
 
     Returns
     -------
@@ -156,10 +177,18 @@ def load_from_config(
         with _maybe_download(checkpoint_uri) as resolved_path:
             checkpoint = load_checkpoint(str(resolved_path), map_location=map_location)
         state_dict = checkpoint.get("state_dict", checkpoint)
-        model.load_state_dict(state_dict, strict=False)
+        model.load_state_dict(state_dict, strict=strict)
 
         if model.ema is not None and "ema_state" in checkpoint:
-            model.ema.load_state_dict(checkpoint["ema_state"])
+            # EMA checkpoints may have been produced on another host/rank and
+            # record e.g. ``cuda:0``.  Treat that as serialization metadata,
+            # not an instruction to allocate a device during CPU inference.
+            ema_state = dict(checkpoint["ema_state"])
+            ema_cfg = getattr(
+                getattr(getattr(model, "config", None), "Training", None), "EMA", None
+            )
+            ema_state["device"] = getattr(ema_cfg, "device", None)
+            model.ema.load_state_dict(ema_state)
 
     model.eval()
     return model
@@ -170,6 +199,7 @@ def load_inference_model(
     *,
     cache_dir: Optional[Union[str, Path]] = None,
     map_location: Optional[Union[str, torch.device]] = None,
+    revision: Optional[str] = None,
 ) -> LightningModule:
     """Load a pretrained SRGAN model from the Hugging Face Hub.
 
@@ -178,12 +208,15 @@ def load_inference_model(
 
     Parameters
     ----------
-    preset : {"RGB-NIR", "SWIR"}
+    preset : {"RGB-NIR", "SWIR", "SEN2-SR"}
         Name of the pretrained model variant to load.
     cache_dir : str or Path, optional
         Directory to cache the downloaded files. Uses the default HF cache if omitted.
     map_location : str or torch.device, optional
         Device mapping for checkpoint deserialization.
+    revision : str, optional
+        Hugging Face commit revision.  This overrides the release revision
+        bundled with a preset and is useful for testing a candidate artifact.
 
     Returns
     -------
@@ -226,23 +259,32 @@ def load_inference_model(
             "Install the project extras or run 'pip install huggingface-hub'."
         ) from exc
 
+    download_kwargs = {
+        "repo_id": preset_meta.repo_id,
+        "cache_dir": None if cache_dir is None else str(cache_dir),
+    }
+    resolved_revision = revision if revision is not None else preset_meta.revision
+    if resolved_revision is not None:
+        download_kwargs["revision"] = resolved_revision
+
     config_path = hf_hub_download(
-        repo_id=preset_meta.repo_id,
         filename=preset_meta.config_filename,
-        cache_dir=None if cache_dir is None else str(cache_dir),
+        **download_kwargs,
     )
     checkpoint_path = hf_hub_download(
-        repo_id=preset_meta.repo_id,
         filename=preset_meta.checkpoint_filename,
-        cache_dir=None if cache_dir is None else str(cache_dir),
+        **download_kwargs,
     )
 
-    return load_from_config(
-        config_path,
-        checkpoint_path,
-        map_location=map_location,
-        mode="eval",
-    )
+    load_kwargs = {
+        "map_location": map_location,
+        "mode": "eval",
+    }
+    # Preserve the exact legacy loader call for historical presets, including
+    # third-party wrappers that implemented the old function signature.
+    if preset_meta.strict:
+        load_kwargs["strict"] = True
+    return load_from_config(config_path, checkpoint_path, **load_kwargs)
 
 
 """

@@ -1,123 +1,111 @@
-# SEN2NAIP local-Gram fine-tuning
+# SEN2-SR v1: supported Sentinel-2 recipe
 
-This recipe promotes the final ESRGAN refinement used by
-`real-rgb-localgram-100k-to150k-20261030` on `exp` (`fd11c4b`). It continues a
-compatible **full training checkpoint**. It does not reproduce the earlier
-reconstruction, texture pilots, or dataset comparisons, and it does not start
-from random weights. SwinIR is a separate generator and cannot load this recipe's
-ESRGAN checkpoint.
+SEN2-SR v1 is the supported four-band ESRGAN checkpoint for Sentinel-2 to
+2.5 m super-resolution. It is a preserved continuation of the successful
+real-pair run, not a from-scratch retraining recipe. The source was the selected
+200k-generator-update synthetic checkpoint, followed by real crosssensor
+refinement. The preserved final state stopped at 154,292 generator updates
+(308,584 Lightning optimizer steps) after the run plateaued.
 
-## Launch through the shared trainer
+The full state is preserved locally at
+`logs/sen2naip_texture/real-from200k-48h-20261103/texture/final.ckpt`.
+`last.ckpt` is byte-identical. Its SHA-256 is
+`3848755551ec5aec00ac820840e1dcdf59e7d847d0a7dec09dd3d2d89b956b6f`.
+The matching resolved configuration is
+`texture/config.yaml`; the release continuation template is
+`opensr_srgan/configs/config_sen2naip_texture.yaml`.
 
-Install the optional dataset reader with `pip install -e '.[sen2naip]'` (or
-`pip install 'opensr-srgan[sen2naip]'` for an installed release containing this
-recipe). The reader is pinned to `tacoreader==0.6.5`; version 2 uses a different API.
+## Public inference preset
 
-Locate the packaged spatial split from any working directory:
+The Hugging Face repository `simon-donike/SR-GAN` publishes the `SEN2-SR`
+preset as `sen2-sr-v1/config.yaml` and `sen2-sr-v1/model_ema.ckpt`. The latter
+contains the EMA generator weights exported from the verified full checkpoint;
+the inference config therefore sets `Training.EMA.enabled: false`. The public
+config keeps four-band `normalise_10k` input handling and explicit back
+projection.
+
+The preset pins Hugging Face commit
+`b55d470dcb5062a4633a482da701d113d3d1e24b` so config and weights resolve together.
+
+The full resumable checkpoint is `sen2-sr-v1/model_full.ckpt`. Download the
+checkpoints, portable training config, and split with:
 
 ```bash
-python -c 'from importlib.resources import files; print(files("opensr_srgan").joinpath("configs/splits/sen2naip_crosssensor.json"))'
+hf download simon-donike/SR-GAN --include 'sen2-sr-v1/*' --local-dir ./sen2-model
 ```
 
-Supply that path, the real crosssensor TACO manifest, and a full checkpoint:
+Install this version from `dev` with
+`pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'`.
+The public preset downloads the matching config and EMA weights:
+
+```python
+from opensr_srgan import load_inference_model
+
+model = load_inference_model("SEN2-SR", map_location="cpu")
+prediction = model.predict_step(raw_dn_tensor)
+```
+
+For files downloaded manually:
+
+```python
+from opensr_srgan import load_from_config
+
+model = load_from_config(
+    "sen2-model/sen2-sr-v1/config.yaml",
+    "sen2-model/sen2-sr-v1/model_ema.ckpt",
+    mode="eval",
+    map_location="cpu",
+)
+prediction = model.predict_step(raw_dn_tensor)  # CPU tensor in raw DN units
+```
+
+`model(raw_normalized_tensor)` or `model.generator(...)` is the raw forward
+path and returns reflectance on the normalized scale, without clipping. For user
+inputs in Sentinel-2 DN units, `predict_step` performs normalization, runs the
+EMA-exported generator, denormalizes to DN units, and applies back projection to
+match the LR measurement. It returns a CPU tensor. Large scenes still require
+windowing and stitching through the tiled inference tooling.
+
+## Exact continuation recipe
+
+Use the flat config or the Hydra experiment. Replace all `???` paths with the
+local TACO manifest, packaged split manifest, and verified full checkpoint.
 
 ```bash
+python -m opensr_srgan.train --config opensr_srgan/configs/config_sen2naip_texture.yaml
+
 python -m opensr_srgan.train_hydra experiment=sen2naip_texture \
   Data.sen2naip_taco_file=/data/sen2naipv2-crosssensor.taco \
   Data.sen2naip_split_file=/path/to/sen2naip_crosssensor.json \
-  Model.continue_training=/checkpoints/full-state-100000G.ckpt
+  Model.continue_training=/checkpoints/sen2-sr-v1/model_full.ckpt
 ```
 
-`srgan-train` accepts the same overrides. Inspect the composition without training
-with `--cfg job`. Alternatively, copy the packaged
-`configs/config_sen2naip_texture.yaml`, replace its three `???` paths, and run
-`python -m opensr_srgan.train --config /path/to/recipe.yaml`.
-Both interfaces call the same trainer. Hydra uses the existing timestamped run
-folder without changing the working directory; the flat YAML uses the normal
-trainer output-directory rules. Use a fresh output folder for each continuation.
+`Training.max_steps: 328584` is an absolute optimizer-step target: from the
+preserved 308,584-step state it permits 10,000 additional generator updates.
+The configuration's nominal optimizer rates are 5e-6 for G and 5e-7 for D,
+but a full-state resume restores the scheduler and optimizer state. The saved
+checkpoint was actually at 1e-6 (G) and 1e-7 (D) when stopped; those restored
+values take precedence. Keep `Model.load_checkpoint: false` for a full resume.
 
-`Model.continue_training` restores live G/D weights, EMA, optimizers, schedulers,
-callback state, and loop counters. Leave `Model.load_checkpoint: false`:
-weights-only initialization would reset the successful training history. The
-source checkpoint remains unchanged. There is no automatic checkpoint search or
-long-running job launch when installing or inspecting the preset.
+The recipe uses four-band red/green/blue/NIR data, aligned 64×64 to 256×256
+crops, spatial split seed 2025, EMA decay 0.99, local-Gram texture weight
+0.4685153484, VGG perceptual weight 1.0, L1 0.01, SAM 0.005, GAN 0.00125,
+normalized patch R1, global relativistic averages, and ImageNet VGG input
+normalization with preactivation features. Validation fixes perceptual RGB to
+bands `[0, 1, 2]` while training uses shuffled triplets. The split contains
+6,401 training, 800 validation, and 799 reserved test pairs. The split manifest
+must remain unchanged for comparable evaluation. The packaged manifest preserves
+the run's validation ordering, with its 16 displayed scenes first; spatial
+membership is unchanged from the original seed-2025 split. Its SHA-256 is
+`218d5d73aec72bbb17a3853606759439f70cb28a1cafe298ee505234b2b21c5d`.
 
-## Settings and budget
+The public model uses the preserved final EMA state from the stopped run;
+it is not claimed to be the lowest historical validation metric. The strict
+multiband fidelity guards were not all met, so this is not a top-k winner. Full
+state checkpoints include live G/D tensors, EMA, Adam, scheduler, loop, and
+callback state. The inference-only artifact intentionally retains only the EMA
+generator needed for deployment.
 
-| Component | Promoted settings |
-| --- | --- |
-| Generator | Four-band ESRGAN, 23 RRDBs, 64 channels, growth 32, residual scale 0.2, 4× ICNR upsampling |
-| Discriminator | Three-layer PatchGAN, relativistic-average BCE |
-| Loss | L1 0.01; SAM 0.005; RGB VGG 1.0; local Gram 1.874061393737793; GAN 0.005; TV 0 |
-| VGG | ImageNet input normalization; preactivation conv5_4 perceptual features; conv2_2/conv3_4 local Gram features; grid 4 |
-| Optimizers | G/D 1e-5 / 1e-6; Adam betas 0.9 / 0.99; gradient clip 1.0 |
-| EMA | Decay 0.99, with restored update history |
-| Data | Four bands, division by 10000, aligned 64×64 / 256×256 crops, batch 6 per GPU |
-| Runtime | Two GPUs, bf16 mixed precision, validation every 250 training batches |
-
-`Training.max_steps: 300000` is an **absolute** Lightning optimizer-step target,
-not 300,000 additional steps. GAN batches update D and G once each. Continuing
-from 100,000 G updates (200,000 optimizer steps) therefore allows 50,000 more G
-updates, ending at 150,000 total. Milestones preserve full state every 5,000 G
-updates between 105,000 and 150,000. Raise the absolute target explicitly when
-continuing a checkpoint that has already reached it.
-
-D/G learning-rate coupling remains 0.1 through warmup, G plateau changes, and
-resume. The independent D plateau scheduler is disabled. G monitors raw
-validation perceptual loss with an absolute threshold of 0.001, after the
-adversarial ramp. Existing configs keep their historical VGG input behavior
-unless `Training.Losses.vgg_input_normalization: true` is set; this recipe enables
-it explicitly, together with `vgg_before_activation: true`.
-
-Selection history is retained when resuming into a fresh output directory.
-Historical best-checkpoint paths remain read-only references in their original
-directory.
-
-Top-k selection monitors `perceptual + 0.01 * L1`. Checkpoints become eligible
-after the adversarial ramp and only when globally averaged validation L1 is at
-most 0.05. Latest/final full-state saves run independently of top-k improvement;
-`last.ckpt` follows validation and both `last.ckpt` and `final.ckpt` are saved at
-normal training end. Full-state restoration retains scheduler, warmup, optimizer,
-and EMA history; configuration LR values do not reset restored optimizers.
-
-## Data and provenance
-
-Use the real Sentinel-2/NAIP crosssensor variant, with bands ordered red, green,
-blue, NIR. The packaged split assigns centroid grid cells of 0.25 degrees using
-seed 2025: **6,401 train, 800 validation, 799 reserved test** pairs. Its exact
-record indices and IDs are validated against the manifest. Training uses fresh
-paired crops, rotations, and flips; validation uses fixed center crops. The test
-indices are excluded from both training and validation. No synthetic variants or
-experiment orchestration scripts are needed.
-
-The recipe's RNG seed is 20261028. Its configured fallback split seed does not
-replace the mandatory spatial manifest. Retain that manifest for comparable
-validation; changing it defines a different experiment.
-
-- Source config SHA-256: `37786d8a5438030d6617c2b4c788cf4996eace793a60545dea6a756b7a4a3225`.
-- Packaged split SHA-256: `d2261258df5af4cca513f7f0f5172de479bd7d7e2a1c2b60ad41b34584b369d6`.
-- Preserved 100k-G source checkpoint SHA-256: `6ccd0a35cfbf6461b614e61603dfc03eee71dad50a33f329df8b70e7f86888c9`.
-
-The promoted config changes machine paths, output location, logging identity, and
-explicit compatibility settings. It removes the disabled experimental convergence
-block. Loss weights, model, optimizer, scheduler, validation, and milestone
-settings otherwise match the saved run. The calibrated Gram weight belongs to
-this RGB feature setup and is not a universal default for other data or backbones.
-
-## Logging and prediction matching
-
-CSV is the default. Local validation RGB/NIR panels retain EMA/live comparisons
-and add matched SR, with a common display range. To enable W&B, set
-`Logging.wandb.enabled=true` and your entity/project. No experiment run ID is
-reused; optional `name`, `group`, `id`, and `resume` settings remain available for
-an intentional continuation of your own logging run.
-
-This recipe selects `postprocessing=back_projection`. Override with
-`postprocessing=histogram` if desired. Matching affects prediction and comparison
-figures; losses, validation metrics, and model selection use raw output. Older
-recipes default to histogram matching. See [prediction matching](inference.md#prediction-matching)
-for the value-range and correction settings.
-
-Inspect scene structure and RGB/NIR texture alongside validation metrics. The
-recipe records promising experimental settings, not a guarantee of better
-performance; test data must remain outside checkpoint selection.
+CSV logging is the default and W&B is disabled in the release config. Set a new
+W&B run identity explicitly when reproducing the continuation; do not reuse the
+historical run ID or deadline settings.

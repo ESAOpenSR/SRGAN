@@ -65,7 +65,7 @@ class GeneratorContentLoss(nn.Module):
     Args:
         cfg: Configuration object (OmegaConf/dict-like) with fields under:
             - ``Training.Losses.{l1_weight,sam_weight,perceptual_weight,tv_weight}``
-            - ``Training.Losses.{max_val,ssim_win,fixed_idx}``
+            - ``Training.Losses.{max_val,ssim_win,fixed_idx,validation_fixed_idx,report_band_metrics}``
             - ``Training.Losses.perceptual_metric`` in {``"vgg"``, ``"lpips"``}
             - ``TruncatedVGG.{i,j}`` (if VGG is used)
         testing (bool, optional): If True, do not load pretrained VGG weights
@@ -116,6 +116,15 @@ class GeneratorContentLoss(nn.Module):
                 raise ValueError("fixed_idx must have length 3")
         self.register_buffer(
             "fixed_idx", fixed_idx if fixed_idx is not None else None, persistent=False
+        )
+        validation_idx = _cfg_get(cfg, ["Training", "Losses", "validation_fixed_idx"], None)
+        if validation_idx is not None:
+            validation_idx = torch.as_tensor(validation_idx, dtype=torch.long)
+            if validation_idx.ndim != 1 or validation_idx.numel() != 3:
+                raise ValueError("validation_fixed_idx must have length 3")
+        self.register_buffer("validation_fixed_idx", validation_idx, persistent=False)
+        self.report_band_metrics = bool(
+            _cfg_get(cfg, ["Training", "Losses", "report_band_metrics"], False)
         )
 
         # Only init model if perceptual weight > 0
@@ -296,14 +305,16 @@ class GeneratorContentLoss(nn.Module):
         return _ensure_finite(ang.mean())
 
     def _prepare_perceptual_input(
-        self, sr: torch.Tensor, hr: torch.Tensor
+        self, sr: torch.Tensor, hr: torch.Tensor, *, for_metrics: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Select three channels for perceptual computation.
 
         Inputs with more than three bands use three unique indices from a fresh
         random permutation by default, in both training and metric evaluation.
         SR and HR share the selected indices and order. An explicit
-        ``fixed_idx`` overrides this policy. Three-band inputs stay unchanged;
+        ``fixed_idx`` overrides this policy. ``validation_fixed_idx`` can
+        independently fix metric evaluation without changing training samples.
+        Three-band inputs stay unchanged;
         one- and two-band inputs repeat channels to form a triplet.
 
         Args:
@@ -327,8 +338,13 @@ class GeneratorContentLoss(nn.Module):
             # already 3 channels, return as is
             return sr, hr
         else:
-            if self.fixed_idx is not None:
-                idx = self.fixed_idx.to(sr.device)
+            fixed_idx = (
+                self.validation_fixed_idx
+                if for_metrics and self.validation_fixed_idx is not None
+                else self.fixed_idx
+            )
+            if fixed_idx is not None:
+                idx = fixed_idx.to(sr.device)
                 if int(idx.min()) < 0 or int(idx.max()) >= C:
                     raise ValueError(
                         f"fixed_idx values must be valid channel indices for C={C}."
@@ -443,7 +459,9 @@ class GeneratorContentLoss(nn.Module):
 
         # Perceptual distance on 3 selected bands
         if self.perceptual_model != None and self.perc_w != 0.0:
-            sr_3, hr_3 = self._prepare_perceptual_input(sr=sr, hr=hr)
+            sr_3, hr_3 = self._prepare_perceptual_input(
+                sr=sr, hr=hr, for_metrics=not build_graph
+            )
             comps["perceptual"] = self._perceptual_distance(
                 sr_3, hr_3, build_graph=build_graph
             )
@@ -452,7 +470,9 @@ class GeneratorContentLoss(nn.Module):
 
         if self.texture_w:
             if self.perc_w == 0:
-                sr_3, hr_3 = self._prepare_perceptual_input(sr=sr, hr=hr)
+                sr_3, hr_3 = self._prepare_perceptual_input(
+                    sr=sr, hr=hr, for_metrics=not build_graph
+                )
             comps["texture"] = _compute(
                 self.texture_w, lambda: self._texture_distance(sr_3, hr_3)
             )
@@ -480,6 +500,23 @@ class GeneratorContentLoss(nn.Module):
 
             comps["psnr"] = _ensure_finite(psnr).detach()
             comps["ssim"] = _ensure_finite(ssim).detach()
+
+            if not build_graph and self.report_band_metrics and sr.shape[1] == 4:
+                for name, bands in (("rgb", slice(0, 3)), ("nir", slice(3, 4))):
+                    prediction, reference = sr_metric[:, bands], hr_metric[:, bands]
+                    comps[f"l1_{name}"] = _ensure_finite(F.l1_loss(sr[:, bands], hr[:, bands]))
+                    comps[f"psnr_{name}"] = _ensure_finite(
+                        km.psnr(prediction, reference, max_val=safe_max_val).mean()
+                    )
+                    comps[f"ssim_{name}"] = _ensure_finite(km.ssim(
+                        prediction, reference, window_size=self.ssim_win,
+                        max_val=safe_max_val,
+                    ).mean())
+                if self.perceptual_model is not None and self.perc_w:
+                    comps["perceptual_nir"] = self._perceptual_distance(
+                        sr[:, 3:4].repeat(1, 3, 1, 1),
+                        hr[:, 3:4].repeat(1, 3, 1, 1), build_graph=False,
+                    )
 
         return comps
 

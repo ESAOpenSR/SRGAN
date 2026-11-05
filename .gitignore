@@ -18,6 +18,8 @@ gitlog.txt
 __pycache__/
 playground
 pretrained
+!opensr_srgan/configs/pretrained/
+!opensr_srgan/configs/pretrained/sen2_sr.yaml
 
 # Test / coverage artifacts
 .coverage

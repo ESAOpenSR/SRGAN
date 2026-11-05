@@ -1,4 +1,5 @@
 import torch
+from .adversarial import relativistic_means, normalized_patch_r1
 
 
 def training_step_PL2(self, batch, batch_idx):
@@ -39,6 +40,9 @@ def training_step_PL2(self, batch, batch_idx):
     sr_imgs = self.forward(lr_imgs)
     use_wasserstein = getattr(self, "adv_loss_type", "gan") == "wasserstein"
     use_relativistic = bool(getattr(self, "relativistic_average_d", False))
+    loss_cfg = getattr(getattr(getattr(self, "config", None), "Training", None), "Losses", None)
+    global_average = bool(getattr(loss_cfg, "global_relativistic_average", False))
+    diagnostics = bool(getattr(loss_cfg, "log_gan_diagnostics", False))
 
     # Compute and log the adversarial weight exactly once per generator update.
     def _adv_weight():
@@ -70,7 +74,12 @@ def training_step_PL2(self, batch, batch_idx):
                 and hasattr(precision_plugin, "unscale_optimizer")
             ):
                 precision_plugin.unscale_optimizer(optimizer)
-            torch.nn.utils.clip_grad_norm_(module.parameters(), gradient_clip_val)
+            norm = torch.nn.utils.clip_grad_norm_(module.parameters(), gradient_clip_val)
+            if diagnostics:
+                if not torch.isfinite(norm):
+                    raise FloatingPointError("Non-finite GAN parameter gradients")
+                name = "generator" if module is self.generator else "discriminator"
+                self.log(f"gradients/{name}_norm_before_clip", norm.detach(), sync_dist=True)
 
     # ======================================================================
     # SECTION: Pretraining phase gate
@@ -134,7 +143,8 @@ def training_step_PL2(self, batch, batch_idx):
 
     # Get R1 Gamma
     r1_gamma = getattr(self, "r1_gamma", 0.0)
-    hr_imgs.requires_grad_(r1_gamma > 0)  # enable grad for R1 penalty if needed
+    normalized_r1 = bool(getattr(loss_cfg, "r1_normalize_patch_mean", False))
+    hr_imgs.requires_grad_(r1_gamma > 0 and not normalized_r1)
 
     hr_discriminated = self.discriminator(hr_imgs)  # D(y)
     sr_discriminated = self.discriminator(sr_imgs.detach())  # D(G(x)) w/o grad to G
@@ -148,8 +158,8 @@ def training_step_PL2(self, batch, batch_idx):
 
         if use_relativistic:
             # Relativistic Average GAN loss
-            real_mean = hr_discriminated.mean()
-            fake_mean = sr_discriminated.mean()
+            real_mean, fake_mean = relativistic_means(
+                hr_discriminated, sr_discriminated, global_batch=global_average)
 
             sr_discriminated_rel = sr_discriminated - real_mean
             hr_discriminated_rel = hr_discriminated - fake_mean
@@ -171,15 +181,26 @@ def training_step_PL2(self, batch, batch_idx):
 
     # R1 Gradient Penalty
     r1_penalty = torch.zeros((), device=hr_imgs.device, dtype=hr_imgs.dtype)
+    raw_r1 = r1_penalty
     if r1_gamma > 0:
-        grad_real = torch.autograd.grad(
-            outputs=hr_discriminated.sum(),
-            inputs=hr_imgs,
-            create_graph=True,
-            retain_graph=True,
-        )[0]
-        grad_penalty = grad_real.pow(2).reshape(grad_real.size(0), -1).sum(dim=1)
-        r1_penalty = 0.5 * r1_gamma * grad_penalty.mean()
+        if normalized_r1:
+            interval = int(getattr(loss_cfg, "r1_interval", 16))
+            origin = int(getattr(loss_cfg, "r1_start_optimizer_step", 0))
+            if interval < 1:
+                raise ValueError("r1_interval must be positive")
+            if ((self.global_step - origin) // 2) % interval == 0:
+                raw_r1 = normalized_patch_r1(self.discriminator, hr_imgs)
+                r1_penalty = r1_gamma * interval * raw_r1
+        else:
+            grad_real = torch.autograd.grad(
+                outputs=hr_discriminated.sum(), inputs=hr_imgs,
+                create_graph=True, retain_graph=True,
+            )[0]
+            grad_penalty = grad_real.pow(2).reshape(grad_real.size(0), -1).sum(dim=1)
+            r1_penalty = 0.5 * r1_gamma * grad_penalty.mean()
+    if diagnostics:
+        self.log("discriminator/r1_raw", raw_r1.detach(), sync_dist=True)
+        self.log("discriminator/adversarial_loss_without_r1", (loss_real + loss_fake).detach(), sync_dist=True)
 
     adversarial_loss = (
         loss_real + loss_fake + r1_penalty
@@ -204,8 +225,7 @@ def training_step_PL2(self, batch, batch_idx):
     if use_relativistic and not use_wasserstein:
         # Standard probabilities are less informative in RaGAN mode; log relativistic ones too.
         with torch.no_grad():
-            real_mean = hr_discriminated.mean()
-            fake_mean = sr_discriminated.mean()
+            # Reuse the means from the discriminator loss.
 
             sr_discriminated_rel = sr_discriminated - real_mean
             hr_discriminated_rel = hr_discriminated - fake_mean
@@ -254,9 +274,8 @@ def training_step_PL2(self, batch, batch_idx):
             # Relativistic Average GAN loss for G
             with torch.no_grad():
                 hr_discriminated = self.discriminator(hr_imgs)
-                real_mean = hr_discriminated.mean()
-
-            fake_mean = sr_discriminated_for_g.mean()
+            real_mean, fake_mean = relativistic_means(
+                hr_discriminated, sr_discriminated_for_g, global_batch=global_average)
             sr_discriminated_rel = sr_discriminated_for_g - real_mean
             hr_discriminated_rel = hr_discriminated - fake_mean
 

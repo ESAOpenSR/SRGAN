@@ -1,6 +1,6 @@
 # @package _global_
 
-# Full-state continuation of the selected real-pair local-Gram refinement.
+# Supported full-state continuation of the selected real-pair local-Gram refinement.
 defaults:
   - override /data: sen2naip_texture
   - override /model: sen2naip_texture

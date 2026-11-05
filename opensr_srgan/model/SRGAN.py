@@ -553,10 +553,24 @@ class SRGAN_model(pl.LightningModule):
             texture_l1_weight = float(
                 getattr(loss_cfg, "texture_selection_l1_weight", 0.01)
             )
+            nir_weight = float(getattr(loss_cfg, "texture_selection_nir_weight", 0.0))
+            perceptual_selection = metrics["val_metrics/perceptual"]
+            if nir_weight:
+                rgb_reference = float(getattr(loss_cfg, "texture_selection_rgb_reference", 0.0))
+                nir_reference = float(getattr(loss_cfg, "texture_selection_nir_reference", 0.0))
+                if not 0 < nir_weight <= 1 or min(rgb_reference, nir_reference) <= 0:
+                    raise ValueError("Invalid normalized RGB/NIR selection weights/references")
+                if "val_metrics/perceptual_nir" not in metrics:
+                    raise ValueError("RGB/NIR texture selection requires report_band_metrics for four-band validation")
+                perceptual_selection = (
+                    (1 - nir_weight) * metrics["val_metrics/perceptual"] / rgb_reference
+                    + nir_weight * metrics["val_metrics/perceptual_nir"] / nir_reference
+                )
+                self.log("val_metrics/multiband_perceptual", perceptual_selection, sync_dist=True)
             # Keep this metric on its natural scale for graphs and schedulers.
             # QualityModelCheckpoint gates complete epochs independently.
             texture_selection = (
-                texture_perceptual_weight * metrics["val_metrics/perceptual"]
+                texture_perceptual_weight * perceptual_selection
                 + texture_l1_weight * metrics["val_metrics/l1"]
             )
             max_l1 = getattr(loss_cfg, "texture_selection_max_l1", None)
@@ -654,6 +668,21 @@ class SRGAN_model(pl.LightningModule):
 
             if self.adv_loss_type == "wasserstein":
                 adversarial_loss = sr_discriminated.mean() - hr_discriminated.mean()
+            elif bool(getattr(self, "relativistic_average_d", False)) and bool(
+                getattr(loss_cfg, "global_relativistic_average", False)
+            ):
+                from .adversarial import relativistic_means
+                real_mean, fake_mean = relativistic_means(
+                    hr_discriminated, sr_discriminated, global_batch=True
+                )
+                adversarial_loss = (
+                    self.adversarial_loss_criterion(
+                        hr_discriminated - fake_mean, torch.ones_like(hr_discriminated)
+                    )
+                    + self.adversarial_loss_criterion(
+                        sr_discriminated - real_mean, torch.zeros_like(sr_discriminated)
+                    )
+                )
             else:
                 adversarial_loss = 0.5 * (
                     self.adversarial_loss_criterion(
@@ -663,6 +692,34 @@ class SRGAN_model(pl.LightningModule):
                         hr_discriminated, torch.ones_like(hr_discriminated)
                     )
                 )
+
+            if bool(getattr(loss_cfg, "log_gan_diagnostics", False)):
+                from .adversarial import image_logits, relativistic_means
+                live = self._live_validation_prediction(lr_imgs) if self._ema_applied else sr_imgs
+                live_logits = self.discriminator(live)
+                real_mean, fake_mean = relativistic_means(
+                    hr_discriminated, live_logits, global_batch=True
+                )
+                real_relative = hr_discriminated.float() - fake_mean
+                fake_relative = live_logits.float() - real_mean
+                self._critic_validation_scores[0].append(image_logits(hr_discriminated))
+                self._critic_validation_scores[1].append(image_logits(live_logits))
+                for name, value in {
+                    "real_rel": real_relative.sigmoid().mean(),
+                    "fake_rel": fake_relative.sigmoid().mean(),
+                    "logit_gap": real_mean - fake_mean,
+                    "patch_accuracy": 0.5 * (
+                        (real_relative > 0).float().mean()
+                        + (fake_relative < 0).float().mean()
+                    ),
+                }.items():
+                    self.log(
+                        "validation/critic_live_" + name,
+                        value,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
 
         self.log(
             "validation/DISC_adversarial_loss",
@@ -686,6 +743,7 @@ class SRGAN_model(pl.LightningModule):
         """
         super().on_validation_epoch_start()
         self._apply_generator_ema_weights()
+        self._critic_validation_scores = [[], []]
 
     def on_validation_epoch_end(self):
         """Hook executed at the end of each validation epoch.
@@ -697,6 +755,25 @@ class SRGAN_model(pl.LightningModule):
             - Calls the parent hook via `super().on_validation_epoch_end()`.
         """
         self._restore_generator_weights()
+        if getattr(self, "_critic_validation_scores", [[], []])[0]:
+            import torch.distributed as dist
+            from .adversarial import critic_auc
+
+            packed = torch.stack(
+                [torch.cat(values) for values in self._critic_validation_scores]
+            )
+            if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+                gathered = [torch.empty_like(packed) for _ in range(dist.get_world_size())]
+                dist.all_gather(gathered, packed)
+                packed = torch.cat(gathered, dim=1)
+            self.log(
+                "validation/critic_live_auc",
+                critic_auc(packed[0], packed[1]),
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self._critic_validation_scores = [[], []]
         super().on_validation_epoch_end()
         self._step_plateau_schedulers()
 
@@ -947,6 +1024,9 @@ class SRGAN_model(pl.LightningModule):
 
     def _step_plateau_schedulers(self) -> None:
         """Step manual-optimization plateau schedulers from validation metrics."""
+        fixed_restart = getattr(self.config.Schedulers, "fixed_restart", None)
+        if fixed_restart is not None and bool(getattr(fixed_restart, "enabled", False)):
+            return
         trainer = getattr(self, "trainer", None)
         if trainer is None or getattr(trainer, "sanity_checking", False):
             return

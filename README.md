@@ -92,6 +92,23 @@ Follow the [installation instructions](https://srgan.opensr.eu/getting-started/)
 * **Training:** Launch a smoke test with `python -m opensr_srgan.train --config opensr_srgan/configs/config_training_example.yaml`, or use Hydra with `python -m opensr_srgan.train_hydra experiment=example`. Use the `10m` and `20m` presets once the matching datasets are configured.
 * **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/inference/).
 
+For the supported four-band Sentinel-2 recipe, use the `SEN2-SR` preset from
+[simon-donike/SR-GAN](https://huggingface.co/simon-donike/SR-GAN). It accepts
+red/green/blue/NIR Sentinel-2 DN tensors and returns 2.5 m predictions:
+
+```bash
+python -m pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'
+```
+
+```python
+from opensr_srgan import load_inference_model
+model = load_inference_model("SEN2-SR", map_location="cpu")
+prediction = model.predict_step(raw_dn_tensor)
+```
+
+The exact continuation and checkpoint lineage are documented in
+[docs/sen2naip-texture.md](docs/sen2naip-texture.md).
+
 ---
 
 ## 🏗️ Configuration & Stabilization

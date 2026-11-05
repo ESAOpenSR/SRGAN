@@ -9,7 +9,7 @@ Data:
   sen2naip_crop_size: 64
   sen2naip_augment: true
   normalization: normalise_10k
-  train_batch_size: 6
+  train_batch_size: 12
   val_batch_size: 2
   num_workers: 4
   prefetch_factor: 2

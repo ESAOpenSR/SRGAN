@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from opensr_srgan.utils.training_callbacks import (
-    LatestCheckpoint, QualityModelCheckpoint, texture_checkpoint_eligible,
+    ConvergenceStop, LatestCheckpoint, QualityModelCheckpoint, texture_checkpoint_eligible,
 )
 
 
@@ -108,6 +108,44 @@ def test_coupled_lr_tracks_warmup_plateau_and_restored_optimizer_rates():
     SRGAN_model._step_plateau_schedulers(model)
     assert g.param_groups[0]["lr"] == pytest.approx(5e-5)
     assert d.param_groups[0]["lr"] == pytest.approx(5e-6)
+
+
+def test_convergence_requires_lr_floor_and_resumable_plateau(tmp_path):
+    callback = ConvergenceStop(monitor="quality", min_steps=100, lr_floor=1e-6,
+                               patience=3, min_delta=0.001)
+    model = SimpleNamespace(
+        _pretrain_check=lambda: False, pretrain_g_only=False,
+        g_pretrain_steps=0, adv_loss_ramp_steps=10, global_step=0,
+        config=SimpleNamespace(Training=SimpleNamespace(
+            Losses=SimpleNamespace(texture_selection_max_l1=0.05)),
+            Logging=SimpleNamespace(output_dir=str(tmp_path))),
+    )
+    g = SimpleNamespace(param_groups=[{"lr": 1e-6}])
+    trainer = SimpleNamespace(sanity_checking=False, global_step=0,
+        callback_metrics={"quality": torch.tensor(1.0), "val_metrics/l1": torch.tensor(.02)},
+        optimizers=[None, g], should_stop=False, is_global_zero=True, loggers=[], max_steps=600000)
+
+    def validate(step, quality=1.0):
+        trainer.global_step = model.global_step = step
+        trainer.callback_metrics["quality"] = torch.tensor(quality)
+        callback.on_validation_end(trainer, model)
+
+    for step in (10, 20, 30, 40, 50):
+        validate(step)
+    assert callback.floor_wait == 0
+    g.param_groups[0]["lr"] = 1e-5
+    for step in (100, 110, 120):
+        validate(step)
+    assert callback.floor_wait == 0
+    g.param_groups[0]["lr"] = 1e-6
+    validate(140)
+    validate(150)
+    assert callback.floor_wait == 2
+    validate(220000, quality=0.99)
+    assert callback.floor_wait == 0 and not trainer.should_stop
+    callback.on_train_end(trainer, model)
+    import json
+    assert json.loads((tmp_path / "stopping.json").read_text())["reason"] == "compute_cap"
 
 
 class TinyModel(pl.LightningModule):
