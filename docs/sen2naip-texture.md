@@ -18,21 +18,27 @@ The matching resolved configuration is
 ## Public inference preset
 
 The Hugging Face repository `simon-donike/SR-GAN` publishes the `SEN2-SR`
-preset as `sen2-sr-v1/config.yaml` and `sen2-sr-v1/model_ema.ckpt`. The latter
-contains the EMA generator weights exported from the verified full checkpoint;
-the inference config therefore sets `Training.EMA.enabled: false`. The public
-config keeps four-band `normalise_10k` input handling and explicit back
-projection.
+preset as `models/sen2-sr/v1/config.yaml` and
+`models/sen2-sr/v1/weights/inference.ckpt`. The latter contains the EMA
+generator weights exported from the verified full checkpoint; the inference
+config therefore sets `Training.EMA.enabled: false`. The public config keeps
+four-band `normalise_10k` input handling and explicit back projection.
 
 The preset pins Hugging Face commit
-`b55d470dcb5062a4633a482da701d113d3d1e24b` so config and weights resolve together.
+`b31d2728952cfaa022bd1df92d82a54c23cf4f8f` so config and weights resolve together.
 
-The full resumable checkpoint is `sen2-sr-v1/model_full.ckpt`. Download the
-checkpoints, portable training config, and split with:
+The full resumable checkpoint is
+`models/sen2-sr/v1/weights/training.ckpt`. Download the checkpoints, portable
+training config, and split with:
 
 ```bash
-hf download simon-donike/SR-GAN --include 'sen2-sr-v1/*' --local-dir ./sen2-model
+hf download simon-donike/SR-GAN --include 'models/sen2-sr/v1/*' --local-dir ./sen2-model
 ```
+
+The downloaded training inputs are
+`models/sen2-sr/v1/training/config.yaml` and
+`models/sen2-sr/v1/training/splits/crosssensor.json`. Keep the split beside the
+training config when resuming or reproducing the run.
 
 Install this version from `dev` with
 `pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'`.
@@ -51,8 +57,8 @@ For files downloaded manually:
 from opensr_srgan import load_from_config
 
 model = load_from_config(
-    "sen2-model/sen2-sr-v1/config.yaml",
-    "sen2-model/sen2-sr-v1/model_ema.ckpt",
+    "sen2-model/models/sen2-sr/v1/config.yaml",
+    "sen2-model/models/sen2-sr/v1/weights/inference.ckpt",
     mode="eval",
     map_location="cpu",
 )
@@ -72,12 +78,13 @@ Use the flat config or the Hydra experiment. Replace all `???` paths with the
 local TACO manifest, packaged split manifest, and verified full checkpoint.
 
 ```bash
-python -m opensr_srgan.train --config opensr_srgan/configs/config_sen2naip_texture.yaml
+python -m opensr_srgan.train \
+  --config sen2-model/models/sen2-sr/v1/training/config.yaml
 
 python -m opensr_srgan.train_hydra experiment=sen2naip_texture \
   Data.sen2naip_taco_file=/data/sen2naipv2-crosssensor.taco \
-  Data.sen2naip_split_file=/path/to/sen2naip_crosssensor.json \
-  Model.continue_training=/checkpoints/sen2-sr-v1/model_full.ckpt
+  Data.sen2naip_split_file=sen2-model/models/sen2-sr/v1/training/splits/crosssensor.json \
+  Model.continue_training=sen2-model/models/sen2-sr/v1/weights/training.ckpt
 ```
 
 `Training.max_steps: 328584` is an absolute optimizer-step target: from the

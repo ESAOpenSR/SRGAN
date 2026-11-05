@@ -40,7 +40,7 @@ from opensr_srgan.data.example_data.download_example_dataset import get_example_
 get_example_dataset()  # downloads into ./example_dataset/
 ```
 
-The script downloads `example_dataset.zip` through the Hugging Face Hub cache and extracts it to `example_dataset/`. The configuration only needs to specify the dataset type:
+The script downloads `data/examples/dataset.zip` through the Hugging Face Hub cache and extracts it to `example_dataset/`. The configuration only needs to specify the dataset type:
 
 ```yaml
 Data:

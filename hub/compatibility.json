@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "source_revision": "b55d470dcb5062a4633a482da701d113d3d1e24b",
+  "policy": "Preserve every listed artifact download path and its bytes. New package integrations use canonical paths. Historical release cards, licenses, manifests and checksums remain archived at their original paths.",
+  "aliases": {
+    "config_RGB-NIR.yaml": "models/rgb-nir/v1/config.yaml",
+    "RGB-NIR_4band_inference.ckpt": "models/rgb-nir/v1/weights/inference.ckpt",
+    "config_SWIR.yaml": "models/swir/v1/config.yaml",
+    "SWIR_6band_inference.ckpt": "models/swir/v1/weights/inference.ckpt",
+    "example_batch_RGBNIR.pt": "data/examples/rgb-nir_batch.pt",
+    "example_dataset.zip": "data/examples/dataset.zip",
+    "sen2-sr-v1/config.yaml": "models/sen2-sr/v1/config.yaml",
+    "sen2-sr-v1/model_ema.ckpt": "models/sen2-sr/v1/weights/inference.ckpt",
+    "sen2-sr-v1/model_full.ckpt": "models/sen2-sr/v1/weights/training.ckpt",
+    "sen2-sr-v1/training.yaml": "models/sen2-sr/v1/training/config.yaml",
+    "sen2-sr-v1/recipe/sen2naip_crosssensor.json": "models/sen2-sr/v1/training/splits/crosssensor.json",
+    "sen2-sr-v1/recipe/environment.txt": "models/sen2-sr/v1/training/provenance/environment.txt",
+    "sen2-sr-v1/recipe/executed_training.yaml": "models/sen2-sr/v1/training/provenance/executed_training.yaml",
+    "sen2-sr-v1/recipe/lineage.json": "models/sen2-sr/v1/training/provenance/lineage.json",
+    "sen2-sr-v1/recipe/source_at_stop.tar.gz": "models/sen2-sr/v1/training/provenance/source_at_stop.tar.gz",
+    "sen2-sr-v1/validation_metrics.json": "models/sen2-sr/v1/metrics/validation.json",
+    "sen2-sr-v1/verification.json": "models/sen2-sr/v1/verification/inference.json",
+    "sen2-sr-v1/recipe/original_resume_verification.json": "models/sen2-sr/v1/verification/resume_original.json",
+    "sen2-sr-v1/recipe/promotion_resume_verification.json": "models/sen2-sr/v1/verification/resume_promotion.json"
+  }
+}

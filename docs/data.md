@@ -21,7 +21,7 @@ from opensr_srgan.data.example_data.download_example_dataset import get_example_
 get_example_dataset()
 ```
 
-The helper pulls `example_dataset.zip` from the [`simon-donike/SR-GAN`](https://huggingface.co/simon-donike/SR-GAN) repository through the Hugging Face cache and extracts it into the requested output directory.
+The helper pulls `data/examples/dataset.zip` from the [`simon-donike/SR-GAN`](https://huggingface.co/simon-donike/SR-GAN) repository through the Hugging Face cache and extracts it into the requested output directory. It is pinned to the package release; pass `revision=` only when deliberately testing another Hub revision.
 
 ### Directory layout
 

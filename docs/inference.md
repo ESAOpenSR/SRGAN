@@ -1,6 +1,6 @@
 # Inference
 
-This walkthrough covers the fastest path from zero to an end-to-end super-resolution run on a full Sentinel-2 tile. It uses the published `opensr-srgan` package to grab the pretrained RGB-NIR preset and hands the model to `opensr-utils` for windowed tiling, stitching, and export.
+This walkthrough covers the fastest path from zero to an end-to-end super-resolution run on a full Sentinel-2 tile. It uses the published `opensr-srgan` package to grab a pretrained preset and hands the model to `opensr-utils` for windowed tiling, stitching, and export.
 
 ## 1. Install the runtime dependencies
 
@@ -18,10 +18,10 @@ pip install opensr-utils  # optional, for full-tile inference
 ```python
 from opensr_srgan import load_inference_model
 
-model = load_inference_model("RGB-NIR", map_location="cuda")
+model = load_inference_model("SEN2-SR", map_location="cuda")
 ```
 
-`load_inference_model` retrieves the configuration and checkpoint that correspond to the selected preset (here the four-band RGB-NIR model), restores the Lightning module, and switches it to evaluation mode so that it is ready for inference. If you run on CPU, change `map_location="cuda"` to `map_location="cpu"`.
+`load_inference_model` retrieves the configuration and checkpoint that correspond to the selected preset (here the supported four-band Sentinel-2 model), restores the Lightning module, and switches it to evaluation mode so that it is ready for inference. Release assets are downloaded from the structured `models/<preset>/v1/` layout at the package-pinned Hub revision. If you run on CPU, change `map_location="cuda"` to `map_location="cpu"`.
 
 ## 2.2 Instantiate your own model
 
@@ -91,7 +91,8 @@ sr_histogram = model.predict_step(lr)
 
 For SwinIR, load your own matching SwinIR config and trained checkpoint with
 `load_from_config(..., mode="eval")`. `load_inference_model` accepts the
-published `RGB-NIR` and `SWIR` presets; it does not select SwinIR by name.
+published `SEN2-SR`, `RGB-NIR`, and `SWIR` presets; it does not select SwinIR
+by name.
 See [SwinIR reconstruction training](training.md#train-a-swinir-reconstruction-model).
 
 Histogram matching keeps the historical sequence: normalize, generate, match,

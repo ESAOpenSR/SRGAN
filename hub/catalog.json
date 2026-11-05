@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "repository": "simon-donike/SR-GAN",
+  "license": "MIT",
+  "models": [
+    {
+      "id": "sen2-sr",
+      "version": "v1",
+      "preset": "SEN2-SR",
+      "status": "supported",
+      "directory": "models/sen2-sr/v1",
+      "config": "models/sen2-sr/v1/config.yaml",
+      "inference_checkpoint": "models/sen2-sr/v1/weights/inference.ckpt",
+      "training_checkpoint": "models/sen2-sr/v1/weights/training.ckpt",
+      "training_config": "models/sen2-sr/v1/training/config.yaml",
+      "split": "models/sen2-sr/v1/training/splits/crosssensor.json",
+      "input_channels": 4,
+      "scale": 4,
+      "input_band_order": ["B04", "B03", "B02", "B08"],
+      "normalization": "reflectance DN / 10000",
+      "inference_weights": "EMA generator",
+      "postprocessing": "back_projection"
+    },
+    {
+      "id": "rgb-nir",
+      "version": "v1",
+      "preset": "RGB-NIR",
+      "status": "legacy",
+      "directory": "models/rgb-nir/v1",
+      "config": "models/rgb-nir/v1/config.yaml",
+      "inference_checkpoint": "models/rgb-nir/v1/weights/inference.ckpt",
+      "input_channels": 4,
+      "scale": 4,
+      "input_band_order": ["B04", "B03", "B02", "B08"],
+      "normalization": "reflectance DN / 10000",
+      "postprocessing": "histogram"
+    },
+    {
+      "id": "swir",
+      "version": "v1",
+      "preset": "SWIR",
+      "status": "legacy",
+      "directory": "models/swir/v1",
+      "config": "models/swir/v1/config.yaml",
+      "inference_checkpoint": "models/swir/v1/weights/inference.ckpt",
+      "input_channels": 6,
+      "scale": 8,
+      "input_band_order": ["B05", "B06", "B07", "B8A", "B11", "B12"],
+      "normalization": "reflectance DN / 10000",
+      "postprocessing": "histogram"
+    }
+  ],
+  "samples": {
+    "rgb_nir_batch": "data/examples/rgb-nir_batch.pt",
+    "dataset_archive": "data/examples/dataset.zip",
+    "license_scope": "Sample imagery retains its original provider terms; see data/examples/README.md."
+  },
+  "examples": {
+    "tensor_inference": "examples/infer_tensor.py",
+    "geotiff_inference": "examples/infer_geotiff.py",
+    "training_continuation": "examples/resume_training.py"
+  },
+  "compatibility": "compatibility.json"
+}

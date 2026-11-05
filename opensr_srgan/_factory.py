@@ -62,19 +62,21 @@ class _Preset:
 _PRESETS = {
     "RGB-NIR": _Preset(
         repo_id="simon-donike/SR-GAN",
-        config_filename="config_RGB-NIR.yaml",
-        checkpoint_filename="RGB-NIR_4band_inference.ckpt",
+        config_filename="models/rgb-nir/v1/config.yaml",
+        checkpoint_filename="models/rgb-nir/v1/weights/inference.ckpt",
+        revision="b31d2728952cfaa022bd1df92d82a54c23cf4f8f",
     ),
     "SWIR": _Preset(
         repo_id="simon-donike/SR-GAN",
-        config_filename="config_SWIR.yaml",
-        checkpoint_filename="SWIR_6band_inference.ckpt",
+        config_filename="models/swir/v1/config.yaml",
+        checkpoint_filename="models/swir/v1/weights/inference.ckpt",
+        revision="b31d2728952cfaa022bd1df92d82a54c23cf4f8f",
     ),
     "SEN2-SR": _Preset(
         repo_id="simon-donike/SR-GAN",
-        config_filename="sen2-sr-v1/config.yaml",
-        checkpoint_filename="sen2-sr-v1/model_ema.ckpt",
-        revision="b55d470dcb5062a4633a482da701d113d3d1e24b",
+        config_filename="models/sen2-sr/v1/config.yaml",
+        checkpoint_filename="models/sen2-sr/v1/weights/inference.ckpt",
+        revision="b31d2728952cfaa022bd1df92d82a54c23cf4f8f",
         strict=True,
     ),
 }

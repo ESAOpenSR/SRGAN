@@ -130,13 +130,34 @@ def test_load_inference_model_raises_for_unknown_preset():
         _factory.load_inference_model("unknown-model")
 
 
+def test_presets_use_structured_paths_at_one_immutable_release():
+    assert {
+        name: (preset.config_filename, preset.checkpoint_filename)
+        for name, preset in _factory._PRESETS.items()
+    } == {
+        "RGB-NIR": (
+            "models/rgb-nir/v1/config.yaml",
+            "models/rgb-nir/v1/weights/inference.ckpt",
+        ),
+        "SWIR": (
+            "models/swir/v1/config.yaml",
+            "models/swir/v1/weights/inference.ckpt",
+        ),
+        "SEN2-SR": (
+            "models/sen2-sr/v1/config.yaml",
+            "models/sen2-sr/v1/weights/inference.ckpt",
+        ),
+    }
+    assert len({preset.revision for preset in _factory._PRESETS.values()}) == 1
+
+
 def test_load_inference_model_downloads_and_calls_load_from_config(
     monkeypatch, tmp_path
 ):
     calls = []
 
-    def fake_hf_hub_download(repo_id, filename, cache_dir=None):
-        calls.append((repo_id, filename, cache_dir))
+    def fake_hf_hub_download(repo_id, filename, cache_dir=None, revision=None):
+        calls.append((repo_id, filename, cache_dir, revision))
         return str(tmp_path / filename)
 
     huggingface_stub = types.ModuleType("huggingface_hub")
@@ -162,8 +183,20 @@ def test_load_inference_model_downloads_and_calls_load_from_config(
 
     assert model is sentinel
     assert len(calls) == 2
-    assert calls[0][1].endswith(".yaml")
-    assert calls[1][1].endswith(".ckpt")
+    assert calls == [
+        (
+            "simon-donike/SR-GAN",
+            "models/rgb-nir/v1/config.yaml",
+            str(tmp_path),
+            _factory._PRESETS["RGB-NIR"].revision,
+        ),
+        (
+            "simon-donike/SR-GAN",
+            "models/rgb-nir/v1/weights/inference.ckpt",
+            str(tmp_path),
+            _factory._PRESETS["RGB-NIR"].revision,
+        ),
+    ]
 
 
 def test_sen2_sr_preset_is_strict_and_passes_revision(monkeypatch, tmp_path):
@@ -192,8 +225,8 @@ def test_sen2_sr_preset_is_strict_and_passes_revision(monkeypatch, tmp_path):
     _factory.load_inference_model("sen2_sr")
 
     assert [call["filename"] for call in calls] == [
-        "sen2-sr-v1/config.yaml",
-        "sen2-sr-v1/model_ema.ckpt",
+        "models/sen2-sr/v1/config.yaml",
+        "models/sen2-sr/v1/weights/inference.ckpt",
     ]
     assert all(call["revision"] == "immutable-test-revision" for call in calls)
     assert captured["strict"] is True
