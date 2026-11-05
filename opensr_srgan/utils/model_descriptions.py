@@ -51,6 +51,8 @@ def print_model_summary(self):
         g_desc = "Stochastic SRGAN (Latent-modulated Residual Blocks)"
     elif g_type_norm == "esrgan":
         g_desc = "ESRGAN (RRDB Residual-in-Residual Dense Network)"
+    elif g_type_norm in {"swinir", "swin_ir", "transformer"}:
+        g_desc = "SwinIR (Residual Shifted-Window Transformer)"
     else:
         g_desc = f"Custom Generator Type: {g_type}"
 
@@ -87,21 +89,29 @@ def print_model_summary(self):
     print(f"   • Architecture:      {g_desc}")
     print(f"   • Resolution:        {res_str}")
     print(f"   • Input Channels:    {self.config.Model.in_bands}")
-    feature_channels = getattr(self.config.Generator, "n_channels", None)
+    is_swinir = g_type_norm in {"swinir", "swin_ir", "transformer"}
+    feature_channels = (
+        getattr(self.generator, "embed_dim", None) if is_swinir
+        else getattr(self.config.Generator, "n_channels", None)
+    )
     if feature_channels is not None:
         print(f"   • Feature Channels:  {feature_channels}")
 
-    block_count = getattr(
+    block_count = None if is_swinir else getattr(
         self.config.Generator,
         "n_blocks",
         getattr(self.generator, "n_blocks", None),
     )
     if block_count is not None:
         print(f"   • Residual Blocks:   {block_count}")
+    if is_swinir:
+        print(f"   • Group Depths:      {self.generator.depths}")
+        print(f"   • Attention Heads:   {self.generator.num_heads}")
+        print(f"   • Window Size:       {self.generator.window_size}")
 
     small_kernel = getattr(self.config.Generator, "small_kernel_size", None)
     large_kernel = getattr(self.config.Generator, "large_kernel_size", None)
-    if small_kernel is not None or large_kernel is not None:
+    if not is_swinir and (small_kernel is not None or large_kernel is not None):
         print(
             "   • Kernel Sizes:      small={small}, large={large}".format(
                 small=small_kernel if small_kernel is not None else "N/A",

@@ -131,3 +131,12 @@ Logging:
     enabled: True              # Toggle Weights & Biases logging on/off
     entity: "opensr"      # W&B entity or team name
     project: "SRGAN_20m"        # W&B project name
+
+# Prediction matching; omitted settings retain histogram matching.
+Postprocessing:
+  method: histogram
+  back_projection:
+    blur_sigma: 0.0
+    max_iterations: 100
+    tolerance: 1.0e-6
+    relaxation: 1.0

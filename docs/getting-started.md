@@ -12,7 +12,7 @@ For the fastest start, open the interactive notebook in Google Colab and run thr
   </a>
 </p>
 
-> 💡 **Only need inference?** Install the published package instead: `python -m pip install opensr-srgan`. It exposes `load_from_config` and `load_inference_model` so you can instantiate models without cloning the repository. Continue with the rest of this guide when you want to train, fine-tune, or otherwise modify the codebase.
+> 💡 **Only need inference?** Install the published package instead: `python -m pip install opensr-srgan==1.1.0`. It exposes `load_from_config` and `load_inference_model` so you can instantiate models without cloning the repository. Continue with the rest of this guide when you want to train, fine-tune, or otherwise modify the codebase.
 
 ## 1. Install the environment
 
@@ -40,7 +40,7 @@ from opensr_srgan.data.example_data.download_example_dataset import get_example_
 get_example_dataset()  # downloads into ./example_dataset/
 ```
 
-The script downloads `example_dataset.zip` through the Hugging Face Hub cache and extracts it to `example_dataset/`. The configuration only needs to specify the dataset type:
+The script downloads `data/examples/dataset.zip` through the Hugging Face Hub cache and extracts it to `example_dataset/`. The configuration only needs to specify the dataset type:
 
 ```yaml
 Data:
@@ -65,7 +65,10 @@ Update at least the following fields:
 * `Model.continue_training`: Provide a path if you want to fully resume interrupted training (optimizer/scheduler/EMA/global-step state).
 * `Training.Losses.perceptual_metric`: Switch to `lpips` if you installed the optional dependency.
 
-See [Configuration](configuration.md) for a full breakdown of available options.
+For the transformer generator, choose `model=10m_swinir` or set
+`Generator.model_type: swinir` in a compatible configuration. See
+[Architecture](architecture.md#swinir-generator) and
+[Configuration](configuration.md) for model and post-processing options.
 
 ## 4. Launch training
 
@@ -107,22 +110,30 @@ Training resumes automatically if `Model.continue_training` points to a Lightnin
     custom_model = load_from_config(
         config_path="path/to/your_config.yaml",
         checkpoint_uri="https://example.com/checkpoints/srgan.ckpt",
-        map_location="cuda",  # optional
+        map_location="cpu",
+        mode="eval",
     )
+    custom_model = custom_model.to("cuda")  # optional GPU placement
 
     # Option B – grab the published RGB-NIR/SWIR presets from Hugging Face
     preset_model = load_inference_model("RGB-NIR", map_location="cpu")
     ```
+  `map_location` selects where checkpoint tensors are deserialized; it does not
+  place a model for inference. Use `.to("cuda")` after loading for GPU work, or
+  `.to("cpu")` to keep the model on CPU.
   * **When working from source:**
     ```python
     from opensr_srgan.model.SRGAN import SRGAN_model
 
-    model = SRGAN_model("your_config.yaml")
+    model = SRGAN_model("your_config.yaml", mode="eval")
     model.load_weights_from_checkpoint("path/to/checkpoint.ckpt")
+    model.eval()
     sr_tiles = model.predict_step(lr_tiles)
     ```
-  In all cases the helpers automatically normalise Sentinel-2 ranges, apply histogram matching, and denormalise outputs for
-  easier comparison with the source imagery.
+  `predict_step` handles the configured normalization and prediction matching.
+  Older recipes use histogram matching; set `Postprocessing.method: back_projection`
+  to enable LR measurement matching. See [Inference](inference.md#prediction-matching)
+  for the two methods and their value ranges.
 
 ## 6. Create Data Pipeline
 

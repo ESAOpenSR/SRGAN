@@ -4,6 +4,7 @@ from .srresnet import SRResNet, Generator
 from .flexible_generator import FlexibleGenerator, flexible_generator
 from .cgan_generator import StochasticGenerator, ConditionalGANGenerator
 from .esrgan import ESRGANGenerator
+from .swinir import SwinIRGenerator
 from .factory import build_generator
 from .SRGAN_advanced import *  # re-export compatibility symbols
 
@@ -15,5 +16,6 @@ __all__ = [
     "StochasticGenerator",
     "ConditionalGANGenerator",
     "ESRGANGenerator",
+    "SwinIRGenerator",
     "build_generator",
 ]

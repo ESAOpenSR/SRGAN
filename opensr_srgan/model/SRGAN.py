@@ -14,9 +14,10 @@ from omegaconf import OmegaConf
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 # local imports
-from opensr_srgan.utils.logging_helpers import plot_tensors
+from opensr_srgan.utils.logging_helpers import plot_tensors, save_validation_artifacts
 from opensr_srgan.utils.model_descriptions import print_model_summary
 from opensr_srgan.utils.radiometrics import histogram as histogram_match
+from opensr_srgan.utils.back_projection import BackProjectionConfig, back_projection
 from opensr_srgan.utils.checkpoint_loading import load_checkpoint
 from opensr_srgan.data.utils import Normalizer
 from opensr_srgan.model.generators import build_generator
@@ -54,7 +55,7 @@ class SRGAN_model(pl.LightningModule):
     - **Lightning 2+ training:** Manual optimization for multi-optimizer GAN updates.
     - **EMA support:** Optional EMA tracking with delayed activation and device placement.
     - **Metrics & logging:** Content/perceptual metrics, LR logging, and optional W&B image logs.
-    - **Inference helpers:** Normalization/denormalization for 0–10000 reflectance and histogram matching.
+    - **Inference helpers:** Normalization/denormalization for 0–10000 reflectance and configurable post-processing.
 
     Args
     ----
@@ -68,7 +69,7 @@ class SRGAN_model(pl.LightningModule):
     Configuration overview (minimal)
     --------------------------------
     - **Model**: `in_bands` (int)
-        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`, `"esrgan"`),
+        - **Generator**: `model_type` (`"SRResNet"`, `"stochastic_gan"`, `"esrgan"`, `"swinir"`),
         optional `block_type` for SRResNet variants (`"standard"`, `"res"`, `"rcab"`,
         `"rrdb"`, `"lka"`), `n_channels`, `n_blocks`, `large_kernel_size`,
         `small_kernel_size`, `scaling_factor`, plus ESRGAN-specific knobs
@@ -110,8 +111,9 @@ class SRGAN_model(pl.LightningModule):
     ------------------------
     - **Forward**: `lr_imgs` of shape `(B, C, H, W)` → SR output with spatial scale set by
     `Generator.scaling_factor`.
-    - **Predict**: Applies optional normalization (0–10000 → 0–1), EMA averaging, histogram
-    matching, and denormalization back to the input range; returns CPU tensors.
+    - **Predict**: Applies optional normalization (0–10000 → 0–1), EMA averaging,
+    configurable matching, and denormalization; returns CPU tensors in input units.
+    Histogram matching is the compatibility default; back-projection is opt-in.
 
     Example
     -------
@@ -155,6 +157,7 @@ class SRGAN_model(pl.LightningModule):
         # Purpose: Set config and mode variables model-wide.
         # ======================================================================
         self.config = config
+        self._postprocessing_method()  # Validate before constructing networks.
         self.mode = mode
         self.normalizer = Normalizer(self.config)
 
@@ -372,6 +375,7 @@ class SRGAN_model(pl.LightningModule):
                 self.generator,
                 decay=ema_decay,
                 use_num_updates=use_num_updates,
+                device=ema_device,
             )
             self._ema_update_after_step = int(getattr(ema_cfg, "update_after_step", 0))
 
@@ -395,62 +399,75 @@ class SRGAN_model(pl.LightningModule):
         sr_imgs = self.generator(lr_imgs)  # pass LR input through generator network
         return sr_imgs  # return super-resolved output
 
+    def _postprocessing_method(self):
+        settings = getattr(self.config, "Postprocessing", None)
+        method = getattr(settings, "method", "histogram")
+        if not isinstance(method, str) or method not in {"histogram", "back_projection"}:
+            raise ValueError("Postprocessing.method must be 'histogram' or 'back_projection'")
+        return method
+
+    @torch.no_grad()
+    def postprocess(self, sr_imgs, lr_imgs):
+        """Match SR to LR in their shared supplied value range, without gradients.
+
+        Histogram matching is the compatibility default. Back-projection infers
+        the scale from BCHW shapes and returns unclipped float32/float64 values.
+        This helper does not normalize inputs and never changes raw predictions.
+        """
+        if self._postprocessing_method() == "histogram":
+            if torch.bfloat16 in (lr_imgs.dtype, sr_imgs.dtype):
+                # NumPy has no bfloat16 dtype; preserve the target dtype on return.
+                return histogram_match(lr_imgs.float(), sr_imgs.float()).to(sr_imgs.dtype)
+            return histogram_match(lr_imgs, sr_imgs)
+        settings = getattr(self.config, "Postprocessing", None)
+        options = dict(getattr(settings, "back_projection", {}))
+        if lr_imgs.ndim != 4 or sr_imgs.ndim != 4:
+            raise ValueError("Postprocessing expects BCHW tensors")
+        h, w = lr_imgs.shape[-2:]
+        sh, sw = sr_imgs.shape[-2:]
+        if h < 1 or w < 1 or sh % h or sw % w or sh // h != sw // w:
+            raise ValueError("SR dimensions must be an equal integer multiple of LR")
+        options.setdefault("scale", sh // h)
+        return back_projection(sr_imgs, lr_imgs, BackProjectionConfig(**options))
+
     @torch.no_grad()
     def predict_step(self, lr_imgs):
-        """Run a single super-resolution inference step.
+        """Predict under EMA, match using the selected method, and return CPU tensors.
 
-        Performs forward inference using the generator (optionally under EMA weights)
-        to produce super-resolved (SR) outputs from low-resolution (LR) inputs.
-        The method normalizes input values using the configured strategy (e.g., raw
-        Sentinel-2 reflectance via ``normalise_10k``), applies histogram matching, and
-        denormalizes the outputs back to their original scale.
-
-        Args:
-            lr_imgs (torch.Tensor): Batch of input low-resolution images
-                with shape `(B, C, H, W)`. Pixel value ranges may vary depending
-                on preprocessing (e.g., 0–10000 for Sentinel-2 reflectance).
-
-        Returns:
-            torch.Tensor: Super-resolved output images with matched histograms
-            and restored value range, detached from the computation graph and
-            placed on CPU memory.
-
-        Raises:
-            AssertionError: If the generator is not in evaluation mode (`.eval()`).
+        Histogram matching runs before denormalization, preserving historical
+        behavior. Back-projection runs after denormalization in original LR units.
+        Already normalized normalise_10k inputs retain their supplied value range.
         """
         if self.generator.training:
             raise RuntimeError("Generator must be in eval mode for prediction.")
-        lr_imgs = lr_imgs.to(self.device)  # move to device (GPU or CPU)
+        lr_imgs = lr_imgs.to(self.device)
+        if not lr_imgs.is_floating_point():
+            lr_imgs = lr_imgs.float()
         input_already_normalized = (
             getattr(self.normalizer, "method", None) == "normalise_10k"
             and _looks_like_zero_one_reflectance(lr_imgs)
         )
-
-        # --- Normalize inputs according to configuration ---
-        if input_already_normalized:
-            normalized_lr = lr_imgs
-        else:
-            normalized_lr = self.normalizer.normalize(lr_imgs)
-
-        # --- Perform super-resolution (optionally using EMA weights) ---
+        normalized_lr = (
+            lr_imgs.clone() if input_already_normalized
+            else self.normalizer.normalize(lr_imgs.clone())
+        )
         context = (
             self.ema.average_parameters(self.generator)
-            if self.ema is not None
-            else nullcontext()
+            if self.ema is not None else nullcontext()
         )
         with context:
-            sr_imgs = self.generator(normalized_lr)  # forward pass (SR prediction)
+            sr_imgs = self.generator(normalized_lr)
 
-        # --- Histogram match SR to LR ---
-        sr_imgs = histogram_match(normalized_lr, sr_imgs)  # match distributions
-
-        # --- Denormalize output back to original range ---
+        method = self._postprocessing_method()
+        if method == "histogram":
+            sr_imgs = self.postprocess(sr_imgs, normalized_lr)
+        elif sr_imgs.dtype in (torch.float16, torch.bfloat16):
+            sr_imgs = sr_imgs.float()
         if not input_already_normalized:
             sr_imgs = self.normalizer.denormalize(sr_imgs)
-
-        # --- Move to CPU and return ---
-        sr_imgs = sr_imgs.cpu().detach()  # detach from graph for inference output
-        return sr_imgs
+        if method == "back_projection":
+            sr_imgs = self.postprocess(sr_imgs, lr_imgs)
+        return sr_imgs.cpu().detach()
 
     def training_step(self, batch, batch_idx):
         """Run one Lightning 2+ manual-optimization training step."""
@@ -516,53 +533,130 @@ class SRGAN_model(pl.LightningModule):
                 f"{key}", value, sync_dist=True
             )  # log each metric to logger (e.g., W&B, TensorBoard)
 
+        # A reconstruction-only warmup can produce the lowest L1 while still
+        # lacking texture. Expose this auxiliary metric only for runs that
+        # explicitly select it.
+        sched_cfg = getattr(self.config, "Schedulers", None)
+        loss_cfg = getattr(getattr(self.config, "Training", None), "Losses", None)
+        texture_metric_name = getattr(sched_cfg, "texture_selection_metric", None)
+        checkpoint_monitor = getattr(sched_cfg, "checkpoint_monitor", None)
+        texture_selection_enabled = bool(texture_metric_name) or (
+            checkpoint_monitor == "val_metrics/texture_selection"
+        )
+        if texture_selection_enabled:
+            texture_metric_name = str(
+                texture_metric_name or "val_metrics/texture_selection"
+            )
+            texture_perceptual_weight = float(
+                getattr(loss_cfg, "texture_selection_perceptual_weight", 1.0)
+            )
+            texture_l1_weight = float(
+                getattr(loss_cfg, "texture_selection_l1_weight", 0.01)
+            )
+            nir_weight = float(getattr(loss_cfg, "texture_selection_nir_weight", 0.0))
+            perceptual_selection = metrics["val_metrics/perceptual"]
+            if nir_weight:
+                rgb_reference = float(getattr(loss_cfg, "texture_selection_rgb_reference", 0.0))
+                nir_reference = float(getattr(loss_cfg, "texture_selection_nir_reference", 0.0))
+                if not 0 < nir_weight <= 1 or min(rgb_reference, nir_reference) <= 0:
+                    raise ValueError("Invalid normalized RGB/NIR selection weights/references")
+                if "val_metrics/perceptual_nir" not in metrics:
+                    raise ValueError("RGB/NIR texture selection requires report_band_metrics for four-band validation")
+                perceptual_selection = (
+                    (1 - nir_weight) * metrics["val_metrics/perceptual"] / rgb_reference
+                    + nir_weight * metrics["val_metrics/perceptual_nir"] / nir_reference
+                )
+                self.log("val_metrics/multiband_perceptual", perceptual_selection, sync_dist=True)
+            # Keep this metric on its natural scale for graphs and schedulers.
+            # QualityModelCheckpoint gates complete epochs independently.
+            texture_selection = (
+                texture_perceptual_weight * perceptual_selection
+                + texture_l1_weight * metrics["val_metrics/l1"]
+            )
+            max_l1 = getattr(loss_cfg, "texture_selection_max_l1", None)
+            if max_l1 is not None:
+                l1 = metrics["val_metrics/l1"]
+                self.log(
+                    "val_metrics/texture_selection_batch_fidelity_fraction",
+                    float(bool(torch.isfinite(l1) and l1 <= float(max_l1))),
+                    sync_dist=True,
+                )
+            self.log(texture_metric_name, texture_selection, sync_dist=True)
+
         # ======================================================================
         # SECTION: Optional visualization — Log example SR/HR/LR images
         # Purpose: visually track qualitative progress of the model.
         # ======================================================================
-        # only perform image logging for first N batches to avoid logging all 200 images
-        if batch_idx < self.config.Logging.num_val_images:
-            base_lr = lr_imgs  # use original LR for visualization
+        # Only inspect the first N validation batches. Local artifacts are
+        # opt-in because they can be expensive on large validation batches.
+        logging_cfg = self.config.Logging
+        local_images = bool(getattr(logging_cfg, "local_images", False))
+        wandb_images = bool(logging_cfg.wandb.enabled)
+        trainer = getattr(self, "trainer", None)
+        is_sanity_check = bool(getattr(trainer, "sanity_checking", False))
+        is_global_zero = bool(getattr(trainer, "is_global_zero", True))
+        if (
+            batch_idx < logging_cfg.num_val_images
+            and not is_sanity_check
+            and (local_images or (wandb_images and is_global_zero))
+        ):
+            live_imgs = None
+            if bool(getattr(logging_cfg, "log_live_and_ema", False)) and self._ema_applied:
+                live_imgs = self._live_validation_prediction(lr_imgs)
+            matched_imgs = self.postprocess(sr_imgs, lr_imgs)
+            saved_panels = []
+            if local_images or (live_imgs is not None and wandb_images):
+                saved_panels = save_validation_artifacts(
+                    lr_imgs,
+                    sr_imgs,
+                    hr_imgs,
+                    getattr(logging_cfg, "output_dir", "logs"),
+                    epoch=self.current_epoch,
+                    num_images=lr_imgs.shape[0],
+                    sample_offset=batch_idx * lr_imgs.shape[0],
+                    local_images=True,
+                    is_global_zero=is_global_zero,
+                    matched=matched_imgs,
+                    live_sr=live_imgs,
+                )
 
-            # --- Select visualization bands (if multispectral) ---
-            if self.config.Model.in_bands < 3:
-                # show only first band
-                lr_vis = base_lr[:, :1, :, :]  # e.g., single-band input
-                hr_vis = hr_imgs[:, :1, :, :]  # subset HR
-                sr_vis = sr_imgs[:, :1, :, :]  # subset SR
-            elif self.config.Model.in_bands == 3:
-                lr_vis = base_lr
-                hr_vis = hr_imgs
-                sr_vis = sr_imgs
-            elif self.config.Model.in_bands == 4:
-                # assume its RGB-NIR, show RGB
-                lr_vis = base_lr[:, :3, :, :]  # e.g., Sentinel-2 RGB
-                hr_vis = hr_imgs[:, :3, :, :]  # subset HR
-                sr_vis = sr_imgs[:, :3, :, :]  # subset SR
-            elif self.config.Model.in_bands > 4:  # e.g., Sentinel-2 with >3 channels
-                # random selection of bands
-                idx = np.random.choice(
-                    sr_imgs.shape[1], 3, replace=False
-                )  # randomly select 3 bands
-                lr_vis = base_lr[:, idx, :, :]  # subset LR
-                hr_vis = hr_imgs[:, idx, :, :]  # subset HR
-                sr_vis = sr_imgs[:, idx, :, :]  # subset SR
-            # --- Clone tensors for plotting to avoid affecting main tensors ---
-            plot_lr_img = lr_vis.clone()
-            plot_hr_img = hr_vis.clone()
-            plot_sr_img = sr_vis.clone()
+            if wandb_images and is_global_zero and saved_panels:
+                payload = {"validation/epoch": self.current_epoch}
+                for band in ("rgb", "nir"):
+                    panels = [path for path in saved_panels if path.stem.endswith("_" + band)]
+                    if panels:
+                        image_key = f"validation/ema_live_{band}" if live_imgs is not None else f"validation/{band}"
+                        payload[image_key] = [
+                            wandb.Image(str(path), caption=path.stem) for path in panels
+                        ]
+                self.logger.experiment.log(payload)
+            elif wandb_images and is_global_zero:
+                base_lr = lr_imgs  # use original LR for visualization
+                if self.config.Model.in_bands < 3:
+                    lr_vis = base_lr[:, :1, :, :]
+                    hr_vis = hr_imgs[:, :1, :, :]
+                    sr_vis = sr_imgs[:, :1, :, :]
+                    matched_vis = matched_imgs[:, :1, :, :]
+                elif self.config.Model.in_bands == 3:
+                    lr_vis, hr_vis, sr_vis = base_lr, hr_imgs, sr_imgs
+                    matched_vis = matched_imgs
+                elif self.config.Model.in_bands == 4:
+                    lr_vis = base_lr[:, :3, :, :]
+                    hr_vis = hr_imgs[:, :3, :, :]
+                    sr_vis = sr_imgs[:, :3, :, :]
+                    matched_vis = matched_imgs[:, :3, :, :]
+                else:
+                    idx = np.random.choice(sr_imgs.shape[1], 3, replace=False)
+                    lr_vis = base_lr[:, idx, :, :]
+                    hr_vis = hr_imgs[:, idx, :, :]
+                    sr_vis = sr_imgs[:, idx, :, :]
+                    matched_vis = matched_imgs[:, idx, :, :]
 
-            # --- Generate matplotlib visualization (LR, SR, HR side-by-side) ---
-            val_img = plot_tensors(plot_lr_img, plot_sr_img, plot_hr_img, title="Val")
-
-            # --- Cleanup ---
-            del plot_lr_img, plot_hr_img, plot_sr_img  # free memory after plotting
-
-            # --- Log image to WandB (or compatible logger), if wanted ---
-            if self.config.Logging.wandb.enabled:
-                self.logger.experiment.log(
-                    {"Val SR": wandb.Image(val_img)}
-                )  # upload to dashboard
+                val_img = plot_tensors(
+                    lr_vis.float().clone(), sr_vis.float().clone(), hr_vis.float().clone(),
+                    title="Val", matched=matched_vis.float().clone(),
+                )
+                self.logger.experiment.log({"Val SR": wandb.Image(val_img)})
 
         # Discriminator validation must run for every validation batch so its
         # epoch aggregate is suitable for ReduceLROnPlateau.
@@ -574,6 +668,21 @@ class SRGAN_model(pl.LightningModule):
 
             if self.adv_loss_type == "wasserstein":
                 adversarial_loss = sr_discriminated.mean() - hr_discriminated.mean()
+            elif bool(getattr(self, "relativistic_average_d", False)) and bool(
+                getattr(loss_cfg, "global_relativistic_average", False)
+            ):
+                from .adversarial import relativistic_means
+                real_mean, fake_mean = relativistic_means(
+                    hr_discriminated, sr_discriminated, global_batch=True
+                )
+                adversarial_loss = (
+                    self.adversarial_loss_criterion(
+                        hr_discriminated - fake_mean, torch.ones_like(hr_discriminated)
+                    )
+                    + self.adversarial_loss_criterion(
+                        sr_discriminated - real_mean, torch.zeros_like(sr_discriminated)
+                    )
+                )
             else:
                 adversarial_loss = 0.5 * (
                     self.adversarial_loss_criterion(
@@ -583,6 +692,34 @@ class SRGAN_model(pl.LightningModule):
                         hr_discriminated, torch.ones_like(hr_discriminated)
                     )
                 )
+
+            if bool(getattr(loss_cfg, "log_gan_diagnostics", False)):
+                from .adversarial import image_logits, relativistic_means
+                live = self._live_validation_prediction(lr_imgs) if self._ema_applied else sr_imgs
+                live_logits = self.discriminator(live)
+                real_mean, fake_mean = relativistic_means(
+                    hr_discriminated, live_logits, global_batch=True
+                )
+                real_relative = hr_discriminated.float() - fake_mean
+                fake_relative = live_logits.float() - real_mean
+                self._critic_validation_scores[0].append(image_logits(hr_discriminated))
+                self._critic_validation_scores[1].append(image_logits(live_logits))
+                for name, value in {
+                    "real_rel": real_relative.sigmoid().mean(),
+                    "fake_rel": fake_relative.sigmoid().mean(),
+                    "logit_gap": real_mean - fake_mean,
+                    "patch_accuracy": 0.5 * (
+                        (real_relative > 0).float().mean()
+                        + (fake_relative < 0).float().mean()
+                    ),
+                }.items():
+                    self.log(
+                        "validation/critic_live_" + name,
+                        value,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
 
         self.log(
             "validation/DISC_adversarial_loss",
@@ -606,6 +743,7 @@ class SRGAN_model(pl.LightningModule):
         """
         super().on_validation_epoch_start()
         self._apply_generator_ema_weights()
+        self._critic_validation_scores = [[], []]
 
     def on_validation_epoch_end(self):
         """Hook executed at the end of each validation epoch.
@@ -617,6 +755,25 @@ class SRGAN_model(pl.LightningModule):
             - Calls the parent hook via `super().on_validation_epoch_end()`.
         """
         self._restore_generator_weights()
+        if getattr(self, "_critic_validation_scores", [[], []])[0]:
+            import torch.distributed as dist
+            from .adversarial import critic_auc
+
+            packed = torch.stack(
+                [torch.cat(values) for values in self._critic_validation_scores]
+            )
+            if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+                gathered = [torch.empty_like(packed) for _ in range(dist.get_world_size())]
+                dist.all_gather(gathered, packed)
+                packed = torch.cat(gathered, dim=1)
+            self.log(
+                "validation/critic_live_auc",
+                critic_auc(packed[0], packed[1]),
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self._critic_validation_scores = [[], []]
         super().on_validation_epoch_end()
         self._step_plateau_schedulers()
 
@@ -744,7 +901,7 @@ class SRGAN_model(pl.LightningModule):
             factor=float(getattr(cfg_sch, "factor_g", 0.5)),
             patience=int(getattr(cfg_sch, "patience_g", 5)),
             threshold=float(getattr(cfg_sch, "threshold", 1e-3)),
-            threshold_mode="rel",
+            threshold_mode=str(getattr(cfg_sch, "threshold_mode", "rel")),
             cooldown=int(getattr(cfg_sch, "cooldown", 0)),
             min_lr=float(getattr(cfg_sch, "min_lr", 1e-7)),
         )
@@ -815,6 +972,9 @@ class SRGAN_model(pl.LightningModule):
             batch (Any): The current batch of training data.
             batch_idx (int): Index of the current batch in the epoch.
         """
+        # Resume can restore optimizer state after on_fit_start. Align rates
+        # before either optimizer takes its first (or any subsequent) step.
+        self._sync_discriminator_lr()
         pre = self._pretrain_check()  # check if currently in pretraining phase
         for p in self.discriminator.parameters():  # loop over all discriminator params
             p.requires_grad = not pre  # freeze D during pretrain, unfreeze otherwise
@@ -831,7 +991,22 @@ class SRGAN_model(pl.LightningModule):
             batch_idx (int): Index of the current batch in the epoch.
         """
         self._step_generator_warmup()
+        self._sync_discriminator_lr()
         self._log_lrs()  # log LR's on each batch end
+
+    def _sync_discriminator_lr(self) -> None:
+        """Optionally preserve the configured D/G LR ratio through warmup/decay."""
+        ratio = getattr(self.config.Schedulers, "d_lr_ratio_to_g", None)
+        if ratio is None:
+            return
+        ratio = float(ratio)
+        if not math.isfinite(ratio) or ratio <= 0:
+            raise ValueError("d_lr_ratio_to_g must be finite and positive")
+        optimizer_d, optimizer_g = self.trainer.optimizers
+        if len(optimizer_d.param_groups) != len(optimizer_g.param_groups):
+            raise ValueError("Coupled D/G learning rates require matching parameter groups")
+        for group_d, group_g in zip(optimizer_d.param_groups, optimizer_g.param_groups):
+            group_d["lr"] = ratio * group_g["lr"]
 
     def _step_generator_warmup(self) -> None:
         """Advance generator warmup once per update, then stop permanently.
@@ -854,6 +1029,10 @@ class SRGAN_model(pl.LightningModule):
             return
 
         callback_metrics = getattr(trainer, "callback_metrics", {})
+        sched_cfg = self.config.Schedulers
+        wait_for_ramp = bool(getattr(sched_cfg, "g_plateau_after_ramp", False))
+        ramp_start = max(0, self.g_pretrain_steps) if self.pretrain_g_only else 0
+        ramp_finished = (not self._pretrain_check() and self.global_step >= ramp_start + max(0, self.adv_loss_ramp_steps))
         scheduler_specs = (
             (
                 getattr(self, "_plateau_scheduler_d", None),
@@ -865,7 +1044,14 @@ class SRGAN_model(pl.LightningModule):
             ),
         )
         warned_metrics = getattr(self, "_missing_plateau_metrics_warned", set())
-        for scheduler, metric_name in scheduler_specs:
+        for index, (scheduler, metric_name) in enumerate(scheduler_specs):
+            if index == 0 and (
+                self._pretrain_check() or not bool(getattr(sched_cfg, "d_plateau_enabled", True))
+                or getattr(sched_cfg, "d_lr_ratio_to_g", None) is not None
+            ):
+                continue
+            if index == 1 and wait_for_ramp and not ramp_finished:
+                continue
             if scheduler is None or not metric_name:
                 continue
             metric = callback_metrics.get(metric_name)
@@ -886,6 +1072,8 @@ class SRGAN_model(pl.LightningModule):
                 metric = metric.item()
             scheduler.step(float(metric))
         self._missing_plateau_metrics_warned = warned_metrics
+        if getattr(sched_cfg, "d_lr_ratio_to_g", None) is not None:
+            self._sync_discriminator_lr()
 
     def on_fit_start(self):  # called once at the start of training
         """Hook executed once at the beginning of model fitting.
@@ -900,8 +1088,17 @@ class SRGAN_model(pl.LightningModule):
             to avoid duplicated output in distributed training.
         """
         super().on_fit_start()
-        if self.ema is not None and self.ema.device is None:  # move ema weights
-            self.ema.to(self.device)
+        self._sync_discriminator_lr()
+        if self.ema is not None:
+            # The serialized EMA device belongs to the saving process (often
+            # cuda:0). Every DDP rank must place its shadow tensors on its own
+            # local model device, unless the config explicitly requests an
+            # offload device such as CPU.
+            ema_cfg = getattr(getattr(self.config, "Training", None), "EMA", None)
+            configured_device = getattr(ema_cfg, "device", None)
+            target_device = configured_device or self.device
+            if self.ema.device != torch.device(target_device):
+                self.ema.to(target_device)
         from opensr_srgan.utils.gpu_rank import _is_global_zero
 
         if _is_global_zero():
@@ -1135,6 +1332,17 @@ class SRGAN_model(pl.LightningModule):
         self._log_adv_loss_weight(adv_weight)
         return adv_weight
 
+    @torch.no_grad()
+    def _live_validation_prediction(self, lr_imgs):
+        """Temporarily use live weights, preserving the EMA validation context."""
+        was_ema_applied = self._ema_applied
+        self._restore_generator_weights()
+        try:
+            return self.generator(lr_imgs).detach().clone()
+        finally:
+            if was_ema_applied:
+                self._apply_generator_ema_weights()
+
     def _apply_generator_ema_weights(self) -> None:
         """Swap the generator's parameters to their EMA-smoothed counterparts.
 
@@ -1166,16 +1374,33 @@ class SRGAN_model(pl.LightningModule):
         self._ema_applied = False
 
     def on_save_checkpoint(self, checkpoint: dict) -> None:
-        """Augment the checkpoint with EMA state, if available.
+        """Save live weights and EMA state while preserving evaluation weights.
 
         Adds the EMA buffer/metadata to the checkpoint so that EMA can be restored upon load.
 
         Args:
             checkpoint (dict): Mutable checkpoint dictionary provided by Lightning.
         """
-        super().on_save_checkpoint(checkpoint)
-        if self.ema is not None:
-            checkpoint["ema_state"] = self.ema.state_dict()
+        # Ensure model state stores live weights if a save occurs while an
+        # evaluation hook has temporarily applied EMA weights.
+        was_ema_applied = self._ema_applied
+        self._restore_generator_weights()
+        try:
+            super().on_save_checkpoint(checkpoint)
+            # Lightning may have copied state_dict() while EMA was active.
+            # Clone the live entries before reapplying EMA, as state_dict()
+            # tensors can also alias the running model's parameters.
+            if was_ema_applied and isinstance(checkpoint.get("state_dict"), dict):
+                model_state = checkpoint["state_dict"]
+                for name, value in self.generator.state_dict().items():
+                    key = f"generator.{name}"
+                    if key in model_state:
+                        model_state[key] = value.detach().clone()
+            if self.ema is not None:
+                checkpoint["ema_state"] = self.ema.state_dict()
+        finally:
+            if was_ema_applied:
+                self._apply_generator_ema_weights()
 
     def on_load_checkpoint(self, checkpoint: dict) -> None:
         """Restore EMA state from a checkpoint, if present.
@@ -1186,7 +1411,14 @@ class SRGAN_model(pl.LightningModule):
         """
         super().on_load_checkpoint(checkpoint)
         if self.ema is not None and "ema_state" in checkpoint:
-            self.ema.load_state_dict(checkpoint["ema_state"])
+            ema_state = dict(checkpoint["ema_state"])
+            # Do not eagerly restore rank-0's runtime CUDA device on another
+            # rank. Load CPU tensors, then on_fit_start moves them locally.
+            ema_cfg = getattr(getattr(self.config, "Training", None), "EMA", None)
+            configured_device = getattr(ema_cfg, "device", None)
+            if "device" in ema_state:
+                ema_state["device"] = configured_device
+            self.ema.load_state_dict(ema_state)
 
     def _log_lrs(self) -> None:
         """Log learning rates for discriminator and generator optimizers.
@@ -1246,4 +1478,15 @@ class SRGAN_model(pl.LightningModule):
             else ckpt
         )
         self.load_state_dict(state_dict, strict=strict)
+        # This helper is deliberately a weights-only import (used for stage-2
+        # initialization). Seed EMA from the imported generator rather than
+        # retaining a shadow copy built from the constructor's random weights.
+        if getattr(self, "ema", None) is not None:
+            self.ema = ExponentialMovingAverage(
+                self.generator,
+                decay=self.ema.decay,
+                use_num_updates=self.ema.num_updates is not None,
+                device=self.ema.device,
+            )
+            self._ema_applied = False
         print(f"Loaded weights from checkpoint {ckpt_path}")

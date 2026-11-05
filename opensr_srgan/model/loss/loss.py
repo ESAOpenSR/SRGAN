@@ -1,4 +1,5 @@
 from pathlib import Path
+import math
 
 import torch
 import torch.nn as nn
@@ -64,7 +65,7 @@ class GeneratorContentLoss(nn.Module):
     Args:
         cfg: Configuration object (OmegaConf/dict-like) with fields under:
             - ``Training.Losses.{l1_weight,sam_weight,perceptual_weight,tv_weight}``
-            - ``Training.Losses.{max_val,ssim_win,randomize_bands,fixed_idx}``
+            - ``Training.Losses.{max_val,ssim_win,fixed_idx,validation_fixed_idx,report_band_metrics}``
             - ``Training.Losses.perceptual_metric`` in {``"vgg"``, ``"lpips"``}
             - ``TruncatedVGG.{i,j}`` (if VGG is used)
         testing (bool, optional): If True, do not load pretrained VGG weights
@@ -74,8 +75,9 @@ class GeneratorContentLoss(nn.Module):
         l1_w, sam_w, perc_w, tv_w (float): Loss term weights.
         max_val (float): Dynamic range for PSNR/SSIM.
         ssim_win (int): Window size for SSIM.
-        randomize_bands (bool): Whether to sample random bands for perceptual loss.
-        fixed_idx (torch.LongTensor|None): Fixed 3-channel indices if not randomized.
+        fixed_idx (torch.LongTensor|None): Explicit fixed triplet override. With
+            ``None`` (default), inputs with more than three bands use shuffled
+            triplets, shared between SR and HR on each call.
         perc_metric (str): Selected perceptual backend (``"vgg"`` or ``"lpips"``).
         perceptual_model (nn.Module): Back-end feature network/metric.
         normalizer (Normalizer): Shared normalizer for evaluation metrics.
@@ -96,6 +98,13 @@ class GeneratorContentLoss(nn.Module):
         )
         self.perc_w = float(perc_w_cfg)
         self.tv_w = float(_cfg_get(cfg, ["Training", "Losses", "tv_weight"], 0.0))
+        self.vgg_input_normalization = bool(
+            _cfg_get(cfg, ["Training", "Losses", "vgg_input_normalization"], False)
+        )
+        self.texture_w = float(_cfg_get(cfg, ["Training", "Losses", "texture_weight"], 0.0))
+        self.texture_grid = int(_cfg_get(cfg, ["Training", "Losses", "texture_grid"], 4))
+        if not math.isfinite(self.texture_w) or self.texture_w < 0 or self.texture_grid < 1:
+            raise ValueError("Texture weight must be finite/nonnegative and grid positive")
 
         self.max_val = float(_cfg_get(cfg, ["Training", "Losses", "max_val"], 1.0))
         self.ssim_win = int(_cfg_get(cfg, ["Training", "Losses", "ssim_win"], 11))
@@ -108,9 +117,18 @@ class GeneratorContentLoss(nn.Module):
         self.register_buffer(
             "fixed_idx", fixed_idx if fixed_idx is not None else None, persistent=False
         )
+        validation_idx = _cfg_get(cfg, ["Training", "Losses", "validation_fixed_idx"], None)
+        if validation_idx is not None:
+            validation_idx = torch.as_tensor(validation_idx, dtype=torch.long)
+            if validation_idx.ndim != 1 or validation_idx.numel() != 3:
+                raise ValueError("validation_fixed_idx must have length 3")
+        self.register_buffer("validation_fixed_idx", validation_idx, persistent=False)
+        self.report_band_metrics = bool(
+            _cfg_get(cfg, ["Training", "Losses", "report_band_metrics"], False)
+        )
 
         # Only init model if perceptual weight > 0
-        if self.perc_w != 0.0:
+        if self.perc_w != 0.0 or self.texture_w != 0.0:
             # --- configure perceptual metric ---
             self.perc_metric = str(
                 _cfg_get(cfg, ["Training", "Losses", "perceptual_metric"], "vgg")
@@ -121,7 +139,20 @@ class GeneratorContentLoss(nn.Module):
 
                 i = int(_cfg_get(cfg, ["TruncatedVGG", "i"], 5))
                 j = int(_cfg_get(cfg, ["TruncatedVGG", "j"], 4))
-                self.perceptual_model = TruncatedVGG19(i=i, j=j, weights=not testing)
+                before_activation = bool(
+                    _cfg_get(
+                        cfg,
+                        ["Training", "Losses", "vgg_before_activation"],
+                        False,
+                    )
+                )
+                self.perceptual_model = TruncatedVGG19(
+                    i=i,
+                    j=j,
+                    weights=not testing,
+                    before_activation=before_activation,
+                )
+                self.vgg_before_activation = before_activation
             elif self.perc_metric == "lpips":
                 import lpips
 
@@ -133,12 +164,44 @@ class GeneratorContentLoss(nn.Module):
             for p in self.perceptual_model.parameters():
                 p.requires_grad = False
             self.perceptual_model.eval()
+            if self.texture_w and self.perc_metric != "vgg":
+                raise ValueError("Local Gram texture loss requires the VGG backbone")
+            if self.texture_w and len(self.perceptual_model.truncated_vgg19) < 17:
+                raise ValueError("Local Gram loss requires VGG through conv3_4 (or deeper)")
         else:  # Set to None when no perc. wanted
             self.perceptual_model = None
             self.perc_metric = None
 
+        # ImageNet VGG expects channel-wise normalized RGB inputs. Keep these
+        # as buffers so they follow the loss module across devices/dtypes.
+        if self.perc_metric == "vgg":
+            self.register_buffer(
+                "_vgg_mean",
+                torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1),
+                persistent=False,
+            )
+            self.register_buffer(
+                "_vgg_std",
+                torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1),
+                persistent=False,
+            )
+
         # Shared normalizer for computing evaluation metrics
         self.normalizer = Normalizer(cfg)
+
+    def train(self, mode: bool = True):
+        """Keep the frozen perceptual backbone in inference mode.
+
+        ``LightningModule.train()`` recursively toggles child modules every
+        epoch, which otherwise silently re-enables dropout/batch-stat updates
+        in a perceptual network.
+        """
+        super().train(mode)
+        if self.perceptual_model is not None:
+            self.perceptual_model.eval()
+            for parameter in self.perceptual_model.parameters():
+                parameter.requires_grad_(False)
+        return self
 
     # ---------- public API ----------
     def return_loss(
@@ -165,6 +228,7 @@ class GeneratorContentLoss(nn.Module):
             + self.sam_w * comps["sam"]
             + self.perc_w * comps["perceptual"]
             + self.tv_w * comps["tv"]
+            + self.texture_w * comps.get("texture", 0.0)
         )
         loss = _ensure_finite(loss)
         metrics = {k: v.detach() for k, v in comps.items()}
@@ -225,29 +289,33 @@ class GeneratorContentLoss(nn.Module):
             torch.Tensor: Scalar mean SAM (radians).
         """
         B, C, H, W = sr.shape
-        sr_f = sr.view(B, C, -1)
-        hr_f = hr.view(B, C, -1)
+        # bfloat16/float16 do not have enough mantissa precision for a safe
+        # cosine clamp near one; keep the angle computation in float32.
+        work_dtype = torch.float32 if sr.dtype in (torch.float16, torch.bfloat16) else sr.dtype
+        sr_f = sr.to(work_dtype).reshape(B, C, -1)
+        hr_f = hr.to(work_dtype).reshape(B, C, -1)
         dot = (sr_f * hr_f).sum(dim=1)
-        if torch.is_floating_point(sr):
-            dtype_eps = torch.finfo(sr.dtype).eps
-        else:
-            dtype_eps = torch.finfo(torch.float32).eps
+        dtype_eps = torch.finfo(work_dtype).eps
         eps = max(eps, dtype_eps)
         sr_n = sr_f.norm(dim=1).clamp_min(eps)
         hr_n = hr_f.norm(dim=1).clamp_min(eps)
         denom = torch.clamp(sr_n * hr_n, min=eps)
-        cos = torch.clamp(dot / denom, -1 + 1e-7, 1 - 1e-7)
+        cos = torch.clamp(dot / denom, -1.0 + 1e-6, 1.0 - 1e-6)
         ang = torch.acos(cos)
         return _ensure_finite(ang.mean())
 
     def _prepare_perceptual_input(
-        self, sr: torch.Tensor, hr: torch.Tensor
+        self, sr: torch.Tensor, hr: torch.Tensor, *, for_metrics: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Select three channels for perceptual computation.
 
-        If the input has exactly 3 channels, returns them unchanged. Otherwise,
-        selects either random unique indices  or
-        the fixed indices stored in ``self.fixed_idx``.
+        Inputs with more than three bands use three unique indices from a fresh
+        random permutation by default, in both training and metric evaluation.
+        SR and HR share the selected indices and order. An explicit
+        ``fixed_idx`` overrides this policy. ``validation_fixed_idx`` can
+        independently fix metric evaluation without changing training samples.
+        Three-band inputs stay unchanged;
+        one- and two-band inputs repeat channels to form a triplet.
 
         Args:
             x (torch.Tensor): Input tensor, shape ``(B, C, H, W)``.
@@ -270,8 +338,13 @@ class GeneratorContentLoss(nn.Module):
             # already 3 channels, return as is
             return sr, hr
         else:
-            if self.fixed_idx is not None:
-                idx = self.fixed_idx.to(sr.device)
+            fixed_idx = (
+                self.validation_fixed_idx
+                if for_metrics and self.validation_fixed_idx is not None
+                else self.fixed_idx
+            )
+            if fixed_idx is not None:
+                idx = fixed_idx.to(sr.device)
                 if int(idx.min()) < 0 or int(idx.max()) >= C:
                     raise ValueError(
                         f"fixed_idx values must be valid channel indices for C={C}."
@@ -306,6 +379,9 @@ class GeneratorContentLoss(nn.Module):
         requires_grad = build_graph and self.perc_w != 0.0
 
         if self.perc_metric == "vgg":
+            if self.vgg_input_normalization:
+                sr_3 = (sr_3 - self._vgg_mean.to(dtype=sr_3.dtype)) / self._vgg_std.to(dtype=sr_3.dtype)
+                hr_3 = (hr_3 - self._vgg_mean.to(dtype=hr_3.dtype)) / self._vgg_std.to(dtype=hr_3.dtype)
             if requires_grad:
                 sr_features = self.perceptual_model(sr_3)
             else:
@@ -329,6 +405,26 @@ class GeneratorContentLoss(nn.Module):
         if not requires_grad:
             distance = distance.detach()
         return _ensure_finite(distance)
+
+    def _texture_distance(self, sr_3, hr_3):
+        """Average local Gram distances at preactivation VGG conv2_2/conv3_4."""
+        from .local_gram import local_gram_distance
+        mean = self._vgg_mean.to(dtype=sr_3.dtype)
+        std = self._vgg_std.to(dtype=sr_3.dtype)
+        generated, reference = sr_3, hr_3.detach()
+        if self.vgg_input_normalization:
+            generated, reference = (generated - mean) / std, (reference - mean) / std
+        distances = []
+        # VGG19 indices 7/16 are conv2_2/conv3_4, before their ReLUs.
+        for index, layer in enumerate(self.perceptual_model.truncated_vgg19):
+            generated = layer(generated)
+            with torch.no_grad():
+                reference = layer(reference)
+            if index in (7, 16):
+                distances.append(local_gram_distance(generated, reference, self.texture_grid))
+            if index == 16:
+                break
+        return torch.stack(distances).mean()
 
     def _compute_components(
         self, sr: torch.Tensor, hr: torch.Tensor, *, build_graph: bool
@@ -363,12 +459,23 @@ class GeneratorContentLoss(nn.Module):
 
         # Perceptual distance on 3 selected bands
         if self.perceptual_model != None and self.perc_w != 0.0:
-            sr_3, hr_3 = self._prepare_perceptual_input(sr=sr, hr=hr)
+            sr_3, hr_3 = self._prepare_perceptual_input(
+                sr=sr, hr=hr, for_metrics=not build_graph
+            )
             comps["perceptual"] = self._perceptual_distance(
                 sr_3, hr_3, build_graph=build_graph
             )
         else:
             comps["perceptual"] = torch.tensor(0.0, device=sr.device)
+
+        if self.texture_w:
+            if self.perc_w == 0:
+                sr_3, hr_3 = self._prepare_perceptual_input(
+                    sr=sr, hr=hr, for_metrics=not build_graph
+                )
+            comps["texture"] = _compute(
+                self.texture_w, lambda: self._texture_distance(sr_3, hr_3)
+            )
 
         # Total variation
         comps["tv"] = _compute(self.tv_w, lambda: self._tv_loss(sr))
@@ -393,6 +500,23 @@ class GeneratorContentLoss(nn.Module):
 
             comps["psnr"] = _ensure_finite(psnr).detach()
             comps["ssim"] = _ensure_finite(ssim).detach()
+
+            if not build_graph and self.report_band_metrics and sr.shape[1] == 4:
+                for name, bands in (("rgb", slice(0, 3)), ("nir", slice(3, 4))):
+                    prediction, reference = sr_metric[:, bands], hr_metric[:, bands]
+                    comps[f"l1_{name}"] = _ensure_finite(F.l1_loss(sr[:, bands], hr[:, bands]))
+                    comps[f"psnr_{name}"] = _ensure_finite(
+                        km.psnr(prediction, reference, max_val=safe_max_val).mean()
+                    )
+                    comps[f"ssim_{name}"] = _ensure_finite(km.ssim(
+                        prediction, reference, window_size=self.ssim_win,
+                        max_val=safe_max_val,
+                    ).mean())
+                if self.perceptual_model is not None and self.perc_w:
+                    comps["perceptual_nir"] = self._perceptual_distance(
+                        sr[:, 3:4].repeat(1, 3, 1, 1),
+                        hr[:, 3:4].repeat(1, 3, 1, 1), build_graph=False,
+                    )
 
         return comps
 

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Optional, Union
 import zipfile
 
 from huggingface_hub import hf_hub_download
@@ -21,7 +22,19 @@ def _safe_extract_member(
         dst.write(src.read())
 
 
-def get_example_dataset(out_dir: str = "example_dataset/"):
+_REPO_ID = "simon-donike/SR-GAN"
+_DATASET_FILENAME = "data/examples/dataset.zip"
+# This commit contains the structured model and sample-data layout.  It is
+# deliberately shared with inference presets so examples remain reproducible.
+_RELEASE_REVISION = "b31d2728952cfaa022bd1df92d82a54c23cf4f8f"
+
+
+def get_example_dataset(
+    out_dir: Union[str, Path] = "example_dataset/",
+    *,
+    cache_dir: Optional[Union[str, Path]] = None,
+    revision: Optional[str] = None,
+) -> None:
     """Download and extract the bundled example dataset from Hugging Face Hub.
 
     Retrieves a small prepackaged example dataset used for SRGAN demonstrations
@@ -30,12 +43,15 @@ def get_example_dataset(out_dir: str = "example_dataset/"):
     the files always end up directly under the specified output directory.
 
     Args:
-        out_dir (str, optional): Target directory for extraction.
+        out_dir (str or Path, optional): Target directory for extraction.
             Defaults to ``"example_dataset/"``.
+        cache_dir (str or Path, optional): Hugging Face cache directory.
+        revision (str, optional): Hub revision to download. Defaults to the
+            immutable package release revision.
 
     Behaviour:
         1. Creates the output folder if it does not exist.
-        2. Downloads ``example_dataset.zip`` from the repository
+        2. Downloads ``data/examples/dataset.zip`` from the repository
            ``simon-donike/SR-GAN`` on Hugging Face Hub.
         3. Extracts the archive contents into ``out_dir``, removing any redundant
            root folder structure for cleaner layout.
@@ -52,11 +68,13 @@ def get_example_dataset(out_dir: str = "example_dataset/"):
     output_dir = Path(out_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    repo_id = "simon-donike/SR-GAN"
-    filename = "example_dataset.zip"
-
     print("📦 Downloading from Hugging Face Hub...")
-    zip_path = hf_hub_download(repo_id=repo_id, filename=filename)
+    zip_path = hf_hub_download(
+        repo_id=_REPO_ID,
+        filename=_DATASET_FILENAME,
+        cache_dir=None if cache_dir is None else str(cache_dir),
+        revision=revision if revision is not None else _RELEASE_REVISION,
+    )
 
     with zipfile.ZipFile(zip_path, "r") as z:
         members = z.namelist()

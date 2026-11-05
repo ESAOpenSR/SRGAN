@@ -1,7 +1,10 @@
 import io
+from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
+import torch.nn.functional as F
 from PIL import Image
 
 from .radiometrics import minmax_percentile
@@ -67,8 +70,8 @@ def _select_display_bands(t: torch.Tensor) -> torch.Tensor:
     return t
 
 
-def plot_tensors(lr, sr, hr, title="Train"):
-    """Render LR–SR–HR triplets from a batch as a single PIL image.
+def plot_tensors(lr, sr, hr, title="Train", *, matched=None):
+    """Render LR–SR–HR rows, optionally including an SR matched column.
 
     Performs percentile-based min–max stretching and clamping to [0, 1] on each
     tensor, converts channel-first images to numpy for plotting, and arranges up
@@ -81,10 +84,12 @@ def plot_tensors(lr, sr, hr, title="Train"):
         sr (torch.Tensor): Super-resolved batch tensor of shape `(B, C, H, W)`.
         hr (torch.Tensor): High-resolution (target) batch tensor of shape `(B, C, H, W)`.
         title (str, optional): Figure title placed above the grid. Defaults to `"Train"`.
+        matched (torch.Tensor, optional): Corrected SR shown beside raw SR.
+            All columns share a display range when this is supplied.
 
     Returns:
-        PIL.Image.Image: RGB image containing a grid with columns `[LR | SR | HR]`
-        and up to two rows (first two items of the batch).
+        PIL.Image.Image: RGB grid with up to two rows and columns
+        `[LR | SR | HR]` or `[LR | SR | SR matched | HR]`.
 
     Notes:
         - Only the first two items of the batch are visualized to avoid large figures.
@@ -98,6 +103,21 @@ def plot_tensors(lr, sr, hr, title="Train"):
     lr = _select_display_bands(lr)
     sr = _select_display_bands(sr)
     hr = _select_display_bands(hr)
+
+    if matched is not None:
+        matched = _select_display_bands(matched)
+        rows = []
+        for index in range(min(2, lr.shape[0])):
+            images = [lr[index], sr[index], matched[index], hr[index]]
+            rows.append(_panel_image(images, ["LR", "SR", "SR matched", "HR"], title))
+        result = Image.new(
+            "RGB", (max(row.width for row in rows), sum(row.height for row in rows))
+        )
+        top = 0
+        for row in rows:
+            result.paste(row, (0, top))
+            top += row.height
+        return result
 
     # --- denorm(?) + stretch  ---
     lr = minmax_percentile(lr)
@@ -161,3 +181,115 @@ def plot_tensors(lr, sr, hr, title="Train"):
     buf.close()
     plt.close(fig)
     return pil_image
+
+
+def _common_display_range(images: list[torch.Tensor]) -> tuple[float, float]:
+    """Return one robust display range shared by all images in a panel."""
+    values = torch.cat([image.detach().float().reshape(-1) for image in images])
+    finite = values[torch.isfinite(values)]
+    if finite.numel() == 0:
+        return 0.0, 1.0
+    low, high = torch.quantile(finite, finite.new_tensor([0.02, 0.98]))
+    low, high = float(low), float(high)
+    if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+        low, high = float(finite.min()), float(finite.max())
+    if high <= low:
+        high = low + 1.0
+    return low, high
+
+
+def _panel_image(
+    images: list[torch.Tensor], labels: list[str], title: str
+) -> Image.Image:
+    """Render equally scaled channel images as an RGB PIL image."""
+    low, high = _common_display_range(images)
+    fig, axes = plt.subplots(
+        1, len(images), figsize=(4 * len(images), 4), squeeze=False
+    )
+    for axis, image, label in zip(axes[0], images, labels):
+        displayed = image.detach().float().clamp(low, high).sub(low).div(high - low)
+        axis.imshow(_to_numpy_img(displayed.cpu()))
+        axis.set_title(label)
+        axis.axis("off")
+    fig.suptitle(title)
+    fig.tight_layout()
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format="png", bbox_inches="tight", dpi=120)
+    buffer.seek(0)
+    result = Image.open(buffer).convert("RGB").copy()
+    buffer.close()
+    plt.close(fig)
+    return result
+
+
+def save_validation_artifacts(
+    lr: torch.Tensor,
+    sr: torch.Tensor,
+    hr: torch.Tensor,
+    output_dir: str | Path,
+    epoch: int,
+    num_images: int,
+    *,
+    sample_offset: int = 0,
+    local_images: bool = True,
+    is_global_zero: bool = True,
+    matched: torch.Tensor | None = None,
+    live_sr: torch.Tensor | None = None,
+) -> list[Path]:
+    """Save LR/bicubic/SR/[SR matched]/HR RGB and NIR validation panels.
+
+    Tensors use their supplied model/data values. Each sample and displayed
+    band uses one shared percentile range across all columns, so comparisons remain
+    meaningful. The caller should pass ``is_global_zero`` from Lightning to
+    prevent duplicate files under DDP.
+    """
+    if not local_images or not is_global_zero or num_images <= 0:
+        return []
+    if any(t.ndim != 4 for t in (lr, sr, hr)):
+        raise ValueError("lr, sr, and hr must have shape (B,C,H,W)")
+    if not (lr.shape[0] == sr.shape[0] == hr.shape[0]):
+        raise ValueError("lr, sr, and hr must contain the same batch size")
+    if sr.shape[-2:] != hr.shape[-2:]:
+        raise ValueError("sr and hr must have the same spatial shape")
+    if matched is not None and matched.shape != sr.shape:
+        raise ValueError("matched and sr must have the same shape")
+    if live_sr is not None and live_sr.shape != sr.shape:
+        raise ValueError("live_sr and sr must have the same shape")
+
+    destination = Path(output_dir).expanduser() / "validation_images"
+    destination.mkdir(parents=True, exist_ok=True)
+    count = min(int(num_images), lr.shape[0])
+    upsampled_lr = F.interpolate(lr[:count].float(), size=hr.shape[-2:], mode="nearest")
+    bicubic = F.interpolate(
+        lr[:count].float(), size=hr.shape[-2:], mode="bicubic", align_corners=False
+    )
+    outputs: list[Path] = []
+    for index in range(count):
+        sources = [upsampled_lr[index], bicubic[index], sr[index], hr[index]]
+        labels = ["LR", "Bicubic", "SR", "HR"]
+        if live_sr is not None:
+            labels[2] = "SR EMA"
+            sources.insert(3, live_sr[index])
+            labels.insert(3, "SR live (non-EMA)")
+        if matched is not None:
+            sources.insert(3, matched[index])
+            labels.insert(3, "SR matched")
+        for band_name in ("rgb", "nir"):
+            if band_name == "rgb" and sr.shape[1] < 3:
+                continue
+            if band_name == "nir" and sr.shape[1] < 4:
+                continue
+            selected = [
+                source[:3] if band_name == "rgb" else source[3:4] for source in sources
+            ]
+            path = (
+                destination
+                / f"epoch-{int(epoch):04d}_sample-{int(sample_offset) + index:03d}_{band_name}.png"
+            )
+            _panel_image(
+                selected,
+                labels,
+                f"Epoch {epoch} | {band_name.upper()}",
+            ).save(path)
+            outputs.append(path)
+    return outputs

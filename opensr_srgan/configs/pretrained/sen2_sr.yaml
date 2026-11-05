@@ -1,0 +1,34 @@
+# SEN2-SR v1 inference configuration.  weights/inference.ckpt contains EMA generator
+# weights, so EMA tracking is disabled for this inference-only configuration.
+Data:
+  dataset_type: SEN2NAIP
+  sen2naip_num_bands: 4
+  normalization: normalise_10k
+Model:
+  in_bands: 4
+Generator:
+  model_type: esrgan
+  n_channels: 64
+  n_blocks: 23
+  growth_channels: 32
+  scaling_factor: 4
+  res_scale: 0.2
+  use_icnr: true
+Training:
+  pretrain_g_only: false
+  g_pretrain_steps: 0
+  adv_loss_ramp_steps: 0
+  label_smoothing: false
+  Losses:
+    adv_loss_type: bce
+    relativistic_average_d: true
+    r1_gamma: 0.0
+  EMA:
+    enabled: false
+Postprocessing:
+  method: back_projection
+  back_projection:
+    blur_sigma: 0.0
+    max_iterations: 100
+    tolerance: 1.0e-06
+    relaxation: 1.0

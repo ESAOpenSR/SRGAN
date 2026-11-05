@@ -44,7 +44,9 @@ class TruncatedVGG19(nn.Module):
         >>> feats = vgg(img_batch)  # [B, C, H, W] feature map
     """
 
-    def __init__(self, i: int = 5, j: int = 4, weights=True) -> None:
+    def __init__(
+        self, i: int = 5, j: int = 4, weights=True, before_activation: bool = False
+    ) -> None:
         super().__init__()
 
         if weights:  # omit downloading for tests
@@ -74,9 +76,13 @@ class TruncatedVGG19(nn.Module):
                 f"One or both of i={i} and j={j} are not valid choices for the VGG19!"
             )
 
-        self.truncated_vgg19 = nn.Sequential(
-            *list(vgg19.features.children())[: truncate_at + 1]
-        )
+        layers = list(vgg19.features.children())
+        # ``truncate_at`` points at the requested convolution.  The historical
+        # behavior includes its following ReLU; texture experiments can instead
+        # compare the raw preactivation features, which retain stronger edge
+        # magnitude information.
+        end = truncate_at if before_activation else truncate_at + 1
+        self.truncated_vgg19 = nn.Sequential(*layers[:end])
 
     def forward(self, input):  # type: ignore[override]
         """Compute VGG-19 features up to the configured truncation layer.

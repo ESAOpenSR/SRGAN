@@ -15,6 +15,8 @@ __all__ = [
     "train",
     "load_from_config",
     "load_inference_model",
+    "export_ema_generator_checkpoint",
+    "export_inference_checkpoint",
     "__version__",
 ]
 
@@ -56,6 +58,12 @@ def __getattr__(name: str) -> Any:  # pragma: no cover - simple import proxy
         from . import _factory
 
         attr = getattr(_factory, name)
+        globals()[name] = attr
+        return attr
+    if name in {"export_ema_generator_checkpoint", "export_inference_checkpoint"}:
+        from . import pretrained
+
+        attr = getattr(pretrained, name)
         globals()[name] = attr
         return attr
     raise AttributeError(f"module 'opensr_srgan' has no attribute '{name}'")

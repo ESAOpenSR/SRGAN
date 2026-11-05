@@ -1,6 +1,6 @@
 # Configuration
 
-ESA OpenSR relies on YAML files to control every aspect of the training pipeline. This page documents the available keys and how they influence the underlying code. Use `opensr_srgan/configs/config_training_example.yaml` for a smoke test, `config_10m.yaml` for SEN2NAIP-style runs, or the Hydra presets described below for composable experiments.
+ESA OpenSR relies on YAML files to control every aspect of the training pipeline. This page documents the available keys and how they influence the underlying code. Use `opensr_srgan/configs/config_training_example.yaml` for a smoke test, `config_10m.yaml` for a four-band baseline, or the Hydra presets described below for composable experiments.
 
 ## File structure
 
@@ -15,6 +15,7 @@ Discriminator:
 Optimizers:
 Schedulers:
 Logging:
+Postprocessing:
 ```
 
 Each section maps directly to parameters consumed inside `opensr_srgan/model/SRGAN.py`, the dataset factory, or the training script.
@@ -115,6 +116,10 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 | `sam_weight` | `0.05` | Weight of the spectral angle mapper loss. |
 | `perceptual_weight` | `0.1` | Weight of the perceptual feature loss. |
 | `perceptual_metric` | `vgg` | Backbone used for perceptual features (`vgg` or `lpips`). |
+| `vgg_before_activation` | `False` | Compare features before the selected VGG ReLU. |
+| `vgg_input_normalization` | `False` | Apply ImageNet mean/std to VGG inputs. |
+| `texture_weight` | `0.0` | Local-Gram texture loss weight; zero disables it. Requires a VGG backbone through conv3_4 or deeper. |
+| `texture_grid` | `4` | Number of tiles along each feature axis; must divide the selected feature dimensions. |
 | `fixed_idx` | unset | Optional fixed 3-band indices used by perceptual loss when `in_bands > 3` (recommended: `[0, 1, 2]` for RGB+NIR setups). |
 | `tv_weight` | `0.0` | Total variation regularisation strength. |
 | `max_val` | `1.0` | Peak value assumed by PSNR/SSIM computations. |
@@ -124,8 +129,8 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `model_type` | `SRResNet` | Generator family (`SRResNet`, `stochastic_gan`, or `esrgan`). |
-| `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`/`esrgan`. |
+| `model_type` | `SRResNet` | Generator family (`SRResNet`, `stochastic_gan`, `esrgan`, or `swinir`). |
+| `block_type` | `standard` | SRResNet variant (`standard`, `res`, `rcab`, `rrdb`, `lka`). Ignored for `stochastic_gan`/`esrgan`/`swinir`. |
 | `large_kernel_size` | `9` | Kernel size for input/output convolution layers. |
 | `small_kernel_size` | `3` | Kernel size for residual/attention blocks. |
 | `n_channels` | `96` | Base number of feature channels (RRDB/ESRGAN trunk width). |
@@ -133,8 +138,31 @@ stable validation imagery. The EMA is fully optional and controlled through the 
 | `scaling_factor` | `8` | Super-resolution scale factor (2, 4, 8, ...). |
 | `growth_channels` | `32` | ESRGAN-only: growth channels inside each RRDB block. |
 | `res_scale` | `0.2` | Residual scaling used by stochastic/ESRGAN variants. |
-| `out_channels` | `Model.in_bands` | ESRGAN-only: override the number of output bands. |
+| `out_channels` | `Model.in_bands` | ESRGAN/SwinIR: override the number of output bands. |
 | `use_icnr` | `True` | ESRGAN-only: apply ICNR initialization to pre-PixelShuffle convolutions to reduce checkerboard artifacts in low-frequency regions. |
+
+### SwinIR settings
+
+Select `Generator.model_type: swinir` or the Hydra group `model=10m_swinir`.
+These settings describe the transformer trunk; CNN-only width, block, kernel,
+RRDB, and ICNR fields are ignored with a factory notice.
+
+| Key under `Generator` | Default | Description |
+| --- | --- | --- |
+| `embed_dim` | `180` | Transformer feature width; must be divisible by every head count. |
+| `depths` | `[6, 6, 6, 6, 6, 6]` | Transformer blocks in each residual group. |
+| `num_heads` | `[6, 6, 6, 6, 6, 6]` | Attention heads per group; length must match `depths`. |
+| `window_size` | `8` | Attention-window side length, at least 2; inputs are padded and cropped automatically. |
+| `mlp_ratio` | `2.0` | Feed-forward hidden width relative to `embed_dim`. |
+| `qkv_bias` | `true` | Add bias to attention query/key/value projections. |
+| `drop_rate` | `0.0` | Projection and feed-forward dropout probability. |
+| `attn_drop_rate` | `0.0` | Attention-weight dropout probability. |
+| `drop_path_rate` | `0.1` | Maximum stochastic-depth probability across the trunk. |
+| `use_checkpoint` | `false` | Recompute transformer blocks during backward to reduce activation memory. |
+| `out_channels` | `Model.in_bands` | Number of generated bands; keep it equal to input bands for LR matching. |
+| `scaling_factor` | `4` | SwinIR supports 2, 3, or 4. |
+
+For a full flat-YAML example see [Architecture](architecture.md#swinir-generator).
 
 ## Discriminator
 
@@ -234,11 +262,56 @@ different validation metrics.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `num_val_images` | `5` | Number of validation batches visualised and logged to Weights & Biases when W&B is enabled. |
+| `num_val_images` | `5` | Maximum validation batches visualised when local images or W&B are enabled. |
+| `local_images` | `false` | Save fixed RGB/NIR comparison panels in `validation_images/`. |
+| `log_live_and_ema` | `false` | Include a separately labelled live-generator prediction when EMA is active; metrics still use EMA. |
 | `wandb.enabled` | `False` in example configs | Enables `WandbLogger`; when false, training uses `CSVLogger`. |
 | `wandb.entity` | `opensr` | W&B entity/team name. |
 | `wandb.project` | `SRGAN_10m` | Project name used by W&B and by the default checkpoint directory. |
 | `output_dir` | unset | Optional explicit run directory. Hydra sets this to its runtime output directory; legacy YAML runs fall back to `logs/<project>/<timestamp>`. |
+
+## Post-processing (`Postprocessing`)
+
+Post-processing is independent of the generator. It changes `predict_step`
+outputs and validation comparison images; `forward`, losses, validation metrics,
+and discriminator inputs retain raw SR predictions.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `method` | `histogram` | Select `histogram` or `back_projection`; any other value raises an error. |
+| `back_projection.blur_sigma` | `0.0` | HR-pixel Gaussian sigma, either a scalar or one value per band. Zero uses block averaging without blur. |
+| `back_projection.max_iterations` | `100` | Maximum correction iterations. |
+| `back_projection.tolerance` | `1e-6` | Stopping threshold for LR RMSE, measured in the supplied image units. |
+| `back_projection.relaxation` | `1.0` | Correction step fraction in `(0, 1]`. |
+| `back_projection.scale` | inferred | Optional scale override; must match the integer LR/SR shape ratio. |
+
+Keep historical prediction behavior explicitly with:
+
+```yaml
+Postprocessing:
+  method: histogram
+```
+
+Or enable measurement matching with:
+
+```yaml
+Postprocessing:
+  method: back_projection
+  back_projection:
+    blur_sigma: 0.0
+    max_iterations: 100
+    tolerance: 1.0e-6
+    relaxation: 1.0
+```
+
+Older configs without these settings use histogram matching. Back-projection
+options apply only when that method is selected. Hydra exposes the same choices
+through `postprocessing=histogram` and `postprocessing=back_projection`.
+
+Histogram matching runs before denormalization. Back-projection runs afterward
+against the original LR values and does not clip the corrected result.
+See [Inference](inference.md#prediction-matching) for method selection, Python
+examples, and the standalone mask/diagnostic API.
 
 ## Hydra experiment configs
 
@@ -250,7 +323,7 @@ python -m opensr_srgan.train_hydra experiment=10m Training.max_epochs=5 Logging.
 srgan-train experiment=20m Training.gpus=[0,1]
 ```
 
-Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` selects simple defaults, while `experiment/example.yaml`, `experiment/10m.yaml`, and `experiment/20m.yaml` reproduce the shipped flat YAML presets through grouped `data`, `model`, `training`, and `logging` configs. Choose `experiment=...` for a full known setup; use direct overrides for a temporary change without editing files. See [Hydra Experiments](hydra.md) for a complete walkthrough.
+Hydra configs live under `opensr_srgan/configs/hydra`. The root `train.yaml` selects simple defaults, while `experiment/example.yaml`, `experiment/10m.yaml`, and `experiment/20m.yaml` reproduce the shipped flat YAML presets through grouped `data`, `model`, `training`, `logging`, and `postprocessing` configs. Choose `experiment=...` for a full known setup; use direct overrides for a temporary change without editing files. See [Hydra Experiments](hydra.md) for a complete walkthrough.
 
 ## Tips for managing configurations
 

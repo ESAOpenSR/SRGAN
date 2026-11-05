@@ -19,6 +19,7 @@ CONSUMED_SECTIONS = (
     "Optimizers",
     "Schedulers",
     "Logging",
+    "Postprocessing",
 )
 
 
@@ -109,3 +110,9 @@ def test_hydra_entrypoint_passes_composed_overrides_to_train(monkeypatch, tmp_pa
     assert cfg.Training.max_epochs == 2
     assert cfg.Logging.wandb.enabled is False
     assert Path(cfg.Logging.output_dir) == tmp_path
+
+
+def test_postprocessing_group_override():
+    cfg = _compose(["postprocessing=back_projection"])
+    assert cfg.Postprocessing.method == "back_projection"
+    assert cfg.Postprocessing.back_projection.blur_sigma == 0.0

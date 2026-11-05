@@ -10,7 +10,7 @@ $$
 x' = \mathrm{Upsample}\!\left( \mathrm{Conv}_{\text{tail}}\!\left(\mathrm{Body}(x_{\text{head}}) + x_{\text{head}}\right)\! \right).
 $$
 
-Because every generator variant (residual, RCAB, RRDB, large-kernel attention, ESRGAN, or stochastic conditional) shares this template, you can swap block implementations without altering the training pipeline or configuration schema.
+Because every generator variant (residual, RCAB, RRDB, large-kernel attention, ESRGAN, SwinIR, or stochastic conditional) shares this template, you can swap block implementations without altering the training pipeline or configuration schema.
 
 
 ## SRGAN Lightning module
@@ -23,7 +23,7 @@ Because every generator variant (residual, RCAB, RRDB, large-kernel attention, E
   `Generator.model_type`/`block_type` and `Discriminator.model_type`. Unsupported combinations fail fast with clear error
   messages.
 * **Loss construction.** `GeneratorContentLoss` (from `opensr_srgan.model.loss`) provides L1, spectral angle mapper (SAM), perceptual, and
-  total-variation terms. Adversarial supervision uses BCE-with-logits or Wasserstein objectives, with optional label smoothing, relativistic-average BCE, and R1 penalty depending on the config.
+  total-variation terms, plus optional local-Gram texture statistics. Adversarial supervision uses BCE-with-logits or Wasserstein objectives, with optional label smoothing, relativistic-average BCE, and R1 penalty depending on the config.
 * **Optimiser scheduling.** `configure_optimizers()` returns paired Adam optimisers (generator + discriminator) with
   `ReduceLROnPlateau` schedulers that monitor a configurable validation metric.
 * **Training orchestration.** `setup_lightning()` binds `training_step_PL2()` and enables manual optimisation
@@ -33,7 +33,8 @@ Because every generator variant (residual, RCAB, RRDB, large-kernel attention, E
 * **Validation and logging.** `validation_step()` computes the same content metrics, logs discriminator diagnostics, and pushes
   qualitative image panels to Weights & Biases according to `Logging.num_val_images`.
 * **Inference pipeline.** `predict_step()` automatically normalises Sentinel-2 style 0–10000 inputs, runs the generator,
-  histogram matches the result to the low-resolution source, and denormalises if necessary.
+  applies the configured histogram matching or back-projection, and returns the supplied input units.
+  Histogram matching precedes denormalisation; back-projection follows it.
 
 ### Key helper methods
 
@@ -42,6 +43,7 @@ Because every generator variant (residual, RCAB, RRDB, large-kernel attention, E
 | `_pretrain_check()` | Determines whether the generator-only warm-up is active. |
 | `_compute_adv_loss_weight()` | Produces the ramped adversarial weight using `linear` or `cosine` schedules. |
 | `_log_generator_content_loss()` and `_log_adv_loss_weight()` | Centralise logging so metrics remain consistent across phases. |
+| `postprocess(sr, lr)` | Applies the selected histogram matching or back-projection to tensors in a shared value range. |
 | `on_fit_start()` | Prints informative status messages when training begins. |
 
 ## Generator options
@@ -57,10 +59,54 @@ The generator zoo lives under `opensr_srgan/model/generators/` and can be select
   enabling experiments where auxiliary metadata influences the super-resolution output.
 * **ESRGAN generator (`esrgan.py`).** Implements the RRDBNet trunk introduced with ESRGAN, exposing `n_blocks`, `growth_channels`,
   and `res_scale` so you can dial in deeper receptive fields and sharper textures. The shared training loop supports optional relativistic-average BCE and a two-step training phase (content-oriented pretraining of the generator followed by adversarial training with the discriminator).
+* **SwinIR generator (`swinir.py`).** Uses residual groups of regular and shifted-window self-attention, followed by a pixel-shuffle reconstruction head. See the settings and example below.
 * **Advanced variants (`SRGAN_advanced.py`).** Provides additional block implementations and compatibility aliases exposed in
   `__init__.py` for backwards compatibility.
 
-Common traits across generators include configurable input channel counts (`Model.in_bands`), support for upscaling factors from 2× to 8×, and residual scaling to stabilise deeper networks.
+All generators accept `Model.in_bands` and `Generator.scaling_factor`. Supported
+scales and trunk settings depend on the selected backbone; CNN residual scaling
+settings do not apply to SwinIR.
+
+### SwinIR generator
+
+SwinIR combines local self-attention with shifts between attention windows so
+features can interact across window boundaries. This implementation takes
+multispectral tensors, pads them to complete windows, and crops the output to
+exactly the requested scaled size. It supports 2×, 3×, and 4× upscaling, including
+small or non-square inputs. It applies no normalization or clipping internally;
+the shared data and inference pipeline handles value ranges.
+
+Select `model=10m_swinir` in Hydra, or replace the `Generator` section of an
+existing flat YAML with:
+
+```yaml
+Generator:
+  model_type: swinir
+  scaling_factor: 4
+  embed_dim: 180
+  depths: [6, 6, 6, 6, 6, 6]
+  num_heads: [6, 6, 6, 6, 6, 6]
+  window_size: 8
+  mlp_ratio: 2.0
+  qkv_bias: true
+  drop_rate: 0.0
+  attn_drop_rate: 0.0
+  drop_path_rate: 0.1
+  use_checkpoint: false
+```
+
+Input and default output bands come from `Model.in_bands`; the shipped model
+preset sets both to four. `depths` and `num_heads` must have equal nonzero lengths,
+and `embed_dim` must divide evenly by each head count. Set `use_checkpoint: true`
+to trade additional backward computation for lower activation memory use.
+CNN-only fields such as `n_channels`, `n_blocks`, and `growth_channels` are ignored
+with a factory notice.
+
+ESRGAN/RRDB checkpoints and official upstream SwinIR checkpoints are not compatible
+with this implementation.
+See the [configuration reference](configuration.md#swinir-settings) for all
+SwinIR controls and the [model API](api-reference/model.md#swinir-transformer)
+for its constructor.
 
 ## Discriminator options
 
@@ -82,6 +128,7 @@ Both discriminators use LeakyReLU activations and strided convolutions to progre
 * **L1 reconstruction** over all spectral bands.
 * **Spectral Angle Mapper (SAM)** to preserve spectral signatures.
 * **Perceptual similarity** via VGG or LPIPS feature spaces, depending on `Training.Losses.perceptual_metric`.
+* **Local-Gram texture loss** on preactivation VGG conv2_2/conv3_4 features when `texture_weight` is non-zero.
 * **Total variation regularisation** for smoothing when `tv_weight` is non-zero.
 
 The same module exposes `return_metrics()` so validation can log PSNR/SSIM-style diagnostics without recomputing forward passes.
@@ -89,10 +136,11 @@ The same module exposes `return_metrics()` so validation can log PSNR/SSIM-style
 ## Data flow and normalisation
 
 The Lightning module expects batches of `(lr_imgs, hr_imgs)` tensors supplied by the `LightningDataModule` returned from
-`opensr_srgan/data/dataset_selector.py`. `predict_step()` uses the configured `opensr_srgan.data.utils.Normalizer` plus histogram matching from `opensr_srgan.utils.radiometrics`:
+`opensr_srgan/data/dataset_selector.py`. `predict_step()` uses the configured `opensr_srgan.data.utils.Normalizer` plus the matching method selected by `Postprocessing.method`:
 
 * `Normalizer`: Applies the configured `Data.normalization` strategy, such as `normalise_10k`, `zero_one`, or a custom callable.
-* `histogram`: Matches the SR histogram to the LR reference to minimise domain gaps during inference.
+* `histogram` (default): Matches the SR histogram to the LR reference before denormalisation.
+* `back_projection`: Corrects denormalised SR so its downsampled measurements reproduce the LR input.
 
 These helpers allow the generator to operate in a normalised space while still reporting outputs in physical units when needed.
 

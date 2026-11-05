@@ -39,6 +39,25 @@ side effects.
         - "!^__"
       members_order: source
 
+## Back-projection
+
+Used when `Postprocessing.method: back_projection` is selected. The model's
+`postprocess(sr, lr)` method infers the spatial scale; standalone calls use
+`BackProjectionConfig`. Both inputs must share a value range. See the
+[inference examples](../inference.md#prediction-matching).
+
+::: opensr_srgan.utils.back_projection
+    handler: python
+    options:
+      show_root_heading: false
+      show_root_full_path: false
+      show_source: true
+      members:
+        - BackProjectionConfig
+        - BlurDownsample
+        - back_projection
+      members_order: source
+
 ## Tensor conversions
 
 ::: opensr_srgan.utils.tensor_conversions

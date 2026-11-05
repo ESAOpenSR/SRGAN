@@ -1,6 +1,6 @@
 # Hydra experiment configs
 
-Hydra is the recommended entry point when you want to run repeatable experiments without copying and editing a full YAML file for every small change. The old single-file config workflow still works; Hydra is an additional layer that composes the same `Data`, `Model`, `Training`, `Generator`, `Discriminator`, `Optimizers`, `Schedulers`, and `Logging` sections that the SRGAN code already understands.
+Hydra is the recommended entry point when you want to run repeatable experiments without copying and editing a full YAML file for every small change. The old single-file config workflow still works; Hydra is an additional layer that composes the same `Data`, `Model`, `Training`, `Generator`, `Discriminator`, `Optimizers`, `Schedulers`, `Logging`, and `Postprocessing` sections that the SRGAN code already understands.
 
 ## Mental model
 
@@ -29,6 +29,7 @@ Hydra configs live in `opensr_srgan/configs/hydra/`:
 | `model/` | Combined `Model`, `Generator`, and `Discriminator` presets. |
 | `training/` | Combined `Training`, `Optimizers`, and `Schedulers` presets. |
 | `logging/` | CSV and W&B logging presets. |
+| `postprocessing/` | Histogram matching (default) or back-projection for predictions and validation panels. |
 | `experiment/` | Full experiment presets that reproduce the shipped legacy YAMLs. |
 | `hydra/default.yaml` | Hydra's own run-directory and working-directory settings. |
 
@@ -43,6 +44,12 @@ python -m opensr_srgan.train_hydra experiment=example
 python -m opensr_srgan.train_hydra experiment=10m
 python -m opensr_srgan.train_hydra experiment=20m
 ```
+
+The model presets use the same group structure:
+
+| Preset | Purpose | Checkpoint requirement |
+| --- | --- | --- |
+| `model=10m_swinir` | Four-band 4× transformer model; combine it with your chosen data and training groups. | Use compatible SwinIR weights when loading a checkpoint. |
 
 Use direct overrides when you only want to change one or two values for a run:
 
@@ -60,6 +67,31 @@ python -m opensr_srgan.train_hydra data=sen2naip model=10m_esrgan training=10m l
 ```
 
 If a field does not already exist in the composed config, Hydra requires a `+` prefix. For normal SRGAN fields this is rarely needed because the presets define the expected sections up front.
+
+### SwinIR and prediction matching
+
+Inspect the transformer model and selected matching method without launching
+training:
+
+```bash
+python -m opensr_srgan.train_hydra --cfg job model=10m_swinir postprocessing=back_projection
+```
+
+Use `model=10m_swinir` with compatible data and training groups. Its checkpoint
+must belong to SwinIR; changing the generator does not convert ESRGAN weights.
+
+Select matching independently from the model or experiment:
+
+```bash
+python -m opensr_srgan.train_hydra --cfg job model=10m_swinir postprocessing=back_projection
+python -m opensr_srgan.train_hydra --cfg job experiment=example postprocessing=histogram
+```
+
+`postprocessing=...` selects the config group; `Postprocessing.method=...`
+overrides the underlying YAML field. Both methods' settings are present in the
+groups, so individual controls can also be overridden, for example
+`Postprocessing.back_projection.tolerance=1e-5`. These choices affect
+predictions and figures, not the training objective.
 
 ## Output directories
 

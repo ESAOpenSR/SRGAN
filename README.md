@@ -20,9 +20,14 @@
 
 Full docs live at **[srgan.opensr.eu](https://srgan.opensr.eu/)**. They cover usage, configuration, training recipes, and deployment tips in depth.
 
+Version **1.1.0** adds [SwinIR configuration and training](docs/architecture.md#swinir-generator),
+[histogram matching and back-projection](docs/inference.md#prediction-matching),
+and a supported [Sen2 SR pretrained model](https://huggingface.co/simon-donike/SR-GAN/blob/main/models/sen2-sr/v1/README.md).
+See the [release notes](CHANGELOG.md) for changes and upgrade notes.
+
 ## 🧠 Highlights
 
-* **Flexible models:** swap between SRResNet, RCAB, RRDB, LKA, ESRGAN, and stochastic generators with YAML-only changes.
+* **Flexible models:** swap between SRResNet, RCAB, RRDB, LKA, ESRGAN, SwinIR, and stochastic generators with YAML-only changes.
 * **Remote-sensing aware losses:** combine spectral, perceptual, and adversarial objectives with tunable weights.
 * **Stable training loop:** generator pretraining, adversarial ramp-ups, EMA, and multi-GPU Lightning support out of the box.
 * **PyPI distribution:** `pip install opensr-srgan` for ready-to-use presets or custom configs.
@@ -65,7 +70,7 @@ The schedule and ramp make training **easier, safer, and more reproducible**.
 
 | Component | Options | Config keys |
 |-----------|---------|-------------|
-| **Generators** | `SRResNet`, `res`, `rcab`, `rrdb`, `lka`, `esrgan`, `stochastic_gan` | `Generator.model_type`, depth via `Generator.n_blocks`, width via `Generator.n_channels`, kernels/scale plus ESRGAN-specific `growth_channels`, `res_scale`, `out_channels`. |
+| **Generators** | `SRResNet`, `res`, `rcab`, `rrdb`, `lka`, `esrgan`, `swinir`, `stochastic_gan` | `Generator.model_type`, architecture settings, and upscaling factor; see the [architecture guide](docs/architecture.md). |
 | **Discriminators** | `standard` SRGAN, `patchgan`, `esrgan` | `Discriminator.model_type`, granularity with `Discriminator.n_blocks`, spectral norm toggle via `Discriminator.use_spectral_norm`, ESRGAN-specific `base_channels`, `linear_size`. |
 | **Content losses** | L1, Spectral Angle Mapper, VGG19/LPIPS perceptual metrics, Total Variation | Weighted by `Training.Losses.*` (e.g. `l1_weight`, `sam_weight`, `perceptual_weight`, `perceptual_metric`, `tv_weight`). |
 | **Adversarial loss** | BCE‑with‑logits or Wasserstein critic | Controlled by `Training.Losses.adv_loss_type`, warmup via `Training.pretrain_g_only`, ramped by `adv_loss_ramp_steps`, capped at `adv_loss_beta`, optional label smoothing. For BCE, enable `Training.Losses.relativistic_average_d` for RaGAN-style relative logits. |
@@ -85,6 +90,21 @@ Follow the [installation instructions](https://srgan.opensr.eu/getting-started/)
 * **Datasets:** Grab the bundled example dataset or learn how to register your own sources in the [data guide](https://srgan.opensr.eu/data/).
 * **Training:** Launch a smoke test with `python -m opensr_srgan.train --config opensr_srgan/configs/config_training_example.yaml`, or use Hydra with `python -m opensr_srgan.train_hydra experiment=example`. Use the `10m` and `20m` presets once the matching datasets are configured.
 * **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/inference/).
+
+For the supported four-band Sentinel-2 model, use the `SEN2-SR` preset. Its
+[model card](https://huggingface.co/simon-donike/SR-GAN/blob/main/models/sen2-sr/v1/README.md)
+documents inputs and outputs. It accepts
+red/green/blue/NIR Sentinel-2 DN tensors and returns 2.5 m predictions:
+
+```bash
+python -m pip install opensr-srgan==1.1.0
+```
+
+```python
+from opensr_srgan import load_inference_model
+model = load_inference_model("SEN2-SR", map_location="cpu")
+prediction = model.predict_step(raw_dn_tensor)
+```
 
 ---
 
@@ -144,5 +164,3 @@ If you use this work, please cite:
 Developed within the **ESA Φ-lab / OpenSR** initiative. Simon Donike is the main contributor and maintainer of the repository. Cesar Aybar and Julio Contreras contributed the datasets as well as implementation, documentation and publishing support. Prof. Luis Gómez-Chova contributed the remote sensing-specific perspective and signal processing advice.  
 > The development history of this code began in 2020 with the implementation of an SR-GAN for a MSc thesis project. Since then, over several iterations, the codebase has been expanded and many training tweaks implemented, based on the experiences made training SR-GANs for the OpenSR project. The fundamental training outline, training tweaks, normalizations, and inference procedures are built upon that experience.  
 The added complexity that came with (a) the implementation of many different models and blocks, (b) more data sources, (c) according normalizations, and (d) testing and documentation structures, was handled to varying degrees with the help of *Codex*. Specifically, the docs, the automated testing workflows, and the normalizer class are in (large) parts AI generated. This code and its functionalities have been verified and tested to the best of my ability.
-
----
