@@ -40,8 +40,7 @@ The downloaded training inputs are
 `models/sen2-sr/v1/training/splits/crosssensor.json`. Keep the split beside the
 training config when resuming or reproducing the run.
 
-Install this version from `dev` with
-`pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'`.
+Install the release with `pip install 'opensr-srgan[sen2naip]==1.1.0'`.
 The public preset downloads the matching config and EMA weights:
 
 ```python
@@ -105,6 +104,11 @@ must remain unchanged for comparable evaluation. The packaged manifest preserves
 the run's validation ordering, with its 16 displayed scenes first; spatial
 membership is unchanged from the original seed-2025 split. Its SHA-256 is
 `218d5d73aec72bbb17a3853606759439f70cb28a1cafe298ee505234b2b21c5d`.
+
+When `Data.sen2naip_split_file` is not set, the loader creates a seeded,
+shuffled train/validation split from the current TACO manifest rather than
+using sequential records. That fallback is useful for exploratory work, but a
+fixed split manifest is required to reproduce this release or compare results.
 
 The public model uses the preserved final EMA state from the stopped run;
 it is not claimed to be the lowest historical validation metric. The strict

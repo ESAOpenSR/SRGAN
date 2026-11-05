@@ -5,7 +5,7 @@ This walkthrough covers the fastest path from zero to an end-to-end super-resolu
 ## 1. Install the runtime dependencies
 
 ```bash
-pip install opensr-srgan
+pip install opensr-srgan==1.1.0
 pip install opensr-utils  # optional, for full-tile inference
 ```
 
@@ -18,17 +18,19 @@ pip install opensr-utils  # optional, for full-tile inference
 ```python
 from opensr_srgan import load_inference_model
 
-model = load_inference_model("SEN2-SR", map_location="cuda")
+model = load_inference_model("SEN2-SR", map_location="cpu")
+model = model.to("cuda")
 ```
 
-`load_inference_model` retrieves the configuration and checkpoint that correspond to the selected preset (here the supported four-band Sentinel-2 model), restores the Lightning module, and switches it to evaluation mode so that it is ready for inference. Release assets are downloaded from the structured `models/<preset>/v1/` layout at the package-pinned Hub revision. If you run on CPU, change `map_location="cuda"` to `map_location="cpu"`.
+`load_inference_model` retrieves the configuration and checkpoint that correspond to the selected preset (here the supported four-band Sentinel-2 model), restores the Lightning module, and switches it to evaluation mode so that it is ready for inference. Release assets are downloaded from the structured `models/<preset>/v1/` layout at the package-pinned Hub revision. `map_location` controls checkpoint deserialization only; it does not place the model for inference. Load on CPU, then use `.to("cuda")` for GPU inference or `.to("cpu")` to keep it on CPU.
 
 ## 2.2 Instantiate your own model
 
 ```python
 from opensr_srgan import load_from_config
 model = load_from_config(config_path="YOUR_CONFIG_PATH",
-                         checkpoint_uri="YOUR_CKPT_PATH")
+                         checkpoint_uri="YOUR_CKPT_PATH",
+                         mode="eval")
 ```
 
 Using the path to your trained model as well as the config file that was used to train your model, you can load your model for inference.

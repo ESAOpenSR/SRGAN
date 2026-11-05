@@ -4,7 +4,7 @@ These small examples use the supported release layouts in this repository.  Inst
 the matching package revision and download the examples alongside the model files:
 
 ```bash
-python -m pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'
+python -m pip install opensr-srgan==1.1.0
 hf download simon-donike/SR-GAN --include 'examples/*' --local-dir sr-gan-release
 cd sr-gan-release/examples
 ```
@@ -104,7 +104,7 @@ Install the packaged data extra before a resume, then use a fresh output
 directory for each attempt:
 
 ```bash
-python -m pip install 'opensr-srgan[sen2naip] @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'
+python -m pip install 'opensr-srgan[sen2naip]==1.1.0'
 ```
 
 Use `--run` only when preparing and launching in one command against a fresh

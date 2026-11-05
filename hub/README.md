@@ -12,7 +12,7 @@ tags:
 # OpenSR SRGAN pretrained models
 
 This repository packages the supported Sen2 SR release and two maintained
-legacy presets for the OpenSR SRGAN `dev` package.
+legacy presets for OpenSR SRGAN 1.1.0.
 
 | Preset | Model card | Input / scale | Checkpoints |
 | --- | --- | --- | --- |
@@ -20,10 +20,10 @@ legacy presets for the OpenSR SRGAN `dev` package.
 | `RGB-NIR` | [RGB-NIR v1](models/rgb-nir/v1/README.md) | 4 bands, 4× | [inference](models/rgb-nir/v1/weights/inference.ckpt) |
 | `SWIR` | [SWIR v1](models/swir/v1/README.md) | 6 bands, 8× | [inference](models/swir/v1/weights/inference.ckpt) |
 
-Install the package from the supported branch and use a preset:
+Install the 1.1.0 release and use a preset:
 
 ```bash
-python -m pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'
+python -m pip install opensr-srgan==1.1.0
 ```
 
 ```python

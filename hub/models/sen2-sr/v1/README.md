@@ -26,7 +26,7 @@ generated 2.5 m detail is not an observed measurement.
 ## Install and infer
 
 ```bash
-python -m pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'
+python -m pip install opensr-srgan==1.1.0
 ```
 
 ```python
@@ -67,7 +67,7 @@ GPU.
 ```bash
 hf download simon-donike/SR-GAN --include 'models/sen2-sr/v1/*' --local-dir ./sen2-model
 hf download simon-donike/SR-GAN examples/resume_training.py --local-dir ./sen2-model
-python -m pip install 'opensr-srgan[sen2naip] @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'
+python -m pip install 'opensr-srgan[sen2naip]==1.1.0'
 python ./sen2-model/examples/resume_training.py \
   --dataset /path/to/crosssensor.taco --output-dir ./new-run --max-steps 328584
 ```

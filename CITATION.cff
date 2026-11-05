@@ -54,8 +54,8 @@ title: "OpenSR-SRGAN: A Flexible Super-Resolution Framework for
 type: software
 repository-code: https://github.com/ESAOpenSR/SRGAN
 url: https://srgan.opensr.eu/
-version: 1.1.0.dev0
-date-released: 2026-10-30
+version: 1.1.0
+date-released: 2026-11-05
 keywords:
 - super-resolution
 - remote sensing

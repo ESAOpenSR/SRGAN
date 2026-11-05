@@ -20,11 +20,10 @@
 
 Full docs live at **[srgan.opensr.eu](https://srgan.opensr.eu/)**. They cover usage, configuration, training recipes, and deployment tips in depth.
 
-The development docs cover [SwinIR configuration and training](docs/architecture.md#swinir-generator),
+Version **1.1.0** adds [SwinIR configuration and training](docs/architecture.md#swinir-generator),
 [histogram matching and back-projection](docs/inference.md#prediction-matching),
-and the [SEN2NAIP local-Gram continuation recipe](docs/sen2naip-texture.md).
-These additions are in development version **1.1.0.dev0**; use the current source
-checkout until that version is released.
+and a supported [Sen2 SR pretrained model and training recipe](docs/sen2naip-texture.md).
+See the [release notes](CHANGELOG.md) for changes and upgrade notes.
 
 ## 🧠 Highlights
 
@@ -71,7 +70,7 @@ The schedule and ramp make training **easier, safer, and more reproducible**.
 
 | Component | Options | Config keys |
 |-----------|---------|-------------|
-| **Generators** | `SRResNet`, `res`, `rcab`, `rrdb`, `lka`, `esrgan`, `stochastic_gan` | `Generator.model_type`, depth via `Generator.n_blocks`, width via `Generator.n_channels`, kernels/scale plus ESRGAN-specific `growth_channels`, `res_scale`, `out_channels`. |
+| **Generators** | `SRResNet`, `res`, `rcab`, `rrdb`, `lka`, `esrgan`, `swinir`, `stochastic_gan` | `Generator.model_type`, architecture settings, and upscaling factor; see the [architecture guide](docs/architecture.md). |
 | **Discriminators** | `standard` SRGAN, `patchgan`, `esrgan` | `Discriminator.model_type`, granularity with `Discriminator.n_blocks`, spectral norm toggle via `Discriminator.use_spectral_norm`, ESRGAN-specific `base_channels`, `linear_size`. |
 | **Content losses** | L1, Spectral Angle Mapper, VGG19/LPIPS perceptual metrics, Total Variation | Weighted by `Training.Losses.*` (e.g. `l1_weight`, `sam_weight`, `perceptual_weight`, `perceptual_metric`, `tv_weight`). |
 | **Adversarial loss** | BCE‑with‑logits or Wasserstein critic | Controlled by `Training.Losses.adv_loss_type`, warmup via `Training.pretrain_g_only`, ramped by `adv_loss_ramp_steps`, capped at `adv_loss_beta`, optional label smoothing. For BCE, enable `Training.Losses.relativistic_average_d` for RaGAN-style relative logits. |
@@ -97,7 +96,7 @@ For the supported four-band Sentinel-2 recipe, use the `SEN2-SR` preset from
 red/green/blue/NIR Sentinel-2 DN tensors and returns 2.5 m predictions:
 
 ```bash
-python -m pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'
+python -m pip install opensr-srgan==1.1.0
 ```
 
 ```python

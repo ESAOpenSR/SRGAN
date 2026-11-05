@@ -17,7 +17,7 @@ order. The published architecture is SRResNet with RRDB blocks: 24 blocks,
 historical `normalise_10k` convention: raw reflectance DN divided by 10,000.
 
 ```bash
-python -m pip install 'opensr-srgan @ git+https://github.com/ESAOpenSR/SRGAN.git@dev'
+python -m pip install opensr-srgan==1.1.0
 ```
 
 ```python

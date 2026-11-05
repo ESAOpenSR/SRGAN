@@ -12,7 +12,7 @@ For the fastest start, open the interactive notebook in Google Colab and run thr
   </a>
 </p>
 
-> 💡 **Only need inference?** Install the published package instead: `python -m pip install opensr-srgan`. It exposes `load_from_config` and `load_inference_model` so you can instantiate models without cloning the repository. Continue with the rest of this guide when you want to train, fine-tune, or otherwise modify the codebase.
+> 💡 **Only need inference?** Install the published package instead: `python -m pip install opensr-srgan==1.1.0`. It exposes `load_from_config` and `load_inference_model` so you can instantiate models without cloning the repository. Continue with the rest of this guide when you want to train, fine-tune, or otherwise modify the codebase.
 
 ## 1. Install the environment
 
@@ -110,12 +110,17 @@ Training resumes automatically if `Model.continue_training` points to a Lightnin
     custom_model = load_from_config(
         config_path="path/to/your_config.yaml",
         checkpoint_uri="https://example.com/checkpoints/srgan.ckpt",
-        map_location="cuda",  # optional
+        map_location="cpu",
+        mode="eval",
     )
+    custom_model = custom_model.to("cuda")  # optional GPU placement
 
     # Option B – grab the published RGB-NIR/SWIR presets from Hugging Face
     preset_model = load_inference_model("RGB-NIR", map_location="cpu")
     ```
+  `map_location` selects where checkpoint tensors are deserialized; it does not
+  place a model for inference. Use `.to("cuda")` after loading for GPU work, or
+  `.to("cpu")` to keep the model on CPU.
   * **When working from source:**
     ```python
     from opensr_srgan.model.SRGAN import SRGAN_model
