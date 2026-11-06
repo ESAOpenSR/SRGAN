@@ -67,7 +67,7 @@ omit = [
 ]
 
 [project.optional-dependencies]
-sen2naip = ["tacoreader==0.6.5"]
+sen2naip = ["tacoreader==2.4.21"]
 tests = [
   "pytest",
   "pytest-cov",
