@@ -6,15 +6,33 @@
 |:---------:|:-------------:|:------------------:|:----------:|:--------------:|
 | [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.12--v3.14-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PyTorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) | [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)<br>[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17590993.svg)](https://doi.org/10.5281/zenodo.17590993)<br><a style="border-width:0" href="https://doi.org/10.21105/joss.11254"><img src="https://joss.theoj.org/papers/10.21105/joss.11254/status.svg" alt="DOI badge"></a> |
 
-![Sentinel-2 RGB comparison: synthetic 40 m input, 4× SR output on a 10 m grid, and 10 m reference, with matching zoomed crops.](assets/rgb_4x.png)
-
 OpenSR-SRGAN is a comprehensive toolkit for training and evaluating super-resolution GANs on remote-sensing imagery. It packages a flexible generator/discriminator zoo, composable perceptual and reconstruction losses, and the training heuristics
 that make adversarial optimisation tractable—generator warm-up phases, learning-rate scheduling, adversarial-weight ramping, and more. All options are driven by concise YAML configuration files so you can explore new architectures or datasets without
 rewriting pipelines.  
   
 Whether you are reproducing published results, exploring new remote-sensing modalities, or trying to establish benchmarks, OpenSR-SRGAN gives you a clear and extensible foundation for multispectral super-resolution research.
 
-> This repository and the configs represent the experiences that were made with SR-GAN training for remote sensing imagery. It's neither complete nor claims to perform SOTA SR, but it implements all tweaks and tips that make training SR-GANs easier.
+## Featured model: Sen2 SR v1
+
+**Sentinel-2 10 m → 2.5 m, across RGB and NIR.** Try a published model built with this framework: a 23-block ESRGAN with PatchGAN, spectral and perceptual objectives, local-Gram texture learning, and EMA inference weights. Explore the recipe, use the pretrained checkpoint, or continue its real Sentinel-2/NAIP training run.
+
+[Recipe & results](sen2-sr.md){ .md-button .md-button--primary }
+[Download EMA checkpoint · 68 MB](https://huggingface.co/simon-donike/SR-GAN/resolve/b31d2728952cfaa022bd1df92d82a54c23cf4f8f/models/sen2-sr/v1/weights/inference.ckpt?download=true){ .md-button }
+[Training YAML](https://huggingface.co/simon-donike/SR-GAN/blob/b31d2728952cfaa022bd1df92d82a54c23cf4f8f/models/sen2-sr/v1/training/config.yaml){ .md-button }
+
+[![Suburban RGB comparison: Sentinel-2 input, Sen2 SR output, and NAIP reference; overview above and a 4× neighborhood zoom below.](assets/sen2-sr-v1-rgb.png)](assets/sen2-sr-v1-rgb.png)
+
+*A suburban validation scene: 1.28 km overview above, 4× zoom into the highlighted 320 m neighborhood below. Sentinel-2, released Sen2 SR with back-projection, and NAIP reference share the same display stretch. Click for full size; see the [results and evaluation scope](sen2-sr.md#results-and-evaluation-scope).*
+
+```python
+from opensr_srgan import load_inference_model
+
+model = load_inference_model("SEN2-SR", map_location="cpu")
+# BCHW tensor of raw Sentinel-2 DN, in B04/B03/B02/B08 order.
+sr_dn = model.predict_step(raw_dn_tensor)
+```
+
+Install with `python -m pip install opensr-srgan==1.1.0`. The [model guide](sen2-sr.md) includes a complete tensor smoke test, both checkpoint downloads, and a full-state continuation example.
 
 ## Why this repository?
 
@@ -39,7 +57,7 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 
 * **From PyPI for inference** – `python -m pip install opensr-srgan` installs the lightweight package that exposes
   `load_from_config` and `load_inference_model`. The former instantiates a Lightning module from any repo config +
-  checkpoint path, while the latter fetches the published RGB-NIR and SWIR presets from the
+  checkpoint path, while the latter fetches the published SEN2-SR, RGB-NIR, and SWIR presets from the
   [`simon-donike/SR-GAN`](https://huggingface.co/simon-donike/SR-GAN) model repository on Hugging Face.
 * **From source for training & development** – clone this repository when you want to modify architectures, retrain
   models, or work on new datasets. The [Getting started](getting-started.md) guide covers environment setup.
@@ -69,7 +87,7 @@ Whether you are reproducing published results, exploring new remote-sensing moda
 
 * [Architecture](architecture.md) explains how the Lightning module orchestrates generators, discriminators, and losses.
 * [Inference](inference.md#prediction-matching) explains enabling and choosing prediction matching.
-* The supported [SEN2-SR model card](https://huggingface.co/simon-donike/SR-GAN/blob/main/models/sen2-sr/v1/README.md) documents its pretrained inference inputs and outputs.
+* [Sen2 SR v1](sen2-sr.md) showcases the featured checkpoint, training recipe, and RGB/NIR validation results.
 * [Configuration](configuration.md) documents every YAML field and how it influences training.
 * [Data](data.md) details the supported datasets and how to integrate your own.
 * [Getting started](getting-started.md) walks through environment setup and the first training run.
