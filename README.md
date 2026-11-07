@@ -4,15 +4,33 @@
 |:---------:|:-------------:|:------------------:|:----------:|:--------------:|
 | [![PyPI](https://img.shields.io/pypi/v/opensr-srgan)](https://pypi.org/project/opensr-srgan/) | ![PythonVersion](https://img.shields.io/badge/Python-v3.12--v3.14-blue.svg)<br>![PLVersion](https://img.shields.io/badge/PyTorchLightning-v2%2B-blue.svg) | [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-brightgreen)](https://srgan.opensr.eu)<br>![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue) | [![CI](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml/badge.svg)](https://github.com/ESAOpenSR/SRGAN/actions/workflows/ci.yml)<br>[![codecov](https://codecov.io/github/ESAOpenSR/SRGAN/graph/badge.svg?token=LQ69MIMLVE)](https://codecov.io/github/ESAOpenSR/SRGAN) |  [![arXiv](https://img.shields.io/badge/arXiv-2511.10461-b31b1b.svg)](https://arxiv.org/abs/2511.10461)  <br> [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17590993.svg)](https://doi.org/10.5281/zenodo.17590993)<br><a style="border-width:0" href="https://doi.org/10.21105/joss.11254"><img src="https://joss.theoj.org/papers/10.21105/joss.11254/status.svg" alt="DOI badge"></a> |
 
-
-
-
-![Sentinel-2 RGB comparison: synthetic 40 m input, 4× SR output on a 10 m grid, and 10 m reference, with matching zoomed crops.](docs/assets/rgb_4x.png)
-
 # 🌍 Single Image Super-Resolution Remote Sensing 'SRGAN'
 
-**Remote-Sensing-SRGAN** is a research-grade GAN framework for super-resolution of Sentinel-2 and other remote-sensing imagery. It is specifically **not meant for SOTA performance, but quick implementation and experimentation**. It supports arbitrary band counts, configurable generator/discriminator designs, scalable depth/width, and a modular loss system designed for stable GAN training on EO data. Check out how inference and training works right now in this interactive example! [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ESAOpenSR/SRGAN/blob/main/notebooks/SRGAN_Showcase.ipynb)
+**OpenSR-SRGAN** is a configurable GAN framework for super-resolution of Sentinel-2 and other remote-sensing imagery, with published pretrained weights and training recipes. It supports arbitrary band counts, interchangeable generators and discriminators, and modular losses for multispectral reconstruction and texture. Explore inference and training in the interactive example: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ESAOpenSR/SRGAN/blob/main/notebooks/SRGAN_Showcase.ipynb)
 
+## ✨ Featured model: Sen2 SR v1 — Sentinel-2 10 m → 2.5 m
+
+**See the framework in action.** The `SEN2-SR` model combines a 23-block ESRGAN generator, PatchGAN discriminator, spectral and perceptual losses, local-Gram texture learning, and EMA weights for **4× RGB/NIR super-resolution**. The release includes the full training recipe, spatial dataset split, and a checkpoint you can continue training.
+
+**[Recipe, results & usage](docs/sen2-sr.md)** · **[Download EMA checkpoint · 68 MB](https://huggingface.co/simon-donike/SR-GAN/resolve/b31d2728952cfaa022bd1df92d82a54c23cf4f8f/models/sen2-sr/v1/weights/inference.ckpt?download=true)** · **[Training YAML](https://huggingface.co/simon-donike/SR-GAN/blob/b31d2728952cfaa022bd1df92d82a54c23cf4f8f/models/sen2-sr/v1/training/config.yaml)** · **[Full training checkpoint · 385 MB](https://huggingface.co/simon-donike/SR-GAN/resolve/b31d2728952cfaa022bd1df92d82a54c23cf4f8f/models/sen2-sr/v1/weights/training.ckpt?download=true)**
+
+[![Suburban RGB comparison: Sentinel-2 input, Sen2 SR output, and NAIP reference; overview above and a 4× neighborhood zoom below.](docs/assets/sen2-sr-v1-rgb.png)](docs/assets/sen2-sr-v1-rgb.png)
+
+*Suburban Pennsylvania: a 1.28 km overview (top) and a 4× zoom into the highlighted 320 m neighborhood (bottom). Columns show Sentinel-2, the released model with back-projection, and NAIP reference. Click the figure for full size; see the [results and evaluation scope](docs/sen2-sr.md#results-and-evaluation-scope).*
+
+```bash
+python -m pip install opensr-srgan==1.1.0
+```
+
+```python
+from opensr_srgan import load_inference_model
+
+model = load_inference_model("SEN2-SR", map_location="cpu")
+# Your tensor: (batch, 4, height, width), raw Sentinel-2 DN, B04/B03/B02/B08.
+sr_dn = model.predict_step(raw_dn_tensor)  # CPU tensor, 4× height and width
+```
+
+The preset loads matching configuration and EMA weights from a pinned release and applies back-projection against the input measurements. The [model guide](docs/sen2-sr.md) covers tensor conventions, recorded validation metrics, and full-state training continuation.
 
 ---
 
@@ -90,21 +108,7 @@ Follow the [installation instructions](https://srgan.opensr.eu/getting-started/)
 * **Datasets:** Grab the bundled example dataset or learn how to register your own sources in the [data guide](https://srgan.opensr.eu/data/).
 * **Training:** Launch a smoke test with `python -m opensr_srgan.train --config opensr_srgan/configs/config_training_example.yaml`, or use Hydra with `python -m opensr_srgan.train_hydra experiment=example`. Use the `10m` and `20m` presets once the matching datasets are configured.
 * **Inference:** Ready-made presets and large-scene pipelines are described in the [inference section](https://srgan.opensr.eu/inference/).
-
-For the supported four-band Sentinel-2 model, use the `SEN2-SR` preset. Its
-[model card](https://huggingface.co/simon-donike/SR-GAN/blob/main/models/sen2-sr/v1/README.md)
-documents inputs and outputs. It accepts
-red/green/blue/NIR Sentinel-2 DN tensors and returns 2.5 m predictions:
-
-```bash
-python -m pip install opensr-srgan==1.1.0
-```
-
-```python
-from opensr_srgan import load_inference_model
-model = load_inference_model("SEN2-SR", map_location="cpu")
-prediction = model.predict_step(raw_dn_tensor)
-```
+* **Featured recipe:** Use [Sen2 SR v1](docs/sen2-sr.md) for pretrained four-band inference or continue its real Sentinel-2/NAIP training run with the published full checkpoint.
 
 ---
 

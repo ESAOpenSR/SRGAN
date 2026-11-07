@@ -2,6 +2,11 @@
 
 This walkthrough covers the fastest path from zero to an end-to-end super-resolution run on a full Sentinel-2 tile. It uses the published `opensr-srgan` package to grab a pretrained preset and hands the model to `opensr-utils` for windowed tiling, stitching, and export.
 
+!!! tip "Featured checkpoint: Sen2 SR v1"
+    See the [model showcase](sen2-sr.md) for RGB/NIR validation previews,
+    checkpoint downloads, the training recipe, and a tensor smoke test using
+    the `SEN2-SR` preset below.
+
 ## 1. Install the runtime dependencies
 
 ```bash

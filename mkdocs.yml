@@ -89,6 +89,7 @@ extra:
 nav:
   - Overview:
       - SRGAN Docs: index.md
+      - "Sen2 SR: Model & Recipe": sen2-sr.md
       - Getting Started: getting-started.md
       - Release Notes: release-notes.md
       - Tests: tests.md

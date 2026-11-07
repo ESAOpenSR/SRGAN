@@ -1,0 +1,63 @@
+{
+  "description": "Real suburban validation scene: input, released Sen2 SR prediction, and NAIP reference; overview and aligned 4x zoom.",
+  "model": "SEN2-SR",
+  "hub_repository": "simon-donike/SR-GAN",
+  "hub_revision": "b31d2728952cfaa022bd1df92d82a54c23cf4f8f",
+  "checkpoint": "models/sen2-sr/v1/weights/inference.ckpt",
+  "checkpoint_sha256": "0d983a7eb8a7249dbb9d92885947f9e7679e003e757462648951f3144fb53a23",
+  "inference": "Released EMA generator, FP32 CPU, predict_step with packaged back_projection postprocessing.",
+  "dataset": "tacofoundation/SEN2NAIPv2 crosssensor",
+  "sample_id": "NA5120_E1907N0730__m_4007942_sw_17_060_20190918",
+  "record_index": 680,
+  "split": "validation",
+  "validation_index": 1,
+  "split_manifest_sha256": "218d5d73aec72bbb17a3853606759439f70cb28a1cafe298ee505234b2b21c5d",
+  "location": "Allegheny County, Pennsylvania, United States",
+  "input_band_order": [
+    "B04",
+    "B03",
+    "B02",
+    "B08"
+  ],
+  "displayed_bands": [
+    "B04",
+    "B03",
+    "B02"
+  ],
+  "full_scene_lr_shape": [
+    130,
+    130
+  ],
+  "overview_crop_lr_xywh": [
+    1,
+    1,
+    128,
+    128
+  ],
+  "zoom_crop_within_overview_lr_xywh": [
+    12,
+    12,
+    32,
+    32
+  ],
+  "overview_width_m": 1280,
+  "zoom_width_m": 320,
+  "display_stretch": "RGB per-band 1st/99th percentiles pooled across input, SR, and reference overview; identical limits for every panel and zoom.",
+  "display_low_reflectance_rgb": [
+    0.009831351228058338,
+    0.01679999940097332,
+    0.006843262817710638
+  ],
+  "display_high_reflectance_rgb": [
+    0.13551537692546844,
+    0.12625475227832794,
+    0.1020534485578537
+  ],
+  "display_interpolation": "nearest",
+  "image_shape_pixels": [
+    1500,
+    1920
+  ],
+  "image_sha256": "139dca785570174f0e2399f08f4a47d012c695afb69c14a16b54c668f6f6ad9f",
+  "test_set_accessed": false
+}

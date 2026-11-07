@@ -2,6 +2,12 @@
 
 `opensr_srgan/train.py` is the canonical entry point for ESA OpenSR experiments. It ties together configuration loading, model instantiation, dataset selection, logging, and callbacks. This page explains how the script is organised and how to customise the training loop.
 
+!!! tip "Start with a published recipe"
+    [Sen2 SR v1](sen2-sr.md) demonstrates ESRGAN/PatchGAN training with spectral,
+    perceptual, local-Gram texture, and relativistic adversarial losses. Its
+    [training YAML and full checkpoint](sen2-sr.md#checkpoints-and-release-artifacts)
+    include the exact spatial split and a [full-state continuation example](sen2-sr.md#continue-training).
+
 !!! note "PyTorch Lightning 2+ only"
     The training stack uses a single manual-optimisation path. `SRGAN_model.setup_lightning()` enforces Lightning >= 2.0 and binds `training_step_PL2()` where GAN training runs with `automatic_optimization = False`. `opensr_srgan.utils.build_trainer_kwargs.build_lightning_kwargs()` forwards resume checkpoints through `Trainer.fit(..., ckpt_path=...)`. See [Trainer Details](trainer-details.md) for a step-by-step breakdown of warm-up checks, adversarial updates, and EMA lifecycle.
 
